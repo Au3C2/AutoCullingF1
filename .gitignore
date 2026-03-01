@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Dataset (raw images and CSVs — not committed)
+dataset/
+
+# Training checkpoints (large .pt files — not committed)
+checkpoints/
+
+# Lock file
+uv.lock
+
+# Logs
+*.log
+
+# ONNX models (large binary files — run export_onnx.py to regenerate)
+onnx_models/
+
+# macOS
+.DS_Store
