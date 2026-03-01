@@ -238,3 +238,124 @@ bash benchmark_onnx.sh
 - **阈值优化**：在验证集上扫描 sigmoid 输出的最优决策阈值（对 mobilenetv3 的高 AUC 尤为重要）
 - 可尝试：resnet50 仅解冻 layer4（v1 风格），因为同时解冻 layer3+layer4 导致其收敛过快
 - 可尝试：对 resnext50 使用 TensorRT 加速，以发挥其精度优势的同时提升推理速度
+
+---
+
+## Mac Apple Silicon 推理测试（CoreMLExecutionProvider）
+
+### 测试环境
+
+- 硬件：Apple M 系列芯片（arm64）
+- 运行时：`onnxruntime-silicon` 1.16.3，Python 3.10.19（conda）
+- 加速后端：`CoreMLExecutionProvider`（Apple Neural Engine / GPU），回退至 `CPUExecutionProvider`
+- 测试集：`test_img/`，共 **1494 张 JPEG**（与训练集 `test_info.csv` 同批次图片）
+- 推理参数：`--batch-size 32`，`--threshold 0.5`，`--copy`（不移动源文件）
+- 测试日期：2026-03-01
+
+### 安装方式
+
+```bash
+conda create -n auto_culling_mac python=3.10 -y
+conda run -n auto_culling_mac pip install onnxruntime-silicon "numpy<2" pillow
+
+# 推理命令（以 resnext50 为例）
+conda run -n auto_culling_mac python infer_onnx.py \
+    --model onnx_models/resnext50.onnx \
+    --input-dir test_img \
+    --output-dir results/resnext50 \
+    --copy --coreml
+```
+
+### 推理结果（1494 张图，threshold=0.5）
+
+| 模型 | keep 数 | discard 数 | keep 比例 | 推理耗时 | 实际吞吐量 |
+|---|---|---|---|---|---|
+| resnet18 | 728 | 766 | 48.7% | 4.52 s | **330.8 img/s** |
+| resnet50 | 753 | 741 | 50.4% | 6.05 s | 246.9 img/s |
+| resnext50 | 683 | 811 | 45.7% | 6.95 s | 214.9 img/s |
+| mobilenetv3 | 737 | 757 | 49.3% | 16.92 s | 88.3 img/s |
+
+> 注：mobilenetv3 的 ONNX 图中含 hard-sigmoid/hard-swish 算子，CoreML 仅支持 140 个节点中的 111 个，其余回退 CPU 执行，导致速度偏低。
+
+### Benchmark 吞吐量（images/sec）
+
+单位：images/sec，越高越好；括号内为 ms/img。
+
+| 模型 | bs=1 | bs=4 | bs=8 | bs=16 | bs=32 | **峰值** |
+|---|---|---|---|---|---|---|
+| resnet18 | 1498（0.67ms） | 1447（0.69ms） | 2416（0.41ms） | **2509（0.40ms）** | 2367（0.42ms） | **2509 img/s（bs=16）** |
+| resnet50 | 643（1.56ms） | **861（1.16ms）** | 767（1.30ms） | 716（1.40ms） | 694（1.44ms） | **861 img/s（bs=4）** |
+| resnext50 | 577（1.73ms） | **719（1.39ms）** | 689（1.45ms） | 685（1.46ms） | 703（1.42ms） | **719 img/s（bs=4）** |
+| mobilenetv3 | 68（14.64ms） | 86（11.61ms） | 106（9.41ms） | **130（7.71ms）** | 127（7.90ms） | **130 img/s（bs=16）** |
+
+### Mac vs RTX 4070 Ti 速度对比
+
+| 模型 | Mac M（CoreML）峰值 | RTX 4070 Ti（CUDA）峰值 | 倍率 |
+|---|---|---|---|
+| resnet18 | **2409 img/s** | 165 img/s | **14.6×** |
+| resnet50 | **958 img/s** | 57 img/s | **16.8×** |
+| resnext50 | **765 img/s** | 42 img/s | **18.2×** |
+| mobilenetv3 | 136 img/s | **218 img/s** | 0.6×（CoreML 算子覆盖不全） |
+
+> resnet 系列在 CoreML 下获得极大加速，Apple Neural Engine 对标准卷积+BN 图的加速效果显著。
+> mobilenetv3 因算子部分回退 CPU，反而比 CUDA 更慢；建议在 Mac 上优先使用 resnet18 或 resnext50。
+
+### Mac 平台综合推荐
+
+| 模型 | 训练 F1 | Mac 峰值 img/s（128张,全分辨率） | Mac 推荐 |
+|---|---|---|---|
+| resnext50 | **0.7680** | 765 | 精度优先（CoreML 加速充分） |
+| resnet18 | 0.7554 | **2409** | **速度/精度均衡，Mac 首选** |
+| resnet50 | 0.7555 | 958 | 次选（精度与 resnet18 相当，速度低 2.5×） |
+| mobilenetv3 | 0.7279 | 136 | 不推荐在 Mac 上使用（CoreML 算子覆盖不全）|
+
+---
+
+## 真实相机分辨率 Benchmark（Mac M 芯片，CoreMLExecutionProvider）
+
+### 测试说明
+
+- 测试图片：随机生成（numpy random RGB），模拟全分辨率原图输入，每组 **128 张**
+- **Sony A7C II**：7008 × 4672（约 33 MP）
+- **Nikon Z6 III**：6048 × 4024（约 24 MP）
+- Benchmark 参数：pool_size=128，warmup=3 batch，measure=20 batch
+- batch sizes 测试范围：1、4、8、16、32
+- 预处理流程（与训练一致）：SquarePad → Resize(224) → ToTensor → ImageNet Normalize
+- 测试日期：2026-03-01
+
+> **注意**：模型输入分辨率固定为 224×224，原始分辨率影响的是 **预处理（CPU decode + resize）耗时**，不影响模型前向推理本身。benchmark 模式下图像预先载入内存，因此下表反映的是纯推理吞吐量（不含磁盘 I/O）。
+
+### Sony A7C II（7008 × 4672 / 33 MP）— 128 张
+
+| 模型 | bs=1 | bs=4 | bs=8 | bs=16 | bs=32 | **峰值** |
+|---|---|---|---|---|---|---|
+| resnet18 | 1460（0.68ms） | 2359（0.42ms） | 2306（0.43ms） | 2372（0.42ms） | **2377（0.42ms）** | **2377 img/s** |
+| resnet50 | 765（1.31ms） | **957（1.05ms）** | 769（1.30ms） | 696（1.44ms） | 652（1.53ms） | **957 img/s** |
+| resnext50 | **765（1.31ms）** | 764（1.31ms） | 703（1.42ms） | 650（1.54ms） | 641（1.56ms） | **765 img/s** |
+| mobilenetv3 | 74（13.60ms） | 92（10.84ms） | 108（9.25ms） | 132（7.55ms） | **136（7.35ms）** | **136 img/s** |
+
+### Nikon Z6 III（6048 × 4024 / 24 MP）— 128 张
+
+| 模型 | bs=1 | bs=4 | bs=8 | bs=16 | bs=32 | **峰值** |
+|---|---|---|---|---|---|---|
+| resnet18 | 1525（0.66ms） | 2359（0.42ms） | **2409（0.42ms）** | 2372（0.42ms） | 2369（0.42ms） | **2409 img/s** |
+| resnet50 | 806（1.24ms） | **958（1.04ms）** | 769（1.30ms） | 710（1.41ms） | 710（1.41ms） | **958 img/s** |
+| resnext50 | 721（1.39ms） | **763（1.31ms）** | 708（1.41ms） | 697（1.44ms） | 655（1.53ms） | **763 img/s** |
+| mobilenetv3 | 82（12.16ms） | 92（10.93ms） | 110（9.07ms） | **134（7.45ms）** | 131（7.65ms） | **134 img/s** |
+
+### 三组分辨率峰值对比（Mac CoreML，n=20→128 更新）
+
+| 模型 | 512×512（test_img,n=1494） | Sony A7C II（33MP,n=128） | Nikon Z6 III（24MP,n=128） | 分辨率影响 |
+|---|---|---|---|---|
+| resnet18 | 2509 img/s | 2377 img/s | **2409 img/s** | 差异 ≤ 5%，几乎无影响 |
+| resnet50 | 861 img/s | 957 img/s | **958 img/s** | Sony/Nikon 略高（+11%），推理稳定 |
+| resnext50 | 719 img/s | **765 img/s** | 763 img/s | 差异 ≤ 6%，基本一致 |
+| mobilenetv3 | 130 img/s | 136 img/s | **134 img/s** | 差异 ≤ 4%，较前次 20 张结果更稳定 |
+
+### 关键结论
+
+1. **推理吞吐量与原始分辨率基本无关**：模型输入固定 224×224，原始分辨率只影响预处理（SquarePad + Resize），benchmark 模式下预处理已预完成，三种分辨率的推理速度差异 ≤ 11%
+2. **128 张 vs 20 张结果对比**：池子扩大后数据更稳定，mobilenetv3 的峰值从 101 提升至 136 img/s（bs=32），说明小样本下 CoreML 部分 batch size 估计偏低
+3. **resnet18 三种分辨率下均超 2300 img/s**，仍是 Mac 平台最优选择（F1=0.7554）
+4. **最优 batch size 规律**：resnet18 在 bs=16~32 时最快（CoreML 内部并行充分）；resnet50/resnext50 在 bs=4 时最快（较深网络 bs 过大反而调度开销增加）；mobilenetv3 在 bs=16~32 时最快（算子回退 CPU 时大 batch 均摊开销更划算）
+5. **实际使用时瓶颈在 I/O + CPU resize**：Sony A7C II 的 33MP JPEG 约 8–15 MB/张，Nikon Z6 III 约 6–10 MB/张，建议配合多进程预处理以充分发挥 CoreML 推理速度

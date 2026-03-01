@@ -119,8 +119,16 @@ def batched(items: list, batch_size: int):
 # ---------------------------------------------------------------------------
 
 
-def build_session(model_path: Path, use_gpu: bool = True):
+def build_session(model_path: Path, use_gpu: bool = True, use_coreml: bool = False):
     """Create an onnxruntime InferenceSession.
+
+    Provider priority:
+      - ``use_coreml=True``  → CoreMLExecutionProvider → CPUExecutionProvider
+      - ``use_gpu=True``     → CUDAExecutionProvider   → CPUExecutionProvider
+      - otherwise            → CPUExecutionProvider only
+
+    On Apple-Silicon machines install ``onnxruntime-silicon`` and pass
+    ``--coreml`` to enable Apple Neural Engine / GPU acceleration via CoreML.
 
     Parameters
     ----------
@@ -128,6 +136,9 @@ def build_session(model_path: Path, use_gpu: bool = True):
         Path to the ``.onnx`` file.
     use_gpu:
         When ``True``, try CUDAExecutionProvider first and fall back to CPU.
+    use_coreml:
+        When ``True``, try CoreMLExecutionProvider first and fall back to CPU.
+        Requires ``onnxruntime-silicon`` (``pip install onnxruntime-silicon``).
 
     Returns
     -------
@@ -137,14 +148,19 @@ def build_session(model_path: Path, use_gpu: bool = True):
         import onnxruntime as ort
     except ImportError as exc:
         raise ImportError(
-            "onnxruntime is required.  Install with: pip install onnxruntime-gpu"
+            "onnxruntime is required.\n"
+            "  GPU (CUDA):  pip install onnxruntime-gpu\n"
+            "  Apple M-series: pip install onnxruntime-silicon\n"
+            "  CPU only:    pip install onnxruntime"
         ) from exc
 
-    providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        if use_gpu
-        else ["CPUExecutionProvider"]
-    )
+    if use_coreml:
+        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    elif use_gpu:
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    else:
+        providers = ["CPUExecutionProvider"]
+
     sess = ort.InferenceSession(str(model_path), providers=providers)
     active = sess.get_providers()[0]
     log.info("ORT session created: model=%s  provider=%s", model_path.name, active)
@@ -339,7 +355,7 @@ def benchmark(
     throughputs: dict[int, float] = {}
 
     # Pre-load a pool of preprocessed images (up to 64 to avoid RAM pressure)
-    pool_size = min(64, len(image_paths))
+    pool_size = min(128, len(image_paths))
     log.info("Pre-loading %d images for benchmark …", pool_size)
     pool: list[np.ndarray] = []
     for p in image_paths[:pool_size]:
@@ -457,6 +473,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help="Force CPU execution (default: try GPU first).",
     )
+    parser.add_argument(
+        "--coreml",
+        action="store_true",
+        default=False,
+        help=(
+            "Use CoreMLExecutionProvider for Apple-Silicon acceleration. "
+            "Requires onnxruntime-silicon (pip install onnxruntime-silicon). "
+            "Takes precedence over --cpu / GPU auto-detection."
+        ),
+    )
 
     # ---- Benchmark ----------------------------------------------------------
     parser.add_argument(
@@ -520,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Found %d images in %s", len(image_paths), input_dir)
 
     # ---- Build ORT session --------------------------------------------------
-    sess = build_session(args.model, use_gpu=not args.cpu)
+    sess = build_session(args.model, use_gpu=not args.cpu, use_coreml=args.coreml)
 
     # ---- Benchmark mode -----------------------------------------------------
     if args.benchmark:

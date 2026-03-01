@@ -26,3 +26,11 @@ onnx_models/
 
 # macOS
 .DS_Store
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.gif
+*.tiff
+*.nef
+*.arw
