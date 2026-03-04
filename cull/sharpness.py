@@ -8,8 +8,11 @@ a photographer's judgement of whether the *subject* is in focus.
 Score normalisation
 -------------------
 Raw Laplacian variance is log-transformed and mapped to [0, 1] via empirical
-calibration constants.  The defaults work well for 12–24 MP RAW-derived images
-decoded to full resolution.  Adjust ``LAP_LO`` / ``LAP_HI`` if needed.
+calibration constants.  The defaults are calibrated for ~1664×1088 preview
+images extracted from Sony A7C2 HIF files (embedded HEVC stream #6).
+
+If working at a different resolution, adjust ``LAP_LO`` / ``LAP_HI`` via
+the function parameters or re-run ``_calibrate_sharpness.py``.
 """
 
 from __future__ import annotations
@@ -26,9 +29,14 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Calibration constants for normalisation
 # log(variance) is clipped to [LAP_LO, LAP_HI] then mapped to [0, 1]
+#
+# Calibrated on 94 sample Sony A7C2 HIF files decoded at 1664×1088
+# (embedded preview stream #6):
+#   p5 = 3.58,  p50 = 5.03,  p95 = 6.00
+# Using slightly wider range for safety margin.
 # ---------------------------------------------------------------------------
-_LAP_LO: float = 2.0   # log-variance corresponding to score ≈ 0 (very blurry)
-_LAP_HI: float = 8.0   # log-variance corresponding to score ≈ 1 (very sharp)
+_LAP_LO: float = 3.0   # log-variance corresponding to score ≈ 0 (very blurry)
+_LAP_HI: float = 6.5   # log-variance corresponding to score ≈ 1 (very sharp)
 
 # Minimum bbox size (pixels) to bother evaluating; smaller crops are unreliable
 _MIN_CROP_PX: int = 32

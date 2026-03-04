@@ -43,10 +43,9 @@ class ExifData:
 class BurstGroup:
     """A set of frames belonging to the same burst / single shot."""
 
-    group_id: str            # human-readable identifier, e.g. "burst_001"
-    frames: list[Path]       # RAW (or standalone readable) paths, ordered by capture time
-    read_paths: list[Path]   # corresponding readable paths for image decoding (same length)
-    is_burst: bool = True    # False for single shots
+    group_id: str           # human-readable identifier, e.g. "burst_001"
+    frames: list[Path]      # ordered by capture time (or filename)
+    is_burst: bool = True   # False for single shots
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +67,11 @@ _EXIFTOOL_FIELDS = [
 
 
 def _run_exiftool(paths: list[Path]) -> list[dict]:
-    """Run exiftool -json on *paths* and return the parsed list of dicts."""
+    """Run exiftool -json on *paths* and return the parsed list of dicts.
+
+    Uses ``-@ -`` (read filenames from stdin) to avoid hitting the Windows
+    command-line length limit (~32 KB) when processing hundreds of files.
+    """
     if not paths:
         return []
 
@@ -77,13 +80,16 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
         "-json",
         "-n",                   # numeric values (no units/text decoration)
         *[f"-{f}" for f in _EXIFTOOL_FIELDS],
-        "--",
-        *[str(p) for p in paths],
+        "-@", "-",              # read file list from stdin
     ]
+
+    # Build newline-separated file list for stdin
+    file_list = "\n".join(str(p) for p in paths) + "\n"
 
     try:
         result = subprocess.run(
             cmd,
+            input=file_list,
             capture_output=True,
             text=True,
             check=True,
@@ -123,7 +129,7 @@ _TZ_SUFFIX = _re.compile(r"[+-]\d{2}:\d{2}$")
 def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    # Strip timezone suffix if present (exiftool may include it)
+    # Strip timezone suffix if present (exiftool may include it, e.g. Sony HIF)
     cleaned = _TZ_SUFFIX.sub("", value).strip()
     for fmt in _DT_FORMATS:
         try:
@@ -218,10 +224,7 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
 _GAP_SECONDS = 2.0   # frames separated by more than this are in different groups
 
 
-def group_bursts(
-    exif_list: list[ExifData],
-    read_paths: list[Path] | None = None,
-) -> list[BurstGroup]:
+def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
     """Group a list of ExifData entries into burst sequences.
 
     Detection strategy (in priority order):
@@ -236,11 +239,6 @@ def group_bursts(
     ----------
     exif_list:
         Ordered list of ExifData for all images to be grouped.
-        ``exif_data.path`` is treated as the RAW / XMP-target path.
-    read_paths:
-        Parallel list of readable-image paths (JPEG / HIF companions).
-        When provided, must be the same length as *exif_list*.
-        When ``None``, ``exif_data.path`` is used for both roles.
 
     Returns
     -------
@@ -250,19 +248,11 @@ def group_bursts(
     if not exif_list:
         return []
 
-    if read_paths is None:
-        read_paths = [e.path for e in exif_list]
-
-    assert len(read_paths) == len(exif_list), (
-        "read_paths and exif_list must have the same length"
-    )
-
     groups: list[BurstGroup] = []
     current_frames: list[Path] = []
-    current_reads: list[Path] = []
     group_counter = 0
 
-    def _flush(frames: list[Path], reads: list[Path]) -> None:
+    def _flush(frames: list[Path]) -> None:
         nonlocal group_counter
         if not frames:
             return
@@ -271,15 +261,13 @@ def group_bursts(
         groups.append(BurstGroup(
             group_id=f"burst_{group_counter:04d}",
             frames=list(frames),
-            read_paths=list(reads),
             is_burst=is_burst,
         ))
 
     prev = exif_list[0]
     current_frames = [prev.path]
-    current_reads = [read_paths[0]]
 
-    for i, curr in enumerate(exif_list[1:], start=1):
+    for curr in exif_list[1:]:
         new_group = False
 
         # --- Strategy 1: Sony A7C2 SequenceImageNumber ---
@@ -317,14 +305,12 @@ def group_bursts(
                 new_group = True
 
         if new_group:
-            _flush(current_frames, current_reads)
+            _flush(current_frames)
             current_frames = [curr.path]
-            current_reads = [read_paths[i]]
         else:
             current_frames.append(curr.path)
-            current_reads.append(read_paths[i])
 
         prev = curr
 
-    _flush(current_frames, current_reads)
+    _flush(current_frames)
     return groups

@@ -6,10 +6,11 @@ Scoring pipeline per image
 1. Veto check:
    - No detections           → Rating = -1 (Lightroom "Rejected" flag)
    - S_sharp < SHARP_THRESH  → Rating = -1
+   - raw < MIN_RAW            → Rating = -1
 
 2. Raw score:
-   raw = 3.5 * S_sharp + 1.5 * S_comp          (sharpness 70%, comp 30%)
-   raw is in approximately [0, 5]
+   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~75%, comp ~25%)
+   raw is in approximately [0, 6]
 
 3. Rating mapping:
    raw   → Rating
@@ -41,6 +42,9 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SHARP_THRESH: float = 0.15   # veto threshold — below this → Rating -1
+W_SHARP: float = 4.5         # weight for sharpness in raw score formula
+W_COMP: float = 1.5          # weight for composition in raw score formula
+MIN_RAW: float = 3.5         # minimum raw score — below this → Rating -1
 
 # Rating breakpoints for raw score → 1-5 stars
 _RATING_BREAKS = [1.0, 2.0, 3.0, 4.0]   # boundaries between ratings 1/2/3/4/5
@@ -62,6 +66,8 @@ class ImageScore:
     rating: int              # Lightroom Rating: -1 (reject) or 1-5 (stars)
     vetoed: bool = False     # True if veto rule triggered
     veto_reason: str = ""    # human-readable reason for veto
+    n_detections: int = 0    # number of detections (for offline replay)
+    burst_group: int = -1    # burst group index (set by run())
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +94,9 @@ def score_image(
     s_sharp: float,
     s_comp: float,
     sharp_thresh: float = SHARP_THRESH,
+    w_sharp: float = W_SHARP,
+    w_comp: float = W_COMP,
+    min_raw: float = MIN_RAW,
 ) -> ImageScore:
     """Compute the final score and Rating for a single image.
 
@@ -103,14 +112,22 @@ def score_image(
         Composition score from ``composition.score_composition``.
     sharp_thresh:
         Minimum sharpness to avoid veto.
+    w_sharp:
+        Weight for sharpness in raw score formula.
+    w_comp:
+        Weight for composition in raw score formula.
+    min_raw:
+        Minimum raw score to avoid veto (0.0 to disable).
 
     Returns
     -------
     ImageScore
     """
+    n_det = len(detections)
+    raw = w_sharp * s_sharp + w_comp * s_comp
+
     # --- Veto checks ---------------------------------------------------------
     if not detections:
-        raw = 3.5 * s_sharp + 1.5 * s_comp
         return ImageScore(
             path=path,
             s_sharp=s_sharp,
@@ -119,10 +136,10 @@ def score_image(
             rating=-1,
             vetoed=True,
             veto_reason="no_detection",
+            n_detections=0,
         )
 
     if s_sharp < sharp_thresh:
-        raw = 3.5 * s_sharp + 1.5 * s_comp
         return ImageScore(
             path=path,
             s_sharp=s_sharp,
@@ -131,10 +148,22 @@ def score_image(
             rating=-1,
             vetoed=True,
             veto_reason=f"sharpness={s_sharp:.3f} < threshold={sharp_thresh:.3f}",
+            n_detections=n_det,
+        )
+
+    if min_raw > 0.0 and raw < min_raw:
+        return ImageScore(
+            path=path,
+            s_sharp=s_sharp,
+            s_comp=s_comp,
+            raw_score=raw,
+            rating=-1,
+            vetoed=True,
+            veto_reason=f"raw={raw:.3f} < min_raw={min_raw:.3f}",
+            n_detections=n_det,
         )
 
     # --- Normal scoring ------------------------------------------------------
-    raw = 3.5 * s_sharp + 1.5 * s_comp
     rating = _raw_to_rating(raw)
 
     log.debug(
@@ -149,6 +178,7 @@ def score_image(
         raw_score=raw,
         rating=rating,
         vetoed=False,
+        n_detections=n_det,
     )
 
 

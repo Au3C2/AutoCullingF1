@@ -15,13 +15,26 @@ uv.lock
 # Logs
 *.log
 
-# Model weights and ONNX exports (large binary — run download_f1_model.py to regenerate)
+# Model weights and ONNX exports (large binary — run train_f1_yolo.py to regenerate)
 models/*.pt
 models/*.onnx
 models/*.yaml
+yolov8n.pt
+yolo26n.pt
+*.pt
 
 # Generated XMP sidecars (output artefacts — not committed)
 *.xmp
+
+# Training runs (large — regenerate via train_f1_yolo.py)
+runs/
+
+# Downloaded datasets (large — regenerate via download script)
+datasets/
+*.zip
+
+# Scores CSV (regenerate via cull_photos.py --dump-scores)
+scores*.csv
 
 # macOS
 .DS_Store
@@ -38,4 +51,5 @@ models/*.yaml
 *.hif
 *.HIF
 *.NEF
-*.ARWyolov8n.pt
+*.ARW
+*.bin
