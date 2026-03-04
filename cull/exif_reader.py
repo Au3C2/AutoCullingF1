@@ -43,9 +43,10 @@ class ExifData:
 class BurstGroup:
     """A set of frames belonging to the same burst / single shot."""
 
-    group_id: str           # human-readable identifier, e.g. "burst_001"
-    frames: list[Path]      # ordered by capture time (or filename)
-    is_burst: bool = True   # False for single shots
+    group_id: str            # human-readable identifier, e.g. "burst_001"
+    frames: list[Path]       # RAW (or standalone readable) paths, ordered by capture time
+    read_paths: list[Path]   # corresponding readable paths for image decoding (same length)
+    is_burst: bool = True    # False for single shots
 
 
 # ---------------------------------------------------------------------------
@@ -110,17 +111,23 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _DT_FORMATS = [
-    "%Y:%m:%d %H:%M:%S.%f",   # with sub-seconds
-    "%Y:%m:%d %H:%M:%S",      # without sub-seconds
+    "%Y:%m:%d %H:%M:%S.%f",   # with sub-seconds, no timezone
+    "%Y:%m:%d %H:%M:%S",      # without sub-seconds, no timezone
 ]
+
+# Regex to strip a trailing timezone offset like "+08:00" or "-05:30"
+import re as _re
+_TZ_SUFFIX = _re.compile(r"[+-]\d{2}:\d{2}$")
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
+    # Strip timezone suffix if present (exiftool may include it)
+    cleaned = _TZ_SUFFIX.sub("", value).strip()
     for fmt in _DT_FORMATS:
         try:
-            return datetime.strptime(value, fmt)
+            return datetime.strptime(cleaned, fmt)
         except ValueError:
             continue
     log.debug("Could not parse datetime: %r", value)
@@ -148,17 +155,26 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
     """
     raw_list = _run_exiftool(paths)
 
-    # Build a lookup from SourceFile → raw dict
+    # Build lookups:
+    #   1. SourceFile string → dict  (exact match, works when paths are ASCII)
+    #   2. lowercase filename → dict (fallback for non-ASCII / encoding issues)
     raw_by_path: dict[str, dict] = {}
+    raw_by_name: dict[str, dict] = {}
     for entry in raw_list:
         src = entry.get("SourceFile", "")
         if src:
             raw_by_path[src] = entry
+            raw_by_name[Path(src).name.lower()] = entry
 
     results: list[ExifData] = []
     for path in paths:
-        # exiftool normalises paths; try both the original and resolved form
-        raw = raw_by_path.get(str(path)) or raw_by_path.get(str(path.resolve())) or {}
+        # Try exact string match first, then resolved path, then filename fallback
+        raw = (
+            raw_by_path.get(str(path))
+            or raw_by_path.get(str(path.resolve()))
+            or raw_by_name.get(path.name.lower())
+            or {}
+        )
 
         dt_str = raw.get("SubSecDateTimeOriginal") or raw.get("DateTimeOriginal")
         seq_num = raw.get("SequenceImageNumber")
@@ -202,7 +218,10 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
 _GAP_SECONDS = 2.0   # frames separated by more than this are in different groups
 
 
-def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
+def group_bursts(
+    exif_list: list[ExifData],
+    read_paths: list[Path] | None = None,
+) -> list[BurstGroup]:
     """Group a list of ExifData entries into burst sequences.
 
     Detection strategy (in priority order):
@@ -217,6 +236,11 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
     ----------
     exif_list:
         Ordered list of ExifData for all images to be grouped.
+        ``exif_data.path`` is treated as the RAW / XMP-target path.
+    read_paths:
+        Parallel list of readable-image paths (JPEG / HIF companions).
+        When provided, must be the same length as *exif_list*.
+        When ``None``, ``exif_data.path`` is used for both roles.
 
     Returns
     -------
@@ -226,11 +250,19 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
     if not exif_list:
         return []
 
+    if read_paths is None:
+        read_paths = [e.path for e in exif_list]
+
+    assert len(read_paths) == len(exif_list), (
+        "read_paths and exif_list must have the same length"
+    )
+
     groups: list[BurstGroup] = []
     current_frames: list[Path] = []
+    current_reads: list[Path] = []
     group_counter = 0
 
-    def _flush(frames: list[Path]) -> None:
+    def _flush(frames: list[Path], reads: list[Path]) -> None:
         nonlocal group_counter
         if not frames:
             return
@@ -239,13 +271,15 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
         groups.append(BurstGroup(
             group_id=f"burst_{group_counter:04d}",
             frames=list(frames),
+            read_paths=list(reads),
             is_burst=is_burst,
         ))
 
     prev = exif_list[0]
     current_frames = [prev.path]
+    current_reads = [read_paths[0]]
 
-    for curr in exif_list[1:]:
+    for i, curr in enumerate(exif_list[1:], start=1):
         new_group = False
 
         # --- Strategy 1: Sony A7C2 SequenceImageNumber ---
@@ -283,12 +317,14 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
                 new_group = True
 
         if new_group:
-            _flush(current_frames)
+            _flush(current_frames, current_reads)
             current_frames = [curr.path]
+            current_reads = [read_paths[i]]
         else:
             current_frames.append(curr.path)
+            current_reads.append(read_paths[i])
 
         prev = curr
 
-    _flush(current_frames)
+    _flush(current_frames, current_reads)
     return groups

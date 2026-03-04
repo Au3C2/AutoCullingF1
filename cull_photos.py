@@ -1,14 +1,23 @@
 """
 cull_photos.py — Rule-based F1 photo culling pipeline.
 
-For each image in the input directory:
+File pairing strategy
+---------------------
+When a directory contains both RAW files (NEF / ARW / HIF) and same-stem
+JPEG/HIF companions, the pipeline:
+  - Uses the JPEG/HIF for image analysis (fast to decode, no LibRaw needed).
+  - Writes the XMP sidecar next to the RAW file (so Lightroom picks it up).
+  - Reads EXIF metadata from the RAW file (richer burst metadata).
+
+Processing steps per image
+--------------------------
   1. Read EXIF metadata and group into burst sequences.
   2. Detect subjects via cascade: F1 YOLO model → COCO YOLOv8n fallback.
   3. Score sharpness (Laplacian variance inside the primary detection bbox).
   4. Score composition (fill, rule-of-thirds, lead-room).
   5. Apply veto rules (no detection / too blurry → Rating -1).
   6. Select the top-N frames per burst group; reject the rest.
-  7. Write XMP sidecar files (same directory as the originals).
+  7. Write XMP sidecar files alongside the RAW originals.
 
 Usage
 -----
@@ -57,16 +66,99 @@ from cull.xmp_writer import write_xmp_batch
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Supported image extensions
+# File extension sets
 # ---------------------------------------------------------------------------
-_EXTENSIONS = {
-    ".hif", ".HIF",
-    ".nef", ".NEF",
-    ".arw", ".ARW",
-    ".jpg", ".jpeg", ".JPG", ".JPEG",
-    ".png", ".PNG",
-    ".tiff", ".tif", ".TIFF", ".TIF",
-}
+
+# RAW formats — EXIF source + XMP target, but decoded via companion JPEG/HIF
+_RAW_EXTENSIONS = {".nef", ".arw", ".cr2", ".cr3", ".orf", ".rw2", ".raf"}
+
+# Natively decodable formats (read directly)
+_READABLE_EXTENSIONS = {".hif", ".heif", ".heic", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
+
+# All formats we care about (case-insensitive comparison used at runtime)
+_ALL_EXTENSIONS = _RAW_EXTENSIONS | _READABLE_EXTENSIONS
+
+
+# ---------------------------------------------------------------------------
+# RAW ↔ companion resolution
+# ---------------------------------------------------------------------------
+
+# Preferred companion search order for a given RAW stem
+_COMPANION_PRIORITY = [".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".tif"]
+
+
+def _find_companion(raw_path: Path) -> Path | None:
+    """Return the best readable companion for a RAW file, or None."""
+    stem = raw_path.stem
+    parent = raw_path.parent
+    for ext in _COMPANION_PRIORITY:
+        for candidate in (parent / (stem + ext), parent / (stem + ext.upper())):
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def _collect_files(input_dir: Path) -> list[tuple[Path, Path]]:
+    """Scan *input_dir* and return (raw_path, read_path) pairs.
+
+    Rules:
+    - If a file is a RAW format and a readable companion exists → pair them.
+      (raw_path=NEF/ARW, read_path=JPG/HIF)
+    - If a file is a RAW format with NO companion → skip it (cannot decode).
+    - If a file is directly readable and has NO same-stem RAW sibling →
+      treat it as its own RAW target too (raw_path == read_path, XMP
+      goes next to the JPEG itself).
+    - If a readable file has a same-stem RAW sibling → it is already
+      covered by the RAW entry; skip to avoid double-processing.
+
+    Returns list sorted by read_path name (proxy for capture order).
+    """
+    all_files: dict[str, Path] = {}  # stem.lower() → path, first-seen wins per ext priority
+    for p in input_dir.iterdir():
+        if p.suffix.lower() in _ALL_EXTENSIONS:
+            all_files[p.name] = p
+
+    # Identify all RAW stems in the directory
+    raw_stems: set[str] = {
+        p.stem.lower()
+        for p in all_files.values()
+        if p.suffix.lower() in _RAW_EXTENSIONS
+    }
+
+    pairs: list[tuple[Path, Path]] = []
+    seen_stems: set[str] = set()
+
+    # Sort so RAW files are processed before their companions
+    for p in sorted(all_files.values(), key=lambda x: (x.suffix.lower() not in _RAW_EXTENSIONS, x.name)):
+        stem_lower = p.stem.lower()
+        ext_lower = p.suffix.lower()
+
+        if ext_lower in _RAW_EXTENSIONS:
+            companion = _find_companion(p)
+            if companion is None:
+                log.warning(
+                    "Skipping %s — no readable companion (JPG/HIF) found alongside it.",
+                    p.name,
+                )
+                seen_stems.add(stem_lower)  # prevent companion from being processed alone
+                continue
+            pairs.append((p, companion))
+            seen_stems.add(stem_lower)
+
+        elif ext_lower in _READABLE_EXTENSIONS:
+            if stem_lower in seen_stems:
+                # Already handled by its RAW counterpart
+                continue
+            if stem_lower in raw_stems:
+                # RAW exists but was skipped (no companion found) — also skip this
+                continue
+            # Standalone readable file: XMP goes next to itself
+            pairs.append((p, p))
+            seen_stems.add(stem_lower)
+
+    # Sort final list by the readable file's name (capture-time proxy)
+    pairs.sort(key=lambda t: t[1].name)
+    return pairs
 
 
 # ---------------------------------------------------------------------------
@@ -170,37 +262,40 @@ class _CloudF1Detector:
 
 def _process_group(
     group: BurstGroup,
-    exif_map: dict[Path, ExifData],
     f1_model,
     coco_model,
     cloud_f1: _CloudF1Detector | None,
     top_n: int,
     sharp_thresh: float,
     conf: float,
-    dry_run: bool,
 ) -> list[ImageScore]:
-    """Score all frames in one burst group and apply TopN selection."""
+    """Score all frames in one burst group and apply TopN selection.
+
+    Each entry in group.frames is the *RAW path* (used as the score/XMP
+    target).  group.read_paths holds the corresponding readable file to
+    actually decode for analysis.
+    """
     scores: list[ImageScore] = []
     prev_detections: list[Detection] | None = None
 
-    for frame_idx, frame_path in enumerate(group.frames):
+    for frame_idx, (raw_path, read_path) in enumerate(
+        zip(group.frames, group.read_paths)
+    ):
         is_first = frame_idx == 0
 
         # --- Load image -------------------------------------------------------
-        img_rgb = _load_image_rgb(frame_path)
+        img_rgb = _load_image_rgb(read_path)
 
         if img_rgb is None:
-            log.warning("Skipping unreadable frame: %s", frame_path.name)
+            log.warning("Skipping unreadable frame: %s", read_path.name)
             continue
 
-        # Derive BGR from the already-loaded RGB to avoid double-decoding
-        # (especially important for large HIF/NEF RAW files)
+        # Derive BGR from already-loaded RGB (avoids double-decoding)
         img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
         h, w = img_rgb.shape[:2]
 
         # --- Detection --------------------------------------------------------
         if cloud_f1 is not None:
-            # Use cloud F1; if no result, fall through to COCO
             detections = cloud_f1.detect(img_rgb, conf=conf)
             if not detections:
                 detections = detect(img_rgb, None, coco_model, conf=conf)
@@ -221,9 +316,9 @@ def _process_group(
             is_first_frame=is_first,
         )
 
-        # --- Score ------------------------------------------------------------
+        # --- Score  (path stored = RAW path, XMP will land next to it) -------
         img_score = score_image(
-            path=frame_path,
+            path=raw_path,
             detections=detections,
             s_sharp=s_sharp,
             s_comp=s_comp,
@@ -232,8 +327,9 @@ def _process_group(
         scores.append(img_score)
 
         log.info(
-            "  [%s]  sharp=%.3f  comp=%.3f  raw=%.2f  Rating=%+d%s",
-            frame_path.name,
+            "  [%s]  read=%s  sharp=%.3f  comp=%.3f  raw=%.2f  Rating=%+d%s",
+            raw_path.name,
+            read_path.name,
             s_sharp,
             s_comp,
             img_score.raw_score,
@@ -260,24 +356,27 @@ def run(args: argparse.Namespace) -> int:
         log.error("Input directory not found: %s", input_dir)
         return 1
 
-    # --- Collect image files -------------------------------------------------
-    image_paths: list[Path] = sorted(
-        p for p in input_dir.iterdir()
-        if p.suffix in _EXTENSIONS
-    )
-    if not image_paths:
+    # --- Collect image files (RAW + companion pairing) -----------------------
+    pairs = _collect_files(input_dir)
+    if not pairs:
         log.error("No supported image files found in %s", input_dir)
         return 1
 
-    log.info("Found %d images in %s", len(image_paths), input_dir)
+    raw_paths  = [p[0] for p in pairs]   # XMP targets (RAW or standalone JPG)
+    read_paths = [p[1] for p in pairs]   # files to decode for analysis
 
-    # --- Read EXIF & group bursts --------------------------------------------
+    log.info(
+        "Found %d image(s) in %s  (%d have separate RAW+JPG pairs)",
+        len(pairs), input_dir,
+        sum(1 for r, rd in pairs if r != rd),
+    )
+
+    # --- Read EXIF from RAW paths & group bursts -----------------------------
     log.info("Reading EXIF metadata …")
-    exif_list = read_exif(image_paths)
-    exif_map  = {e.path: e for e in exif_list}
+    exif_list = read_exif(raw_paths)
 
     log.info("Grouping burst sequences …")
-    groups = group_bursts(exif_list)
+    groups = group_bursts(exif_list, read_paths=read_paths)
     log.info(
         "  %d groups  (%d burst, %d single)",
         len(groups),
@@ -286,9 +385,9 @@ def run(args: argparse.Namespace) -> int:
     )
 
     # --- Load detection models -----------------------------------------------
-    f1_model    = None
-    cloud_f1    = None
-    coco_model  = load_coco_model()
+    f1_model   = None
+    cloud_f1   = None
+    coco_model = load_coco_model()
 
     f1_onnx = Path(args.f1_model)
     if args.rf_api_key:
@@ -315,24 +414,22 @@ def run(args: argparse.Namespace) -> int:
         )
         group_scores = _process_group(
             group=group,
-            exif_map=exif_map,
             f1_model=f1_model,
             coco_model=coco_model,
             cloud_f1=cloud_f1,
             top_n=args.top_n,
             sharp_thresh=args.sharp_thresh,
             conf=args.conf,
-            dry_run=args.dry_run,
         )
         all_scores.extend(group_scores)
 
     elapsed = time.perf_counter() - t_start
 
     # --- Summary statistics --------------------------------------------------
-    n_total   = len(all_scores)
-    n_reject  = sum(1 for s in all_scores if s.rating == -1)
-    n_keep    = n_total - n_reject
-    ips       = n_total / elapsed if elapsed > 0 else float("inf")
+    n_total  = len(all_scores)
+    n_reject = sum(1 for s in all_scores if s.rating == -1)
+    n_keep   = n_total - n_reject
+    ips      = n_total / elapsed if elapsed > 0 else float("inf")
 
     log.info(
         "\nDone in %.1fs  (%.1f img/s)  total=%d  keep=%d  reject=%d",
@@ -346,7 +443,7 @@ def run(args: argparse.Namespace) -> int:
         label = "Rejected" if r == -1 else f"{r}★"
         log.info("  %8s : %d", label, rating_dist[r])
 
-    # --- Write XMP sidecars --------------------------------------------------
+    # --- Write XMP sidecars (next to RAW files) ------------------------------
     xmp_pairs = [(s.path, s.rating) for s in all_scores]
     written = write_xmp_batch(xmp_pairs, overwrite=True, dry_run=args.dry_run)
 
