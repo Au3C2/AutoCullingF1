@@ -9,23 +9,24 @@ wheels/
 # Virtual environments
 .venv/
 
-# Dataset (raw images and CSVs — not committed)
-dataset/
-
-# Training checkpoints (large .pt files — not committed)
-checkpoints/
-
 # Lock file
 uv.lock
 
 # Logs
 *.log
 
-# ONNX models (large binary files — run export_onnx.py to regenerate)
-onnx_models/
+# Model weights and ONNX exports (large binary — run download_f1_model.py to regenerate)
+models/*.pt
+models/*.onnx
+models/*.yaml
+
+# Generated XMP sidecars (output artefacts — not committed)
+*.xmp
 
 # macOS
 .DS_Store
+
+# Raw image files
 *.jpg
 *.jpeg
 *.png
@@ -34,3 +35,7 @@ onnx_models/
 *.tiff
 *.nef
 *.arw
+*.hif
+*.HIF
+*.NEF
+*.ARW
