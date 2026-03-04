@@ -38,4 +38,4 @@ models/*.yaml
 *.hif
 *.HIF
 *.NEF
-*.ARW
+*.ARWyolov8n.pt
