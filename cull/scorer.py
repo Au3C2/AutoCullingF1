@@ -12,13 +12,13 @@ Scoring pipeline per image
    raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~36%, comp ~64%)
    raw is in approximately [0, 5.5]
 
-3. Rating mapping:
-   raw   → Rating
-   < 1   →  1
-   1-2   →  2
-   2-3   →  3
-   3-4   →  4
-   ≥ 4   →  5
+3. Rating mapping (tuned for non-vetoed raw range ~4.0-5.5):
+   raw      → Rating
+   < 4.25   →  1★
+   4.25-4.5 →  2★
+   4.5-4.75 →  3★
+   4.75-5.0 →  4★
+   ≥ 5.0    →  5★
 
 Burst group TopN selection
 --------------------------
@@ -44,10 +44,16 @@ log = logging.getLogger(__name__)
 SHARP_THRESH: float = 0.15   # veto threshold — below this → Rating -1
 W_SHARP: float = 2.0         # weight for sharpness in raw score formula
 W_COMP: float = 3.5          # weight for composition in raw score formula
-MIN_RAW: float = 4.2         # minimum raw score — below this → Rating -1
+MIN_RAW: float = 4.0         # minimum raw score — below this → Rating -1
 
-# Rating breakpoints for raw score → 1-5 stars
-_RATING_BREAKS = [1.0, 2.0, 3.0, 4.0]   # boundaries between ratings 1/2/3/4/5
+# Rating breakpoints for raw score → 1-5 stars.
+# Tuned for the range [MIN_RAW, ~5.5] to give a natural star gradient:
+#   1★: [4.00, 4.25)  ~28%   precision ~34%
+#   2★: [4.25, 4.50)  ~26%   precision ~40%
+#   3★: [4.50, 4.75)  ~19%   precision ~48%
+#   4★: [4.75, 5.00)  ~16%   precision ~66%
+#   5★: [5.00, +∞)    ~11%   precision ~74%
+_RATING_BREAKS = [4.25, 4.50, 4.75, 5.00]   # boundaries between ratings 1/2/3/4/5
 
 
 # ---------------------------------------------------------------------------

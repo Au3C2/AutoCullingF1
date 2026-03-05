@@ -72,7 +72,7 @@ def load_csv(path: Path) -> list[Row]:
 # Rating mapping (mirrors cull/scorer.py)
 # ---------------------------------------------------------------------------
 
-_RATING_BREAKS_DEFAULT = [1.0, 2.0, 3.0, 4.0]
+_RATING_BREAKS_DEFAULT = [4.25, 4.50, 4.75, 5.00]
 
 
 def _raw_to_rating(raw: float, breaks: list[float] = _RATING_BREAKS_DEFAULT) -> int:
@@ -385,8 +385,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Also show baseline for comparison
     print(f"\n{'='*110}")
-    print("Baseline (current defaults: sharp_thresh=0.15, w_sharp=2.0, w_comp=3.5, top_n=7, min_raw=4.2):")
-    baseline = simulate(rows, sharp_thresh=0.15, w_sharp=2.0, w_comp=3.5, top_n=7, min_raw=4.2)
+    print("Baseline (current defaults: sharp_thresh=0.15, w_sharp=2.0, w_comp=3.5, top_n=7, min_raw=4.0):")
+    baseline = simulate(rows, sharp_thresh=0.15, w_sharp=2.0, w_comp=3.5, top_n=7, min_raw=4.0)
     print(f"  Precision={baseline.precision:.3f}  Recall={baseline.recall:.3f}  "
           f"F1={baseline.f1:.4f}  Acc={baseline.accuracy:.3f}  "
           f"TP={baseline.tp}  FP={baseline.fp}  FN={baseline.fn}  TN={baseline.tn}  "
