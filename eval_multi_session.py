@@ -303,7 +303,7 @@ def main() -> int:
                         help="Output scores CSV path.")
     parser.add_argument("--f1-model", type=Path, default=Path("models/f1_yolov8n.onnx"),
                         help="Path to F1 YOLO ONNX model.")
-    parser.add_argument("--top-n", type=int, default=7)
+    parser.add_argument("--top-n", type=int, default=12)
     parser.add_argument("--sharp-thresh", type=float, default=SHARP_THRESH)
     parser.add_argument("--w-sharp", type=float, default=W_SHARP)
     parser.add_argument("--w-comp", type=float, default=W_COMP)

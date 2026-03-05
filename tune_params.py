@@ -1,28 +1,26 @@
 """
 tune_params.py — Offline parameter tuning for the culling pipeline.
 
-Reads a CSV produced by ``cull_photos.py --dump-scores`` and replays the
-scoring + burst-group TopN logic with different parameter combinations.
-No image decoding or detection is needed — runs in < 1 second.
+Reads a CSV produced by ``cull_photos.py --dump-scores`` (single session)
+or ``eval_multi_session.py`` (multi-session with ``session`` column) and
+replays the scoring + burst-group TopN logic with different parameter
+combinations.  No image decoding or detection is needed — runs in < 1 s.
 
 Usage
 -----
-    # Generate the scores CSV first (only once, ~2 min for 934 HIF):
-    python cull_photos.py \
-        --input-dir "E:\...\HIF" \
-        --dump-scores scores.csv \
-        --label-check --dry-run
-
-    # Then tune parameters offline:
+    # Single-session CSV:
     python tune_params.py --scores scores.csv
 
-    # Or specify a custom search grid:
-    python tune_params.py --scores scores.csv \
-        --sharp-thresh 0.10 0.15 0.20 0.25 0.30 \
-        --top-n 1 2 3 \
-        --w-sharp 2.5 3.0 3.5 4.0 \
-        --w-comp 0.5 1.0 1.5 2.0 \
-        --min-raw 0.0 2.0 2.5 3.0
+    # Multi-session CSV (must have ``session`` column):
+    python tune_params.py --scores scores_multi_v2.csv
+
+    # Custom search grid:
+    python tune_params.py --scores scores_multi_v2.csv \
+        --sharp-thresh 0.10 0.15 0.20 \
+        --w-sharp 1.5 2.0 2.5 3.0 \
+        --w-comp 2.5 3.0 3.5 4.0 \
+        --min-raw 3.5 3.8 4.0 4.2 \
+        --top-n 5 7 9
 """
 
 from __future__ import annotations
@@ -44,25 +42,39 @@ class Row:
     """One image's intermediate scores, loaded from CSV."""
 
     filename: str
+    session: str  # session name (empty string if single-session CSV)
     s_sharp: float
     s_comp: float
     n_detections: int
-    burst_group: int
+    burst_group: int  # raw burst_group from CSV (per-session numbering)
+    group_key: str  # unique key: "session:burst_group" to avoid cross-session collisions
     has_arw: bool  # ground truth
 
 
 def load_csv(path: Path) -> list[Row]:
-    """Read the scores CSV into a list of Row objects."""
+    """Read the scores CSV into a list of Row objects.
+
+    Handles both single-session CSVs (no ``session`` column) and
+    multi-session CSVs (with ``session`` column).  Constructs a unique
+    ``group_key`` from ``(session, burst_group)`` to avoid cross-session
+    burst_group ID collisions.
+    """
     rows: list[Row] = []
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
+        has_session = "session" in (reader.fieldnames or [])
         for r in reader:
+            session = r.get("session", "") if has_session else ""
+            burst_group = int(r["burst_group"])
+            group_key = f"{session}:{burst_group}"
             rows.append(Row(
                 filename=r["filename"],
+                session=session,
                 s_sharp=float(r["s_sharp"]),
                 s_comp=float(r["s_comp"]),
                 n_detections=int(r["n_detections"]),
-                burst_group=int(r["burst_group"]),
+                burst_group=burst_group,
+                group_key=group_key,
                 has_arw=bool(int(r["has_arw"])),
             ))
     return rows
@@ -127,7 +139,7 @@ def simulate(
     w_sharp: float = 2.0,
     w_comp: float = 3.5,
     top_n: int = 7,
-    min_raw: float = 4.2,
+    min_raw: float = 4.0,
     rating_breaks: list[float] | None = None,
 ) -> SimResult:
     """Replay scoring + TopN logic offline and compute metrics vs ground truth.
@@ -144,7 +156,7 @@ def simulate(
         rating_breaks = _RATING_BREAKS_DEFAULT
 
     # --- Phase 1: per-image scoring (veto + raw + rating) --------------------
-    # We store (index, raw_score, vetoed, burst_group) for TopN phase
+    # We store (index, raw_score, vetoed, group_key) for TopN phase
     scored: list[dict] = []
     for i, r in enumerate(rows):
         raw = w_sharp * r.s_sharp + w_comp * r.s_comp
@@ -163,14 +175,14 @@ def simulate(
             "raw": raw,
             "rating": rating,
             "vetoed": vetoed,
-            "burst_group": r.burst_group,
+            "group_key": r.group_key,
         })
 
     # --- Phase 2: burst-group TopN selection ---------------------------------
-    # Group by burst_group
-    groups: dict[int, list[dict]] = {}
+    # Group by group_key (session:burst_group) to avoid cross-session collisions
+    groups: dict[str, list[dict]] = {}
     for s in scored:
-        groups.setdefault(s["burst_group"], []).append(s)
+        groups.setdefault(s["group_key"], []).append(s)
 
     for g_items in groups.values():
         candidates = [s for s in g_items if not s["vetoed"]]
@@ -275,27 +287,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--sharp-thresh", type=float, nargs="+",
-        default=[0.10, 0.15, 0.20, 0.25, 0.30],
+        default=[0.05, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25],
         help="Sharpness threshold values to try.",
     )
     parser.add_argument(
         "--w-sharp", type=float, nargs="+",
-        default=[2.5, 3.0, 3.5, 4.0, 4.5],
+        default=[1.0, 1.5, 2.0, 2.5, 3.0, 3.5],
         help="Sharpness weight values to try.",
     )
     parser.add_argument(
         "--w-comp", type=float, nargs="+",
-        default=[0.5, 1.0, 1.5, 2.0],
+        default=[2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
         help="Composition weight values to try.",
     )
     parser.add_argument(
         "--top-n", type=int, nargs="+",
-        default=[1, 2, 3],
+        default=[3, 5, 7, 9, 12],
         help="TopN values to try.",
     )
     parser.add_argument(
         "--min-raw", type=float, nargs="+",
-        default=[0.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+        default=[3.0, 3.2, 3.5, 3.8, 4.0, 4.2, 4.5],
         help="Minimum raw score values to try (below → reject).",
     )
     parser.add_argument(
@@ -326,8 +338,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Ground truth: {n_keep_gt} keep ({100*n_keep_gt/len(rows):.1f}%), "
           f"{n_disc_gt} discard ({100*n_disc_gt/len(rows):.1f}%)")
 
-    n_groups = len(set(r.burst_group for r in rows))
-    print(f"  {n_groups} burst groups")
+    sessions = set(r.session for r in rows)
+    n_groups = len(set(r.group_key for r in rows))
+    if sessions != {""}:
+        print(f"  {len(sessions)} sessions: {sorted(sessions)}")
+    print(f"  {n_groups} burst groups (unique across sessions)")
 
     # Count search space
     n_combos = (len(args.sharp_thresh) * len(args.w_sharp) * len(args.w_comp)
@@ -391,6 +406,55 @@ def main(argv: list[str] | None = None) -> int:
           f"F1={baseline.f1:.4f}  Acc={baseline.accuracy:.3f}  "
           f"TP={baseline.tp}  FP={baseline.fp}  FN={baseline.fn}  TN={baseline.tn}  "
           f"Keep={baseline.n_keep}  Reject={baseline.n_reject}")
+
+    # Also show per-session breakdown for multi-session data
+    sessions = set(r.session for r in rows)
+    if sessions != {""}:
+        print(f"\n{'='*110}")
+        print("Per-session breakdown (baseline params):")
+        print(f"{'='*110}")
+        print(f"  {'Session':<18} {'Prec':>6}  {'Recall':>6}  {'F1':>6}  "
+              f"{'TP':>4}  {'FP':>4}  {'FN':>4}  {'TN':>4}  "
+              f"{'Keep':>5}  {'Rej':>5}  {'Total':>5}")
+        print(f"  {'-'*100}")
+        for sess in sorted(sessions):
+            sess_rows = [r for r in rows if r.session == sess]
+            sess_result = simulate(sess_rows,
+                                   sharp_thresh=0.15, w_sharp=2.0,
+                                   w_comp=3.5, top_n=7, min_raw=4.0)
+            print(f"  {sess:<18} "
+                  f"{sess_result.precision:6.3f}  {sess_result.recall:6.3f}  "
+                  f"{sess_result.f1:6.4f}  "
+                  f"{sess_result.tp:4d}  {sess_result.fp:4d}  "
+                  f"{sess_result.fn:4d}  {sess_result.tn:4d}  "
+                  f"{sess_result.n_keep:5d}  {sess_result.n_reject:5d}  "
+                  f"{len(sess_rows):5d}")
+
+    # Show best result's per-session breakdown
+    if sessions != {""} and results:
+        best_params = results[0][0]
+        print(f"\n{'='*110}")
+        print(f"Per-session breakdown (BEST params: "
+              f"sharp_thresh={best_params['sharp_thresh']:.2f}, "
+              f"w_sharp={best_params['w_sharp']:.1f}, "
+              f"w_comp={best_params['w_comp']:.1f}, "
+              f"top_n={best_params['top_n']}, "
+              f"min_raw={best_params['min_raw']:.1f}):")
+        print(f"{'='*110}")
+        print(f"  {'Session':<18} {'Prec':>6}  {'Recall':>6}  {'F1':>6}  "
+              f"{'TP':>4}  {'FP':>4}  {'FN':>4}  {'TN':>4}  "
+              f"{'Keep':>5}  {'Rej':>5}  {'Total':>5}")
+        print(f"  {'-'*100}")
+        for sess in sorted(sessions):
+            sess_rows = [r for r in rows if r.session == sess]
+            sess_result = simulate(sess_rows, **best_params)
+            print(f"  {sess:<18} "
+                  f"{sess_result.precision:6.3f}  {sess_result.recall:6.3f}  "
+                  f"{sess_result.f1:6.4f}  "
+                  f"{sess_result.tp:4d}  {sess_result.fp:4d}  "
+                  f"{sess_result.fn:4d}  {sess_result.tn:4d}  "
+                  f"{sess_result.n_keep:5d}  {sess_result.n_reject:5d}  "
+                  f"{len(sess_rows):5d}")
 
     return 0
 

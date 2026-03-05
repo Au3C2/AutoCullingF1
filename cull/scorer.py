@@ -9,16 +9,16 @@ Scoring pipeline per image
    - raw < MIN_RAW            → Rating = -1
 
 2. Raw score:
-   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~36%, comp ~64%)
+   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~55%, comp ~45%)
    raw is in approximately [0, 5.5]
 
-3. Rating mapping (tuned for non-vetoed raw range ~4.0-5.5):
+3. Rating mapping (tuned for non-vetoed raw range ~4.2-5.5):
    raw      → Rating
-   < 4.25   →  1★
-   4.25-4.5 →  2★
-   4.5-4.75 →  3★
-   4.75-5.0 →  4★
-   ≥ 5.0    →  5★
+   < 4.40   →  1★   ~25%   precision ~34%
+   4.40-4.60 →  2★   ~25%   precision ~38%
+   4.60-4.80 →  3★   ~18%   precision ~52%
+   4.80-5.00 →  4★   ~14%   precision ~57%
+   ≥ 5.00    →  5★   ~17%   precision ~73%
 
 Burst group TopN selection
 --------------------------
@@ -26,7 +26,7 @@ After scoring all frames in a burst group, keep the top-N by raw score.
 The kept frames receive their computed Rating (1-5).
 All others are downgraded to Rating = -1 (rejected).
 
-N is configurable (default 7).
+N is configurable (default 12).
 """
 
 from __future__ import annotations
@@ -38,22 +38,22 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants  (v3 — tuned via offline grid search on 2018-image test set)
 # ---------------------------------------------------------------------------
 
 SHARP_THRESH: float = 0.15   # veto threshold — below this → Rating -1
-W_SHARP: float = 2.0         # weight for sharpness in raw score formula
-W_COMP: float = 3.5          # weight for composition in raw score formula
-MIN_RAW: float = 4.0         # minimum raw score — below this → Rating -1
+W_SHARP: float = 3.0          # weight for sharpness in raw score formula
+W_COMP: float = 2.5           # weight for composition in raw score formula
+MIN_RAW: float = 4.2          # minimum raw score — below this → Rating -1
 
 # Rating breakpoints for raw score → 1-5 stars.
 # Tuned for the range [MIN_RAW, ~5.5] to give a natural star gradient:
-#   1★: [4.00, 4.25)  ~28%   precision ~34%
-#   2★: [4.25, 4.50)  ~26%   precision ~40%
-#   3★: [4.50, 4.75)  ~19%   precision ~48%
-#   4★: [4.75, 5.00)  ~16%   precision ~66%
-#   5★: [5.00, +∞)    ~11%   precision ~74%
-_RATING_BREAKS = [4.25, 4.50, 4.75, 5.00]   # boundaries between ratings 1/2/3/4/5
+#   1★: [4.20, 4.40)  ~25%   precision ~34%
+#   2★: [4.40, 4.60)  ~25%   precision ~38%
+#   3★: [4.60, 4.80)  ~18%   precision ~52%
+#   4★: [4.80, 5.00)  ~14%   precision ~57%
+#   5★: [5.00, +∞)    ~17%   precision ~73%
+_RATING_BREAKS = [4.40, 4.60, 4.80, 5.00]   # boundaries between ratings 1/2/3/4/5
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ def score_image(
 
 def select_best_n(
     scores: list[ImageScore],
-    top_n: int = 7,
+    top_n: int = 12,
 ) -> list[ImageScore]:
     """Apply burst-group TopN selection.
 
@@ -209,7 +209,7 @@ def select_best_n(
     scores:
         All ImageScore objects for frames in a single burst group, in any order.
     top_n:
-        Maximum number of frames to keep (default 3).
+        Maximum number of frames to keep (default 12).
 
     Returns
     -------
