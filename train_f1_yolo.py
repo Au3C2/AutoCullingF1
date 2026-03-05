@@ -1,15 +1,15 @@
 """
 train_f1_yolo.py — Train a YOLOv8n model for F1 car detection.
 
-Uses the Roboflow "Formula One Car Detection" dataset (YOLOv8 format)
-already extracted to ``datasets/f1_roboflow/``.
+Uses the merged F1 dataset (10 teams, from three Roboflow sources)
+at ``datasets/f1_merged/``.  See ``merge_datasets.py`` to regenerate.
 
 Usage
 -----
     python train_f1_yolo.py
 
     # Custom epochs / image size
-    python train_f1_yolo.py --epochs 100 --imgsz 640
+    python train_f1_yolo.py --epochs 150 --imgsz 640
 
     # Resume from a checkpoint
     python train_f1_yolo.py --resume
@@ -33,7 +33,7 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
-_DATA_YAML    = _PROJECT_ROOT / "datasets" / "f1_roboflow" / "data.yaml"
+_DATA_YAML    = _PROJECT_ROOT / "datasets" / "f1_merged" / "data.yaml"
 _TRAIN_DIR    = _PROJECT_ROOT / "runs" / "f1_detect"
 _ONNX_OUT     = _PROJECT_ROOT / "models" / "f1_yolov8n.onnx"
 
@@ -50,7 +50,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--epochs", type=int, default=50,
+        "--epochs", type=int, default=100,
         help="Number of training epochs.",
     )
     parser.add_argument(
@@ -90,8 +90,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.data.exists():
         print(f"ERROR: data.yaml not found: {args.data}")
-        print("  Extract the dataset first:")
-        print("  Expand-Archive 'Formula One Car Detection.v1i.yolov8.zip' 'datasets/f1_roboflow'")
+        print("  Run merge_datasets.py --merge first to create the merged dataset.")
         return 1
 
     # --- Train ---------------------------------------------------------------

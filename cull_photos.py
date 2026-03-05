@@ -888,7 +888,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--top-n",
         type=int,
-        default=3,
+        default=7,
         help="Maximum frames to keep per burst group.",
     )
     parser.add_argument(

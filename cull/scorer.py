@@ -9,8 +9,8 @@ Scoring pipeline per image
    - raw < MIN_RAW            → Rating = -1
 
 2. Raw score:
-   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~75%, comp ~25%)
-   raw is in approximately [0, 6]
+   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~36%, comp ~64%)
+   raw is in approximately [0, 5.5]
 
 3. Rating mapping:
    raw   → Rating
@@ -26,7 +26,7 @@ After scoring all frames in a burst group, keep the top-N by raw score.
 The kept frames receive their computed Rating (1-5).
 All others are downgraded to Rating = -1 (rejected).
 
-N is configurable (default 3).
+N is configurable (default 7).
 """
 
 from __future__ import annotations
@@ -42,9 +42,9 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SHARP_THRESH: float = 0.15   # veto threshold — below this → Rating -1
-W_SHARP: float = 4.5         # weight for sharpness in raw score formula
-W_COMP: float = 1.5          # weight for composition in raw score formula
-MIN_RAW: float = 3.5         # minimum raw score — below this → Rating -1
+W_SHARP: float = 2.0         # weight for sharpness in raw score formula
+W_COMP: float = 3.5          # weight for composition in raw score formula
+MIN_RAW: float = 4.2         # minimum raw score — below this → Rating -1
 
 # Rating breakpoints for raw score → 1-5 stars
 _RATING_BREAKS = [1.0, 2.0, 3.0, 4.0]   # boundaries between ratings 1/2/3/4/5
@@ -189,7 +189,7 @@ def score_image(
 
 def select_best_n(
     scores: list[ImageScore],
-    top_n: int = 3,
+    top_n: int = 7,
 ) -> list[ImageScore]:
     """Apply burst-group TopN selection.
 

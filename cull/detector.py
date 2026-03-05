@@ -14,7 +14,7 @@ If both stages return no detections → empty list (image will be rejected).
 
 Class → semantic weight mapping
 --------------------------------
-f1_car (Ferrari/McLaren/Mercedes/RedBull → unified)  : 1.0
+f1_car (all 10 F1 teams → unified)                    : 1.0
 coco_car                                              : 0.7
 coco_person                                           : 0.5
 coco_airplane / coco_helicopter                       : 0.3
