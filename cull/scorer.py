@@ -9,16 +9,16 @@ Scoring pipeline per image
    - raw < MIN_RAW            → Rating = -1
 
 2. Raw score:
-   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness ~55%, comp ~45%)
-   raw is in approximately [0, 5.5]
+   raw = W_SHARP * S_sharp + W_COMP * S_comp    (sharpness 50%, comp 50%)
+   raw is in approximately [0, 6.0]
 
-3. Rating mapping (tuned for non-vetoed raw range ~4.2-5.5):
-   raw      → Rating
-   < 4.40   →  1★   ~25%   precision ~34%
-   4.40-4.60 →  2★   ~25%   precision ~38%
-   4.60-4.80 →  3★   ~18%   precision ~52%
-   4.80-5.00 →  4★   ~14%   precision ~57%
-   ≥ 5.00    →  5★   ~17%   precision ~73%
+3. Rating mapping (tuned for non-vetoed raw range ~2.9-6.0):
+   raw       → Rating
+   < 3.40    →  1★
+   3.40-3.80 →  2★
+   3.80-4.20 →  3★
+   4.20-4.60 →  4★
+   ≥ 4.60    →  5★
 
 Burst group TopN selection
 --------------------------
@@ -26,7 +26,7 @@ After scoring all frames in a burst group, keep the top-N by raw score.
 The kept frames receive their computed Rating (1-5).
 All others are downgraded to Rating = -1 (rejected).
 
-N is configurable (default 12).
+N is configurable (default 11).
 """
 
 from __future__ import annotations
@@ -38,22 +38,20 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants  (v3 — tuned via offline grid search on 2018-image test set)
+# Constants  (v4 — tuned via offline grid search on 2018-image test set
+#             with FFT hf_ratio sharpness metric)
 # ---------------------------------------------------------------------------
 
-SHARP_THRESH: float = 0.15   # veto threshold — below this → Rating -1
+SHARP_THRESH: float = 0.12   # veto threshold — below this → Rating -1
 W_SHARP: float = 3.0          # weight for sharpness in raw score formula
-W_COMP: float = 2.5           # weight for composition in raw score formula
-MIN_RAW: float = 4.2          # minimum raw score — below this → Rating -1
+W_COMP: float = 3.0           # weight for composition in raw score formula
+MIN_RAW: float = 2.9          # minimum raw score — below this → Rating -1
 
 # Rating breakpoints for raw score → 1-5 stars.
-# Tuned for the range [MIN_RAW, ~5.5] to give a natural star gradient:
-#   1★: [4.20, 4.40)  ~25%   precision ~34%
-#   2★: [4.40, 4.60)  ~25%   precision ~38%
-#   3★: [4.60, 4.80)  ~18%   precision ~52%
-#   4★: [4.80, 5.00)  ~14%   precision ~57%
-#   5★: [5.00, +∞)    ~17%   precision ~73%
-_RATING_BREAKS = [4.40, 4.60, 4.80, 5.00]   # boundaries between ratings 1/2/3/4/5
+# Tuned for the range [MIN_RAW, ~6.0] to give a natural star gradient.
+# With hf_ratio sharpness, s_sharp has much better spread (no ceiling effect)
+# so raw scores span a wider range than the old Laplacian-based version.
+_RATING_BREAKS = [3.40, 3.80, 4.20, 4.60]   # boundaries between ratings 1/2/3/4/5
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,12 @@ Three sub-scores are computed and combined:
                             The first frame of a burst group receives a neutral
                             score of 0.6 (direction unknown for single frames).
 
+A multiplicative *intact penalty* is applied when the primary subject's
+bounding box touches the image border (< 5% margin on any side).  This
+penalises heavily cropped / partially out-of-frame subjects.
+
 Final composition score:
-  S_comp = 0.35 * S_fill + 0.35 * S_thirds + 0.30 * S_lead
+  S_comp = (0.35 * S_fill + 0.35 * S_thirds + 0.30 * S_lead) * intact_factor
 """
 
 from __future__ import annotations
@@ -37,6 +41,45 @@ _LEAD_NEUTRAL = 0.6
 # the frame area.  Outside this range the score tapers off.
 _FILL_LO = 0.04   # 4% — subject too small (distant car)
 _FILL_HI = 0.50   # 50% — subject fills half the frame (close-up)
+
+# Intact-subject penalty: if any bbox edge is closer than this fraction
+# of the image dimension to the border, the subject is considered partially
+# cut off.  Each clipped edge reduces the composition score.
+_INTACT_MARGIN = 0.05          # 5% of image width/height
+_INTACT_PER_EDGE_PENALTY = 0.10  # penalty per clipped edge
+_INTACT_MAX_PENALTY = 0.30      # max cumulative penalty (3 edges)
+
+
+# ---------------------------------------------------------------------------
+# Intact factor (P1 — vehicle completeness)
+# ---------------------------------------------------------------------------
+
+
+def _intact_factor(detection: Detection, img_w: int, img_h: int) -> float:
+    """Return a multiplicative penalty factor ∈ [1-MAX_PENALTY, 1.0].
+
+    Checks whether the primary detection's bounding box is clipped by any
+    image border (margin < 5% of the corresponding dimension).  Each
+    clipped edge applies a fixed penalty, up to a configured maximum.
+
+    A fully in-frame subject returns 1.0 (no penalty).
+    """
+    n_clipped = 0
+    if detection.x1 < img_w * _INTACT_MARGIN:
+        n_clipped += 1   # left edge clipped
+    if detection.y1 < img_h * _INTACT_MARGIN:
+        n_clipped += 1   # top edge clipped
+    if detection.x2 > img_w * (1 - _INTACT_MARGIN):
+        n_clipped += 1   # right edge clipped
+    if detection.y2 > img_h * (1 - _INTACT_MARGIN):
+        n_clipped += 1   # bottom edge clipped
+
+    if n_clipped == 0:
+        return 1.0
+
+    penalty = min(n_clipped * _INTACT_PER_EDGE_PENALTY, _INTACT_MAX_PENALTY)
+    log.debug("Intact penalty: %d edges clipped → factor %.2f", n_clipped, 1.0 - penalty)
+    return 1.0 - penalty
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +250,13 @@ def score_composition(
     s_fill   = _score_fill(primary, img_w, img_h)
     s_thirds = _score_thirds(primary, img_w, img_h)
     s_lead   = _score_lead(primary, img_w, img_h, prev_primary, is_first_frame)
+    intact   = _intact_factor(primary, img_w, img_h)
 
-    s_comp = _W_FILL * s_fill + _W_THIRDS * s_thirds + _W_LEAD * s_lead
+    s_comp = (_W_FILL * s_fill + _W_THIRDS * s_thirds + _W_LEAD * s_lead) * intact
 
     log.debug(
-        "Composition  fill=%.3f  thirds=%.3f  lead=%.3f  → S_comp=%.3f",
-        s_fill, s_thirds, s_lead, s_comp,
+        "Composition  fill=%.3f  thirds=%.3f  lead=%.3f  intact=%.2f  → S_comp=%.3f",
+        s_fill, s_thirds, s_lead, intact, s_comp,
     )
 
     return float(np.clip(s_comp, 0.0, 1.0))
