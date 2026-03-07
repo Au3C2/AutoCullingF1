@@ -34,8 +34,10 @@ _XMP_TEMPLATE = """\
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
     <rdf:Description rdf:about=""
-      xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+      xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+      xmlns:xmpDM="http://ns.adobe.com/xmp/1.0/DynamicMedia/">
       <xmp:Rating>{rating}</xmp:Rating>
+{pick_tag}
     </rdf:Description>
   </rdf:RDF>
 </x:xmpmeta>
@@ -80,7 +82,12 @@ def write_xmp(image_path: Path, rating: int, overwrite: bool = True) -> Path:
         log.debug("Skipping existing sidecar: %s", xmp_path)
         return xmp_path
 
-    content = _XMP_TEMPLATE.format(rating=rating)
+    pick_tag = '      <xmpDM:pick>-1</xmpDM:pick>' if rating == -1 else ''
+    content = _XMP_TEMPLATE.format(rating=rating, pick_tag=pick_tag)
+    # Remove empty line if pick_tag is empty
+    if not pick_tag:
+        content = content.replace("      <xmp:Rating>{rating}</xmp:Rating>\n\n", f"      <xmp:Rating>{rating}</xmp:Rating>\n")
+    
     xmp_path.write_text(content, encoding="utf-8")
     log.debug("Wrote %s  (Rating=%d)", xmp_path.name, rating)
     return xmp_path
