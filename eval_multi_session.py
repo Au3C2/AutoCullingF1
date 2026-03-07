@@ -235,6 +235,8 @@ def _process_session(
                     "max_det_conf": f"{mc:.4f}",
                     "f1_max_conf": f"{f1c:.4f}",
                     "has_arw": has_arw,
+                    "fence_pred": s.fence_pred,
+                    "fence_confidence": f"{s.fence_confidence:.6f}",
                 })
 
     return all_rows

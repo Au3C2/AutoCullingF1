@@ -4,6 +4,7 @@ scorer.py — Aggregate scores, apply veto rules, map to Lightroom Rating.
 Scoring pipeline per image
 --------------------------
 1. Veto check:
+   - Wire fence detected      → Rating = -1 (new: P3 fence detection)
    - No detections           → Rating = -1 (Lightroom "Rejected" flag)
    - S_sharp < SHARP_THRESH  → Rating = -1
    - raw < MIN_RAW            → Rating = -1
@@ -47,11 +48,33 @@ W_SHARP: float = 3.0          # weight for sharpness in raw score formula
 W_COMP: float = 3.0           # weight for composition in raw score formula
 MIN_RAW: float = 2.9          # minimum raw score — below this → Rating -1
 
+# Fence detection (P3)
+ENABLE_FENCE_VETO: bool = True  # enable fence veto (set to False to disable)
+
 # Rating breakpoints for raw score → 1-5 stars.
 # Tuned for the range [MIN_RAW, ~6.0] to give a natural star gradient.
 # With hf_ratio sharpness, s_sharp has much better spread (no ceiling effect)
 # so raw scores span a wider range than the old Laplacian-based version.
 _RATING_BREAKS = [3.40, 3.80, 4.20, 4.60]   # boundaries between ratings 1/2/3/4/5
+# ---------------------------------------------------------------------------
+# Global fence classifier instance (lazy-loaded on first use)
+# ---------------------------------------------------------------------------
+
+_FENCE_CLASSIFIER = None  # Lazy-loaded FenceClassifier instance
+
+
+def _get_fence_classifier():
+    """Get or initialize the global fence classifier (lazy-loaded)."""
+    global _FENCE_CLASSIFIER
+    if _FENCE_CLASSIFIER is None:
+        try:
+            from cull.fence_classifier import FenceClassifier
+            _FENCE_CLASSIFIER = FenceClassifier(arch="mobilenetv2")
+            log.info("Fence classifier loaded (MobileNetV2, F1=0.9796)")
+        except Exception as e:
+            log.error(f"Failed to load fence classifier: {e}. Fence veto disabled.")
+            _FENCE_CLASSIFIER = False  # Mark as failed
+    return _FENCE_CLASSIFIER if _FENCE_CLASSIFIER is not False else None
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +95,8 @@ class ImageScore:
     veto_reason: str = ""    # human-readable reason for veto
     n_detections: int = 0    # number of detections (for offline replay)
     burst_group: int = -1    # burst group index (set by run())
+    fence_pred: int = 0      # fence classifier: 0 (no fence) or 1 (fence) [new: P3]
+    fence_confidence: float = 0.0  # fence classifier confidence [0, 1] [new: P3]
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +126,7 @@ def score_image(
     w_sharp: float = W_SHARP,
     w_comp: float = W_COMP,
     min_raw: float = MIN_RAW,
+    check_fence: bool = ENABLE_FENCE_VETO,
 ) -> ImageScore:
     """Compute the final score and Rating for a single image.
 
@@ -122,6 +148,8 @@ def score_image(
         Weight for composition in raw score formula.
     min_raw:
         Minimum raw score to avoid veto (0.0 to disable).
+    check_fence:
+        Whether to check for wire fence occlusion (P3).
 
     Returns
     -------
@@ -129,6 +157,31 @@ def score_image(
     """
     n_det = len(detections)
     raw = w_sharp * s_sharp + w_comp * s_comp
+    
+    fence_pred = 0
+    fence_confidence = 0.0
+
+    # --- Wire fence veto check (P3) -----------------------------------------------
+    if check_fence:
+        try:
+            classifier = _get_fence_classifier()
+            if classifier is not None:
+                fence_pred, fence_confidence = classifier.predict_image(path)
+                if fence_pred == 1:  # fence detected
+                    return ImageScore(
+                        path=path,
+                        s_sharp=s_sharp,
+                        s_comp=s_comp,
+                        raw_score=raw,
+                        rating=-1,
+                        vetoed=True,
+                        veto_reason=f"fence_detected (confidence={fence_confidence:.3f})",
+                        n_detections=n_det,
+                        fence_pred=fence_pred,
+                        fence_confidence=fence_confidence,
+                    )
+        except Exception as e:
+            log.warning(f"Fence detection error for {path}: {e}")
 
     # --- Veto checks ---------------------------------------------------------
     if not detections:
@@ -141,6 +194,8 @@ def score_image(
             vetoed=True,
             veto_reason="no_detection",
             n_detections=0,
+            fence_pred=fence_pred,
+            fence_confidence=fence_confidence,
         )
 
     if s_sharp < sharp_thresh:
@@ -153,6 +208,8 @@ def score_image(
             vetoed=True,
             veto_reason=f"sharpness={s_sharp:.3f} < threshold={sharp_thresh:.3f}",
             n_detections=n_det,
+            fence_pred=fence_pred,
+            fence_confidence=fence_confidence,
         )
 
     if min_raw > 0.0 and raw < min_raw:
@@ -165,6 +222,8 @@ def score_image(
             vetoed=True,
             veto_reason=f"raw={raw:.3f} < min_raw={min_raw:.3f}",
             n_detections=n_det,
+            fence_pred=fence_pred,
+            fence_confidence=fence_confidence,
         )
 
     # --- Normal scoring ------------------------------------------------------
@@ -183,6 +242,8 @@ def score_image(
         rating=rating,
         vetoed=False,
         n_detections=n_det,
+        fence_pred=fence_pred,
+        fence_confidence=fence_confidence,
     )
 
 

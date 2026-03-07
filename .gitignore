@@ -36,6 +36,17 @@ datasets/
 # Scores CSV (regenerate via cull_photos.py --dump-scores)
 scores*.csv
 
+# Experimental and temporary files
+_*.py
+_*.csv
+eval_output.txt
+fence_eval_output.txt
+train_v2.log
+nul
+
+# Error review analysis (separate from production code)
+error_review/
+
 # macOS
 .DS_Store
 
