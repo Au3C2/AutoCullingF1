@@ -423,6 +423,7 @@ def _process_group(
     min_raw: float,
     conf: float,
     dry_run: bool,
+    p4_policy: str = "always",
     scale_width: int = 0,
     prefetch_executor: ThreadPoolExecutor | None = None,
 ) -> list[ImageScore]:
@@ -444,6 +445,20 @@ def _process_group(
         pending_future = prefetch_executor.submit(
             _load_image_rgb, frames[0], scale_width,
         )
+
+    # Determine P4 check based on policy
+    check_p4 = True
+    if p4_policy == "never":
+        check_p4 = False
+    elif p4_policy == "auto":
+        # Auto mode: Only enable P4 if we see "F1" or "Grand Prix" or "GP" in the path
+        path_str = str(frames[0]).lower()
+        keywords = ["f1", "gp", "grand prix", "race", "quali", "practice"]
+        check_p4 = any(k in path_str for k in keywords)
+        
+        # Exception: sprint_quali (F1 session where P4 showed negative impact in benchmarks)
+        if "sprint_quali" in path_str:
+            check_p4 = False
 
     for frame_idx, frame_path in enumerate(frames):
         is_first = frame_idx == 0
@@ -503,6 +518,7 @@ def _process_group(
             w_sharp=w_sharp,
             w_comp=w_comp,
             min_raw=min_raw,
+            check_p4=check_p4,
             img_rgb=img_rgb,
         )
         scores.append(img_score)
@@ -608,8 +624,9 @@ def run(args: argparse.Namespace) -> int:
                 min_raw=args.min_raw,
                 conf=args.conf,
                 dry_run=args.dry_run,
+                p4_policy=args.p4_policy,
                 scale_width=scale_width,
-                prefetch_executor=None, # Concurrency handled at group level now
+                prefetch_executor=executor if n_workers > 1 else None,
             )
             for s in group_scores:
                 s.burst_group = idx
@@ -930,6 +947,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.25,
         help="Minimum confidence for object detections.",
+    )
+    parser.add_argument(
+        "--p4-policy",
+        choices=["always", "never", "auto"],
+        default="always",
+        help=(
+            "P4 evaluation policy: 'always' (run for all), 'never' (disable), "
+            "'auto' (enable only for F1 sessions based on path/keywords, excluding sprint_quali)."
+        ),
     )
 
     # ---- Output -------------------------------------------------------------

@@ -115,6 +115,7 @@ def _process_session(
     w_comp: float,
     min_raw: float,
     conf: float,
+    p4_policy: str = "always",
     n_workers: int = 2,
 ) -> list[dict]:
     """Process a subset of files from one session.
@@ -139,6 +140,18 @@ def _process_session(
     all_rows: list[dict] = []
     group_offset = 0
 
+    # Determine P4 check based on policy
+    check_p4 = True
+    if p4_policy == "never":
+        check_p4 = False
+    elif p4_policy == "auto":
+        # Enable P4 for F1 sessions (except sprint_quali which showed regression)
+        f1_sessions = ["practice", "sprint_race", "qualifying", "main_race"]
+        # Or look for "f1" in session_id
+        check_p4 = (session_id.lower() in f1_sessions) or ("f1" in session_id.lower())
+        if "sprint_quali" in session_id.lower():
+            check_p4 = False
+            
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         for g_idx, group in enumerate(groups, start=1):
             group_offset += 1
@@ -208,6 +221,7 @@ def _process_session(
                     w_sharp=w_sharp,
                     w_comp=w_comp,
                     min_raw=min_raw,
+                    check_p4=check_p4,
                     img_rgb=img_rgb,
                 )
                 img_score.burst_group = group_offset
@@ -315,7 +329,18 @@ def main() -> int:
     parser.add_argument("--w-sharp", type=float, default=W_SHARP)
     parser.add_argument("--w-comp", type=float, default=W_COMP)
     parser.add_argument("--min-raw", type=float, default=MIN_RAW)
-    parser.add_argument("--conf", type=float, default=0.25)
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.25,
+        help="Detection confidence threshold",
+    )
+    parser.add_argument(
+        "--p4-policy",
+        choices=["always", "never", "auto"],
+        default="always",
+        help="P4 model execution policy: always, never, auto (F1 sessions only)",
+    )
     parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args()
 
@@ -370,6 +395,7 @@ def main() -> int:
             w_comp=args.w_comp,
             min_raw=args.min_raw,
             conf=args.conf,
+            p4_policy=args.p4_policy,
             n_workers=args.workers,
         )
         elapsed_s = time.perf_counter() - t_session
