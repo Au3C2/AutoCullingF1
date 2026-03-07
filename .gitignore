@@ -47,6 +47,10 @@ temp_*.txt
 top_params*.txt
 fence_eval_results.json
 
+# Preview tree (hardlinked images, regenerate via make_preview.py)
+preview/
+scores_preview.csv
+
 # Error review analysis (separate from production code)
 error_review/
 
