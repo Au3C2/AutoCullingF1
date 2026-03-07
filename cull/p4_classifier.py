@@ -17,7 +17,7 @@ ORIENT_MAP = {
 _p4_classifier = None
 
 class P4Classifier:
-    def __init__(self, model_path: str = "p4_model_checkpoints/p4_car_model.onnx"):
+    def __init__(self, model_path: str = "models/p4_car_model.onnx"):
         self.model_path = Path(model_path)
         try:
             import onnxruntime as ort
@@ -84,11 +84,11 @@ class P4Classifier:
 def get_p4_classifier() -> P4Classifier | None:
     global _p4_classifier
     if _p4_classifier is None:
-        model_path = Path("p4_model_checkpoints/p4_car_model.onnx")
+        model_path = Path("models/p4_car_model.onnx")
         if model_path.exists():
             _p4_classifier = P4Classifier(str(model_path))
             if _p4_classifier.session is None:
                 _p4_classifier = None
         else:
-            log.warning("P4 model not found at p4_model_checkpoints/p4_car_model.onnx")
+            log.warning("P4 model not found at models/p4_car_model.onnx")
     return _p4_classifier

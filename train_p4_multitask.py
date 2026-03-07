@@ -248,7 +248,7 @@ def train():
     
     best_loss = float('inf')
     epochs_no_improve = 0
-    out_dir = Path("p4_model_checkpoints")
+    out_dir = Path("models")
     out_dir.mkdir(exist_ok=True)
     
     for epoch in range(args.epochs):

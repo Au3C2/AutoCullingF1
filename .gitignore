@@ -17,7 +17,6 @@ uv.lock
 
 # Model weights and ONNX exports (large binary — run train_f1_yolo.py to regenerate)
 models/*.pt
-models/*.onnx
 models/*.yaml
 yolov8n.pt
 yolo26n.pt
@@ -50,6 +49,7 @@ fence_eval_results.json
 # Preview tree (hardlinked images, regenerate via make_preview.py)
 preview/
 scores_preview.csv
+test_import/
 
 # Error review analysis (separate from production code)
 error_review/
