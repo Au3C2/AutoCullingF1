@@ -68,10 +68,16 @@ def main():
         subdir = "kept" if is_kept else "rejected"
         dst_dir = args.out / session / subdir
         dst_dir.mkdir(parents=True, exist_ok=True)
-        dst = dst_dir / filename
+        # Use .heif instead of original extension
+        dst = dst_dir / Path(filename).with_suffix(".heif").name
 
         if dst.exists():
             dst.unlink()
+
+        # Handle old DSC*.HIF if they exist (to clean up if previously run)
+        old_dst = dst_dir / filename
+        if old_dst.exists() and old_dst != dst:
+            old_dst.unlink()
 
         try:
             os.link(src, dst)
