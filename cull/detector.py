@@ -118,20 +118,32 @@ class Detection:
 
 
 def load_f1_model(onnx_path: Path):
-    """Load the F1-specialised YOLO model from an ONNX file.
-
-    Returns an ``ultralytics.YOLO`` wrapper around the ONNX, or ``None`` if
-    the file does not exist (caller should fall back to COCO-only mode).
-
-    Parameters
-    ----------
-    onnx_path:
-        Path to ``models/f1_yolov8n.onnx``.
+    """Load the F1-specialised YOLO model.
+    Respects CULL_BACKEND env var.
     """
+    import os
+    import platform
+    backend = os.environ.get("CULL_BACKEND", "auto").lower()
+    is_mac = platform.system() == "Darwin"
+    
+    # Force ONNX if requested
+    if backend == "onnx":
+        log.info("Forcing ONNX backend via CULL_BACKEND")
+    elif is_mac or backend == "coreml":
+        # Check if there is a coreml version in models/
+        coreml_path = Path("models/f1_yolov8n.mlpackage")
+        if coreml_path.exists():
+            try:
+                from ultralytics import YOLO
+                model = YOLO(str(coreml_path), task="detect")
+                log.info("F1 CoreML model loaded from %s", coreml_path)
+                return model
+            except Exception as e:
+                log.warning(f"Failed to load F1 CoreML model: {e}")
+
     if not onnx_path.exists():
         log.warning(
-            "F1 ONNX model not found at %s — F1 detection disabled. "
-            "Run models/download_f1_model.py to download it.",
+            "F1 ONNX model not found at %s — F1 detection disabled.",
             onnx_path,
         )
         return None
@@ -147,12 +159,22 @@ def load_f1_model(onnx_path: Path):
 
 
 def load_coco_model():
-    """Load the YOLOv8n COCO model (auto-downloaded by ultralytics on first use).
-
-    Returns an ``ultralytics.YOLO`` instance.
+    """Load the YOLOv8n COCO model.
+    Respects CULL_BACKEND env var.
     """
     try:
         from ultralytics import YOLO  # type: ignore
+        import os
+        import platform
+        backend = os.environ.get("CULL_BACKEND", "auto").lower()
+        
+        if backend != "onnx" and platform.system() == "Darwin":
+            coreml_path = Path("models/yolov8n.mlpackage")
+            if coreml_path.exists():
+                model = YOLO(str(coreml_path), task="detect")
+                log.info("COCO CoreML model loaded from %s", coreml_path)
+                return model
+        
         model = YOLO("yolov8n.pt")
         log.info("COCO YOLOv8n model loaded")
         return model

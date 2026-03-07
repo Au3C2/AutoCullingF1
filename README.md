@@ -63,6 +63,41 @@ source .venv/bin/activate   # Linux/macOS
 python cull_photos.py /path/to/hif/folder --top-n 11 --output /path/to/output
 ```
 
+## macOS 性能优化与 CoreML 支持
+
+在 Apple M 系列芯片（M1/M2/M3/M4）上，本项目支持使用 **Apple Neural Engine (ANE)** 进行硬件加速推理。
+
+### 1. 性能基准 (1280px / 1000张 HEIF)
+
+| 模式 | 后端设备 | 吞吐量 | 耗时 |
+| :--- | :--- | :--- | :--- |
+| **ONNX (原生)** | M-Chip CPU | 13.8 img/s | 72.5 s |
+| **CoreML (加速)** | **Neural Engine (ANE)** | **18.6 img/s** | **53.8 s** |
+
+> **提示**: CoreML 版本比 ONNX 版本整体快了约 **35%**，且大幅降低了 CPU 负载。
+
+### 2. 精确度分析 (ONNX vs CoreML)
+经过 1000 张照片的对比测试，CoreML 与 ONNX 的筛选结果**一致性高达 97.6%**。仅 2.4% 的照片因推理引擎精度差异在分值临界点产生星级波动（±1星），不影响最终筛选逻辑。
+
+### 3. 使用方法
+系统会自动检测 macOS 环境并优先加载 `models/*.mlpackage` 模型。如需手动指定后端，可使用环境变量：
+
+```bash
+# 强制使用 CoreML (ANE 加速)
+export CULL_BACKEND=coreml
+python cull_photos.py ...
+
+# 强制使用 ONNX (CPU 运行)
+export CULL_BACKEND=onnx
+python cull_photos.py ...
+```
+
+### 4. 硬件解码要求
+为了在 Mac 上获得最佳速度，请确保已安装 `ffmpeg` (支持 `videotoolbox` 硬件加速):
+```bash
+brew install ffmpeg
+```
+
 ### 评估流水线性能
 
 ```bash

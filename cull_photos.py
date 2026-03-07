@@ -222,6 +222,7 @@ def _load_image_ffmpeg(
             proc = subprocess.run(
                 [
                     "ffmpeg", "-hide_banner", "-v", "error",
+                    "-hwaccel", "auto",  # Use available hardware acceleration
                     "-i", str(path),
                     "-map", f"0:{s_idx}",
                     "-f", "rawvideo", "-pix_fmt", "rgb24",
@@ -248,6 +249,7 @@ def _load_image_ffmpeg(
         proc = subprocess.run(
             [
                 "ffmpeg", "-hide_banner", "-v", "error",
+                "-hwaccel", "auto",
                 "-i", str(path),
                 "-f", "rawvideo", "-pix_fmt", "rgb24",
                 "-frames:v", "1",
@@ -582,18 +584,17 @@ def run(args: argparse.Namespace) -> int:
              f"{scale_width}px" if scale_width > 0 else "full-res",
              n_workers)
 
-    # --- Process each group --------------------------------------------------
+    # --- Process each group (Parallel) ---------------------------------------
     all_scores: list[ImageScore] = []
     t_start = time.perf_counter()
 
-    with ThreadPoolExecutor(max_workers=n_workers) as prefetch_pool:
-        for g_idx, group in enumerate(groups, start=1):
-            label = "burst" if group.is_burst else "single"
-            log.info(
-                "Group %d/%d  [%s, %d frame(s)]  %s",
-                g_idx, len(groups), label, len(group.frames),
-                group.frames[0].name if group.frames else "?",
-            )
+    # Create a wrapper for parallel execution
+    def process_one_group(g_info):
+        idx, group = g_info
+        label = "burst" if group.is_burst else "single"
+        log.info("Processing Group %d/%d  [%s, %d frame(s)]", idx, len(groups), label, len(group.frames))
+        
+        try:
             group_scores = _process_group(
                 group=group,
                 exif_map=exif_map,
@@ -608,12 +609,20 @@ def run(args: argparse.Namespace) -> int:
                 conf=args.conf,
                 dry_run=args.dry_run,
                 scale_width=scale_width,
-                prefetch_executor=prefetch_pool,
+                prefetch_executor=None, # Concurrency handled at group level now
             )
-            # Tag each score with its burst group index
             for s in group_scores:
-                s.burst_group = g_idx
-            all_scores.extend(group_scores)
+                s.burst_group = idx
+            return group_scores
+        except Exception as e:
+            log.error("Error processing group %d: %s", idx, e)
+            return []
+
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        group_results = list(executor.map(process_one_group, enumerate(groups, start=1)))
+    
+    for res in group_results:
+        all_scores.extend(res)
 
     elapsed = time.perf_counter() - t_start
 

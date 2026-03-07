@@ -21,7 +21,13 @@ class P4Classifier:
         self.model_path = Path(model_path)
         try:
             import onnxruntime as ort
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            available = ort.get_available_providers()
+            providers = []
+            for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']:
+                if p in available:
+                    providers.append(p)
+            if not providers:
+                providers = ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(self.model_path), providers=providers)
             
             # Warmup
