@@ -501,6 +501,7 @@ def _process_group(
             w_sharp=w_sharp,
             w_comp=w_comp,
             min_raw=min_raw,
+            img_rgb=img_rgb,
         )
         scores.append(img_score)
 

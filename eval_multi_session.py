@@ -208,6 +208,7 @@ def _process_session(
                     w_sharp=w_sharp,
                     w_comp=w_comp,
                     min_raw=min_raw,
+                    img_rgb=img_rgb,
                 )
                 img_score.burst_group = group_offset
                 scores.append(img_score)
@@ -237,6 +238,10 @@ def _process_session(
                     "has_arw": has_arw,
                     "fence_pred": s.fence_pred,
                     "fence_confidence": f"{s.fence_confidence:.6f}",
+                    "p4_orient": s.p4_orient,
+                    "p4_orient_conf": f"{s.p4_orient_conf:.4f}",
+                    "p4_integ": s.p4_integ,
+                    "p4_integ_prob": f"{s.p4_integ_prob:.4f}",
                 })
 
     return all_rows
@@ -386,7 +391,8 @@ def main() -> int:
     fieldnames = [
         "session", "filename", "s_sharp", "s_comp", "raw_score", "rating",
         "vetoed", "veto_reason", "n_detections", "burst_group",
-        "max_det_conf", "f1_max_conf", "has_arw",
+        "max_det_conf", "f1_max_conf", "has_arw", "fence_pred", "fence_confidence",
+        "p4_orient", "p4_orient_conf", "p4_integ", "p4_integ_prob",
     ]
     with open(args.output, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

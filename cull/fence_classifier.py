@@ -106,7 +106,27 @@ class FenceClassifier:
             return 0, 0.0
         
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img_tensor = self.transform(img).unsqueeze(0).to(device)
+        return self.predict_roi(img, (0, 0, img.shape[1], img.shape[0]))
+        
+    def predict_roi(self, img_rgb: np.ndarray, bbox: tuple[int, int, int, int]) -> tuple[int, float]:
+        """
+        Predict fence class for a specific ROI in an RGB image.
+        """
+        x1, y1, x2, y2 = bbox
+        h, w = img_rgb.shape[:2]
+        
+        # No expansion; extract exactly bounding box as detected by YOLO.
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w, int(x2)), min(h, int(y2))
+        
+        if x2 <= x1 or y2 <= y1:
+            return 0, 0.0
+            
+        roi = img_rgb[y1:y2, x1:x2]
+        if roi.size == 0:
+            return 0, 0.0
+            
+        img_tensor = self.transform(roi).unsqueeze(0).to(device)
         
         with torch.no_grad():
             logit = self.model(img_tensor).squeeze()

@@ -43,9 +43,22 @@ eval_output.txt
 fence_eval_output.txt
 train_v2.log
 nul
+temp_*.txt
+top_params*.txt
+fence_eval_results.json
 
 # Error review analysis (separate from production code)
 error_review/
+
+# Training data and labeled images (large, regenerate via extract scripts)
+p4_data/
+fence_label/
+vehicle_orientation_labels/
+
+# Model checkpoints (large binary, regenerate via training scripts)
+fence_classifier_checkpoints/*.pth
+p4_model_checkpoints/*.pt
+p4_model_checkpoints/*.onnx
 
 # macOS
 .DS_Store
