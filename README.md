@@ -79,9 +79,26 @@ python cull_photos.py /path/to/hif/folder --top-n 11 --output /path/to/output
 ### 2. 精确度分析 (ONNX vs CoreML)
 经过 1000 张照片的对比测试，CoreML 与 ONNX 的筛选结果**一致性高达 97.6%**。仅 2.4% 的照片因推理引擎精度差异在分值临界点产生星级波动（±1星），不影响最终筛选逻辑。
 
-### 3. 使用方法
-系统会自动检测 macOS 环境并优先加载 `models/*.mlpackage` 模型。如需手动指定后端，可使用环境变量：
+### 3. 推荐使用方式 (Recommended Usage)
 
+系统会自动检测 macOS 环境并优先加载 `models/*.mlpackage` 模型。
+
+#### 方案 A: 使用 uv 直接运行 (推荐)
+无需手动激活环境，速度最快：
+```bash
+~/.local/bin/uv run cull_photos.py --input-dir /你的/照片/路径 --scale-width 1280 --workers 12
+```
+
+#### 方案 B: 标准虚拟环境运行
+```bash
+# 激活环境
+source .venv/bin/activate
+
+# 执行筛选
+python3 cull_photos.py --input-dir /你的/照片/路径 --scale-width 1280 --workers 12
+```
+
+#### 进阶控制 (环境变量)
 ```bash
 # 强制使用 CoreML (ANE 加速)
 export CULL_BACKEND=coreml
