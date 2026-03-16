@@ -57,6 +57,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from cull.renamer import rename_images
 
 import cv2
 import numpy as np
@@ -67,14 +68,43 @@ from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
 from cull.xmp_writer import write_xmp_batch
+from cull.xmp_reader import read_xmp_rating
 
 log = logging.getLogger(__name__)
+
+def setup_logging(base_dir: Path):
+    """Setup logging to both console and a file in the base_dir/logs folder."""
+    log_dir = base_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"cull_{timestamp}.log"
+    
+    # Reset existing handlers if any
+    root_log = logging.getLogger()
+    for handler in root_log.handlers[:]:
+        root_log.removeHandler(handler)
+        
+    root_log.setLevel(logging.INFO)
+    
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    root_log.addHandler(file_handler)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(message)s'))
+    root_log.addHandler(console_handler)
+    
+    log.info("Logging to %s", log_file)
+    return log_file
 
 # ---------------------------------------------------------------------------
 # Supported image extensions (case-insensitive comparison used at runtime)
 # ---------------------------------------------------------------------------
 _EXTENSIONS = {".hif", ".heif", ".heic", ".nef", ".arw", ".cr2", ".cr3",
                ".orf", ".rw2", ".raf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
+
+_RAW_EXTS = {".arw", ".nef", ".cr2", ".cr3", ".orf", ".rw2", ".raf", ".dng"}
+_COOKED_EXTS = {".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".tif"}
 
 
 def _collect_images(input_dir: Path, recursive: bool = False) -> list[Path]:
@@ -330,12 +360,42 @@ def _load_image_rgb(
                 path.name, exc,
             )
 
-    # --- Non-HIF: OpenCV (returns BGR; convert to RGB) -----------------------
+    # --- Non-HIF: Try OpenCV -------------------------------------------------
     img_bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    
+    # --- RAW Fallback: Extract embedded preview via ExifTool -----------------
+    if img_bgr is None and suffix in _RAW_EXTS:
+        log.debug("OpenCV failed for RAW %s — trying ExifTool preview extraction", path.name)
+        # Try -JpgFromRaw then -PreviewImage
+        for tag in ["-JpgFromRaw", "-PreviewImage"]:
+            try:
+                proc = subprocess.run(
+                    ["exiftool", "-b", tag, str(path)],
+                    capture_output=True, timeout=10
+                )
+                if proc.returncode == 0 and len(proc.stdout) > 0:
+                    arr = np.frombuffer(proc.stdout, dtype=np.uint8)
+                    img_rgb = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if img_rgb is not None:
+                        img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
+                        log.debug("Successfully extracted %s from %s", tag, path.name)
+                        img_bgr = img_rgb # used for return logic below
+                        break
+            except Exception:
+                continue
+
     if img_bgr is None:
-        log.warning("Could not load image: %s", path)
+        log.warning("Could not load image: %s (tried FFmpeg/Pillow/OpenCV/ExifTool)", path.name)
         return None
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        
+    # If we got here, img_bgr is actually RGB if we used the ExifTool path, 
+    # or BGR if we used imread. Let's unify.
+    if suffix in _RAW_EXTS and 'img_rgb' in locals() and img_rgb is not None:
+        # already RGB
+        pass
+    else:
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        
     if scale_width > 0:
         h, w = img_rgb.shape[:2]
         new_w = scale_width
@@ -463,10 +523,53 @@ def _process_group(
     for frame_idx, frame_path in enumerate(frames):
         is_first = frame_idx == 0
 
-        # --- Load image (from prefetch or directly) ---------------------------
+        # --- Consume prefetch ASAP to keep sync -------------------------------
+        img_rgb_prefetched = None
         if pending_future is not None:
-            img_rgb = pending_future.result()
+            img_rgb_prefetched = pending_future.result()
             pending_future = None
+
+        # --- Check for existing culling status (XMP sidecar or internal metadata)
+        xmp_rating, xmp_pick = read_xmp_rating(frame_path)
+        exif = exif_map.get(frame_path)
+        
+        # Priority: 1. XMP sidecar, 2. Internal metadata
+        final_rating = xmp_rating if xmp_rating is not None else (exif.rating if exif else None)
+        final_pick = xmp_pick if xmp_pick is not None else (exif.pick if exif else None)
+
+        # Logic: 0 stars or 0 pick flag means "unrated/no decision" in LR.
+        # We only skip if the user has explicitly set a non-zero value.
+        is_rating_set = final_rating is not None and final_rating != 0
+        is_pick_set = final_pick is not None and final_pick != 0
+
+        # Skip if EITHER non-zero rating or pick status is present
+        if is_rating_set or is_pick_set:
+            # Infer missing value for consistent internal scoring
+            if not is_rating_set:
+                final_rating = 1 if final_pick == 1 else (-1 if final_pick == -1 else 0)
+            if not is_pick_set:
+                final_pick = 1 if final_rating > 0 else (-1 if final_rating == -1 else 0)
+
+            source = "XMP sidecar" if xmp_rating is not None or xmp_pick is not None else "Internal Metadata"
+            log.info("  [%s]  Existing decision found in %s (Rating=%d, Pick=%d) - skipping analysis", 
+                     frame_path.name, source, final_rating, final_pick)
+            
+            img_score = ImageScore(
+                path=frame_path,
+                s_sharp=1.0,   # Placeholder
+                s_comp=1.0,    # Placeholder
+                raw_score=10.0 if final_rating > 0 else 0.0, 
+                rating=final_rating,
+                vetoed=(final_rating == -1),
+                veto_reason="manual_metadata" if final_rating == -1 else "",
+                is_manual=True
+            )
+            scores.append(img_score)
+            continue
+
+        # --- Load image (from prefetch or directly) ---------------------------
+        if img_rgb_prefetched is not None:
+            img_rgb = img_rgb_prefetched
         else:
             img_rgb = _load_image_rgb(frame_path, scale_width=scale_width)
 
@@ -551,6 +654,8 @@ def run(args: argparse.Namespace) -> int:
     if not input_dir.is_dir():
         log.error("Input directory not found: %s", input_dir)
         return 1
+        
+    log_file = setup_logging(input_dir)
 
     # --- Collect image files -------------------------------------------------
     image_paths = _collect_images(input_dir, recursive=args.recursive)
@@ -558,9 +663,44 @@ def run(args: argparse.Namespace) -> int:
         log.error("No supported image files found in %s", input_dir)
         return 1
 
-    log.info("Found %d images in %s%s",
+    log.info("Found %d image files in %s%s",
              len(image_paths), input_dir,
              " (recursive)" if args.recursive else "")
+
+    # --- Rename --------------------------------------------------------------
+    if args.rename:
+        log.info("Renaming images by EXIF timestamp...")
+        new_map = rename_images(image_paths, dry_run=args.dry_run)
+        image_paths = sorted(list(new_map.values()))
+
+    # --- Prioritize JPG/HIF over RAW -----------------------------------------
+    stems: dict[str, Path] = {}
+    has_raw: dict[str, bool] = {}
+    
+    for p in image_paths:
+        stem = p.stem.lower()
+        ext = p.suffix.lower()
+        if ext in _RAW_EXTS:
+            has_raw[stem] = True
+        
+        if stem not in stems:
+            stems[stem] = p
+        else:
+            prev = stems[stem]
+            if ext in _COOKED_EXTS and prev.suffix.lower() in _RAW_EXTS:
+                stems[stem] = p
+    
+    # These are the files we will actually process (decode & score)
+    image_paths = sorted(stems.values())
+    
+    # Track which cooked files are "standalone" (no RAW partner)
+    standalone_cooked: set[Path] = set()
+    for stem, p in stems.items():
+        if p.suffix.lower() in _COOKED_EXTS and not has_raw.get(stem):
+            standalone_cooked.add(p)
+
+    log.info("Processing %d unique shots (%d standalone cooked)",
+             len(image_paths), len(standalone_cooked))
 
     # --- Read EXIF & group bursts --------------------------------------------
     log.info("Reading EXIF metadata …")
@@ -626,7 +766,7 @@ def run(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
                 p4_policy=args.p4_policy,
                 scale_width=scale_width,
-                prefetch_executor=executor if n_workers > 1 else None,
+                prefetch_executor=None,
             )
             for s in group_scores:
                 s.burst_group = idx
@@ -662,11 +802,21 @@ def run(args: argparse.Namespace) -> int:
         log.info("  %8s : %d", label, rating_dist[r])
 
     # --- Write XMP sidecars --------------------------------------------------
-    xmp_pairs = [(s.path, s.rating) for s in all_scores]
+    xmp_pairs = [(s.path, s.rating) for s in all_scores if not s.is_manual]
     written = write_xmp_batch(xmp_pairs, overwrite=True, dry_run=args.dry_run)
 
     action = "Would write" if args.dry_run else "Wrote"
     log.info("%s %d XMP sidecar(s) alongside original files.", action, len(written))
+
+    # --- Sync to standalone cooked files -------------------------------------
+    to_sync = [s for s in all_scores if s.path in standalone_cooked and not s.is_manual]
+    if to_sync and not args.dry_run:
+        log.info("Syncing metadata to %d standalone cooked files via ExifTool...", len(to_sync))
+        from apply_exif_ratings import update_single_image
+        # Using a few workers to avoid overwhelming the system
+        with ThreadPoolExecutor(max_workers=min(8, n_workers)) as sync_executor:
+            for s in to_sync:
+                sync_executor.submit(update_single_image, s.path, s.rating)
 
     # --- Dump per-image scores to CSV (for offline parameter tuning) ----------
     if args.dump_scores:
@@ -959,6 +1109,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     # ---- Output -------------------------------------------------------------
+    parser.add_argument(
+        "--rename",
+        action="store_true",
+        help="Rename images to IMG_YYYYMMDD_HHMMSS_MS format before processing.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",

@@ -5,12 +5,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
 logger = logging.getLogger(__name__)
 
 def update_single_image(img_path, rating):
@@ -90,6 +84,12 @@ def apply_ratings_to_jpg_multi(csv_path, img_dir, max_workers=8):
     logger.info("-" * 40)
 
 if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S'
+    )
     # Settings
     TARGET_CSV = "ysy_photos_latest.csv" 
     IMG_DIR = "/Users/joeylin/Pictures/YSY_PHOTOS/original_photos"

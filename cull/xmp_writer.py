@@ -87,7 +87,7 @@ def write_xmp(image_path: Path, rating: int, overwrite: bool = True) -> Path:
     # Remove empty line if pick_tag is empty
     if not pick_tag:
         content = content.replace("      <xmp:Rating>{rating}</xmp:Rating>\n\n", f"      <xmp:Rating>{rating}</xmp:Rating>\n")
-    
+
     xmp_path.write_text(content, encoding="utf-8")
     log.debug("Wrote %s  (Rating=%d)", xmp_path.name, rating)
     return xmp_path

@@ -35,6 +35,8 @@ class ExifData:
     release_mode: str | None = None            # e.g. "Continuous", "Single"
     image_width: int | None = None
     image_height: int | None = None
+    rating: int | None = None          # XMP:Rating
+    pick: int | None = None            # XMP-xmpDM:Pick
     # Raw dict for any extra fields callers may need
     raw: dict = field(default_factory=dict)
 
@@ -63,6 +65,8 @@ _EXIFTOOL_FIELDS = [
     "ImageHeight",
     "ExifImageWidth",
     "ExifImageHeight",
+    "Rating",
+    "XMP-xmpDM:Pick",
 ]
 
 
@@ -147,19 +151,18 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def read_exif(paths: list[Path]) -> list[ExifData]:
     """Read EXIF metadata for a list of image paths via exiftool.
-
-    Parameters
-    ----------
-    paths:
-        List of image file paths (any format exiftool supports).
-
-    Returns
-    -------
-    list[ExifData]
-        One entry per path, in the same order as *paths*.
-        On exiftool failure the returned list may be shorter.
+    Processes in batches of 500 to provide progress feedback.
     """
-    raw_list = _run_exiftool(paths)
+    batch_size = 500
+    all_raw: list[dict] = []
+    
+    for i in range(0, len(paths), batch_size):
+        batch = paths[i : i + batch_size]
+        log.info("  Reading metadata: %d/%d images...", i + len(batch), len(paths))
+        raw_list = _run_exiftool(batch)
+        all_raw.extend(raw_list)
+
+    raw_list = all_raw
 
     # Build lookups:
     #   1. SourceFile string → dict  (exact match, works when paths are ASCII)
@@ -211,6 +214,8 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
             release_mode=release,
             image_width=int(width) if width is not None else None,
             image_height=int(height) if height is not None else None,
+            rating=int(raw.get("Rating")) if raw.get("Rating") is not None else None,
+            pick=int(raw.get("Pick")) if raw.get("Pick") is not None else None,
             raw=raw,
         ))
 

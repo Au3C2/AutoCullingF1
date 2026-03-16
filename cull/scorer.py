@@ -122,6 +122,7 @@ class ImageScore:
     p4_orient_conf: float = 0.0    # orientation confidence [new: P4]
     p4_integ: int = 1              # integrity: 1 (full), 0 (cut) [new: P4]
     p4_integ_prob: float = 1.0     # integrity confidence [new: P4]
+    is_manual: bool = False        # True if rating was loaded from existing XMP sidecar
 
 
 # ---------------------------------------------------------------------------
@@ -365,14 +366,14 @@ def select_best_n(
             s.rating = -1
         return scores
 
-    # Only non-vetoed frames are candidates
-    candidates = [s for s in scores if not s.vetoed]
+    # Only non-vetoed and non-manual frames are candidates for auto-culling
+    candidates = [s for s in scores if not s.vetoed and not s.is_manual]
     candidates.sort(key=lambda s: s.raw_score, reverse=True)
 
     keep_set = {id(s) for s in candidates[:top_n]}
 
     for s in scores:
-        if not s.vetoed and id(s) not in keep_set:
+        if not s.vetoed and not s.is_manual and id(s) not in keep_set:
             s.rating = -1
             s.veto_reason = "burst_group_topn"
 
