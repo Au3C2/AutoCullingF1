@@ -69,6 +69,7 @@ from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
 from cull.xmp_writer import write_xmp_batch
 from cull.xmp_reader import read_xmp_rating
+from cull.cropper import calculate_crop, has_crop_info
 
 log = logging.getLogger(__name__)
 
@@ -501,6 +502,7 @@ def _process_group(
     force: bool = False,
     p4_policy: str = "always",
     scale_width: int = 0,
+    autocrop: bool = False,
     prefetch_executor: ThreadPoolExecutor | None = None,
 ) -> list[ImageScore]:
     """Score all frames in one burst group and apply TopN selection.
@@ -578,7 +580,8 @@ def _process_group(
                 rating=final_rating,
                 vetoed=(final_rating == -1),
                 veto_reason="manual_metadata" if final_rating == -1 else "",
-                is_manual=True
+                is_manual=True,
+                crop=None # Don't re-calculate if skipping
             )
             scores.append(img_score)
             continue
@@ -639,6 +642,8 @@ def _process_group(
             min_raw=min_raw,
             check_p4=check_p4,
             img_rgb=img_rgb,
+            img_w=w,
+            img_h=h,
         )
         scores.append(img_score)
 
@@ -656,6 +661,27 @@ def _process_group(
 
     # --- Burst TopN selection ------------------------------------------------
     select_best_n(scores, top_n=top_n)
+
+    # After Top-N selection, calculate crops for keepers if requested
+    if autocrop:
+        for s in scores:
+            if s.rating >= 1 and not s.is_manual and s.detections:
+                f1_cars = [d for d in s.detections if d.label == "f1_car"]
+                if len(f1_cars) == 1:
+                    # Normalized coords
+                    det = f1_cars[0]
+                    # We need the image dims to normalize if detector returned pixels. 
+                    # Actually detector stores normalized usually? Check detector.py
+                    # In this pipeline, compositions/scorer use what detector returns.
+                    # Assumption: s.detections coordinates are already handled correctly 
+                    # for the original image if we use the same loader.
+                    # Wait, detect() returns relative coords? Let's check detection bbox 
+                    # in detector.py. If they are percentages, we are good.
+                    
+                    # For now assume det has normalized coords (0.0-1.0)
+                    # We need the image dimensions to calculate correct normalized crop for 3:2/2:3
+                    img_ar = s.img_w / s.img_h if s.img_w and s.img_h else 1.5
+                    s.crop = calculate_crop(det.x1, det.y1, det.x2, det.y2, img_ar=img_ar)
 
     return scores
 
@@ -799,6 +825,7 @@ def run(args: argparse.Namespace) -> int:
                 force=args.force,
                 p4_policy=args.p4_policy,
                 scale_width=scale_width,
+                autocrop=not args.crop_off,
                 prefetch_executor=None,
             )
             for s in group_scores:
@@ -835,7 +862,7 @@ def run(args: argparse.Namespace) -> int:
         log.info("  %8s : %d", label, rating_dist[r])
 
     # --- Write XMP sidecars --------------------------------------------------
-    xmp_pairs = [(s.path, s.rating) for s in all_scores if not s.is_manual]
+    xmp_pairs = [(s.path, s.rating, s.crop) for s in all_scores if not s.is_manual]
     written = write_xmp_batch(xmp_pairs, overwrite=True, dry_run=args.dry_run)
 
     action = "Would write" if args.dry_run else "Wrote"
@@ -924,6 +951,16 @@ def _dump_scores_csv(
 # ---------------------------------------------------------------------------
 # Label-check evaluation (--label-check)
 # ---------------------------------------------------------------------------
+
+
+def _collect_images(input_dir: Path, recursive: bool) -> list[Path]:
+    """Collect image files from the input directory."""
+    image_paths: list[Path] = []
+    search_pattern = "**/*" if recursive else "*"
+    for p in input_dir.glob(search_pattern):
+        if p.is_file() and p.suffix.lower() in _COOKED_EXTS | _RAW_EXTS:
+            image_paths.append(p)
+    return sorted(image_paths)
 
 
 def _run_label_check(
@@ -1092,6 +1129,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Roboflow API key for cloud-based F1 detection.  "
             "Used instead of --f1-model when provided."
         ),
+    )
+    parser.add_argument(
+        "--crop-off",
+        action="store_true",
+        help="Disable auto-cropping for keepers (enabled by default)",
     )
 
     # ---- Scoring parameters -------------------------------------------------

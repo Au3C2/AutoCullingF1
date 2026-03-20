@@ -8,10 +8,11 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# Basic regex to extract Rating and Pick flag from XMP
-# We use regex instead of full XML parser for speed and to handle slightly malformed XMP
-_RATING_RE = re.compile(r'<xmp:Rating>([-0-9]+)</xmp:Rating>')
-_PICK_RE = re.compile(r'<xmpDM:pick>([-0-9]+)</xmpDM:pick>')
+# Regexes to extract Rating and Pick flag from XMP (supports both tag and attribute formats)
+_RATING_TAG_RE = re.compile(r'<xmp:Rating>([-0-9]+)</xmp:Rating>')
+_RATING_ATTR_RE = re.compile(r'xmp:Rating="([-0-9]+)"')
+_PICK_TAG_RE = re.compile(r'<xmpDM:pick>([-0-9]+)</xmpDM:pick>')
+_PICK_ATTR_RE = re.compile(r'xmpDM:pick="([-0-9]+)"')
 
 def read_xmp_rating(image_path: Path) -> tuple[int | None, int | None]:
     """Read rating and pick status from the corresponding XMP sidecar.
@@ -27,8 +28,8 @@ def read_xmp_rating(image_path: Path) -> tuple[int | None, int | None]:
     try:
         content = xmp_path.read_text(encoding="utf-8", errors="ignore")
         
-        rating_match = _RATING_RE.search(content)
-        pick_match = _PICK_RE.search(content)
+        rating_match = _RATING_TAG_RE.search(content) or _RATING_ATTR_RE.search(content)
+        pick_match = _PICK_TAG_RE.search(content) or _PICK_ATTR_RE.search(content)
         
         rating = int(rating_match.group(1)) if rating_match else None
         pick = int(pick_match.group(1)) if pick_match else None

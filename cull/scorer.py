@@ -61,7 +61,7 @@ P4_CUT_PENALTY = 0.6             # reduce raw_score by this much if cut/occluded
 # Tuned for the range [MIN_RAW, ~6.0] to give a natural star gradient.
 # With hf_ratio sharpness, s_sharp has much better spread (no ceiling effect)
 # so raw scores span a wider range than the old Laplacian-based version.
-_RATING_BREAKS = [3.40, 3.80, 4.20, 4.60]   # boundaries between ratings 1/2/3/4/5
+_RATING_BREAKS = [3.11, 3.40, 3.80, 4.20]   # boundaries between ratings 1/2/3/4/5
 # ---------------------------------------------------------------------------
 # Global fence classifier instance (lazy-loaded on first use)
 # ---------------------------------------------------------------------------
@@ -123,6 +123,10 @@ class ImageScore:
     p4_integ: int = 1              # integrity: 1 (full), 0 (cut) [new: P4]
     p4_integ_prob: float = 1.0     # integrity confidence [new: P4]
     is_manual: bool = False        # True if rating was loaded from existing XMP sidecar
+    crop: tuple[float, float, float, float] | None = None  # (top, left, bottom, right) normalized
+    img_w: int = 0
+    img_h: int = 0
+    detections: list = None         # Store detections for cropping
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +159,8 @@ def score_image(
     check_fence: bool = ENABLE_FENCE_VETO,
     check_p4: bool = ENABLE_P4,
     img_rgb: np.ndarray | None = None,
+    img_w: int = 0,
+    img_h: int = 0,
 ) -> ImageScore:
     """Compute the final score and Rating for a single image.
 
@@ -217,6 +223,9 @@ def score_image(
                         n_detections=n_det,
                         fence_pred=fence_pred,
                         fence_confidence=fence_confidence,
+                        img_w=img_w,
+                        img_h=img_h,
+                        detections=detections,
                     )
         except Exception as e:
             log.warning(f"Fence detection error for {path}: {e}")
@@ -233,6 +242,9 @@ def score_image(
             n_detections=0,
             fence_pred=fence_pred,
             fence_confidence=fence_confidence,
+            img_w=img_w,
+            img_h=img_h,
+            detections=None,
         )
         
     p4_orient = "unknown"
@@ -269,6 +281,9 @@ def score_image(
             p4_orient_conf=p4_orient_conf,
             p4_integ=p4_integ,
             p4_integ_prob=p4_integ_prob,
+            img_w=img_w,
+            img_h=img_h,
+            detections=detections,
         )
 
     if min_raw > 0.0 and raw < min_raw:
@@ -287,6 +302,9 @@ def score_image(
             p4_orient_conf=p4_orient_conf,
             p4_integ=p4_integ,
             p4_integ_prob=p4_integ_prob,
+            img_w=img_w,
+            img_h=img_h,
+            detections=detections,
         )
         
     if p4_orient in P4_ORIENT_VETO:
@@ -305,6 +323,9 @@ def score_image(
             p4_orient_conf=p4_orient_conf,
             p4_integ=p4_integ,
             p4_integ_prob=p4_integ_prob,
+            img_w=img_w,
+            img_h=img_h,
+            detections=detections,
         )
 
     # --- Normal scoring ------------------------------------------------------
@@ -329,6 +350,9 @@ def score_image(
         p4_orient_conf=p4_orient_conf,
         p4_integ=p4_integ,
         p4_integ_prob=p4_integ_prob,
+        img_w=img_w,
+        img_h=img_h,
+        detections=detections,
     )
 
 
