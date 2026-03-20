@@ -164,26 +164,24 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
 
     raw_list = all_raw
 
-    # Build lookups:
-    #   1. SourceFile string → dict  (exact match, works when paths are ASCII)
-    #   2. lowercase filename → dict (fallback for non-ASCII / encoding issues)
+    # Build lookups: prioritize exact string match of the absolute path
     raw_by_path: dict[str, dict] = {}
     raw_by_name: dict[str, dict] = {}
     for entry in raw_list:
         src = entry.get("SourceFile", "")
         if src:
-            raw_by_path[src] = entry
+            # Standardize path separators for consistent matching on Windows
+            norm_src = str(Path(src)).lower()
+            raw_by_path[norm_src] = entry
             raw_by_name[Path(src).name.lower()] = entry
 
     results: list[ExifData] = []
     for path in paths:
-        # Try exact string match first, then resolved path, then filename fallback
-        raw = (
-            raw_by_path.get(str(path))
-            or raw_by_path.get(str(path.resolve()))
-            or raw_by_name.get(path.name.lower())
-            or {}
-        )
+        # Standardize search path
+        norm_path = str(path).lower()
+        
+        # Fast lookup in memory without disk IO
+        raw = raw_by_path.get(norm_path) or raw_by_name.get(path.name.lower()) or {}
 
         dt_str = raw.get("SubSecDateTimeOriginal") or raw.get("DateTimeOriginal")
         seq_num = raw.get("SequenceImageNumber")

@@ -109,19 +109,34 @@ _COOKED_EXTS = {".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".ti
 
 def _collect_images(input_dir: Path, recursive: bool = False) -> list[Path]:
     """Scan *input_dir* for supported image files, sorted by name.
-
-    When *recursive* is ``True``, descend into subdirectories (e.g. ``HIF/``).
-    Extension matching is case-insensitive.
+    Uses os.scandir for high performance on Windows (prevents redundant stat() calls).
     """
-    if recursive:
-        candidates = (p for p in input_dir.rglob("*") if p.is_file())
-    else:
-        candidates = (p for p in input_dir.iterdir() if p.is_file())
+    import os
+    found: list[Path] = []
+    
+    log.info("Collecting files from %s...", input_dir)
+    
+    def _scan(target: str):
+        try:
+            with os.scandir(target) as it:
+                for entry in it:
+                    if entry.is_file():
+                        # Filter out macOS metadata files (e.g., ._IMG_1234.JPG)
+                        if entry.name.startswith("._"):
+                            continue
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in _EXTENSIONS:
+                            found.append(Path(entry.path))
+                    elif recursive and entry.is_dir():
+                        # Skip hidden directories (e.g., .git, .thumbnails)
+                        if entry.name.startswith("."):
+                            continue
+                        _scan(entry.path)
+        except PermissionError:
+            pass
 
-    return sorted(
-        p for p in candidates
-        if p.suffix.lower() in _EXTENSIONS
-    )
+    _scan(str(input_dir))
+    return sorted(found)
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +498,7 @@ def _process_group(
     min_raw: float,
     conf: float,
     dry_run: bool,
+    force: bool = False,
     p4_policy: str = "always",
     scale_width: int = 0,
     prefetch_executor: ThreadPoolExecutor | None = None,
@@ -511,13 +527,13 @@ def _process_group(
     if p4_policy == "never":
         check_p4 = False
     elif p4_policy == "auto":
-        # Auto mode: Only enable P4 if we see "F1" or "Grand Prix" or "GP" in the path
-        path_str = str(frames[0]).lower()
+        # Auto mode: Only enable P4 if we see "F1" or "Grand Prix" or "GP" in the immediate directory name
+        dir_name = frames[0].parent.name.lower()
         keywords = ["f1", "gp", "grand prix", "race", "quali", "practice"]
-        check_p4 = any(k in path_str for k in keywords)
+        check_p4 = any(k in dir_name for k in keywords)
         
         # Exception: sprint_quali (F1 session where P4 showed negative impact in benchmarks)
-        if "sprint_quali" in path_str:
+        if "sprint_quali" in dir_name:
             check_p4 = False
 
     for frame_idx, frame_path in enumerate(frames):
@@ -542,8 +558,8 @@ def _process_group(
         is_rating_set = final_rating is not None and final_rating != 0
         is_pick_set = final_pick is not None and final_pick != 0
 
-        # Skip if EITHER non-zero rating or pick status is present
-        if is_rating_set or is_pick_set:
+        # Skip if EITHER non-zero rating or pick status is present (unless --force)
+        if not force and (is_rating_set or is_pick_set):
             # Infer missing value for consistent internal scoring
             if not is_rating_set:
                 final_rating = 1 if final_pick == 1 else (-1 if final_pick == -1 else 0)
@@ -733,6 +749,22 @@ def run(args: argparse.Namespace) -> int:
             "Only COCO detection will be used."
         )
 
+    # --- P4 Policy check ---
+    if args.p4_policy == "auto":
+        dir_name = input_dir.name.lower()
+        keywords = ["f1", "gp", "grand prix", "race", "quali", "practice"]
+        is_f1 = any(k in dir_name for k in keywords)
+        is_sprint = "sprint_quali" in dir_name
+        if is_f1 and not is_sprint:
+            log.info("P4 Multi-task model: ENABLED (auto-policy match)")
+        else:
+            reason = "sprint_quali excluded" if is_sprint else "no keywords found"
+            log.info("P4 Multi-task model: DISABLED (auto-policy: %s)", reason)
+    elif args.p4_policy == "always":
+        log.info("P4 Multi-task model: ENABLED (policy: always)")
+    else:
+        log.info("P4 Multi-task model: DISABLED (policy: never)")
+
     # --- Decode scale and prefetch config ------------------------------------
     scale_width = args.scale_width
     n_workers   = args.workers
@@ -764,6 +796,7 @@ def run(args: argparse.Namespace) -> int:
                 min_raw=args.min_raw,
                 conf=args.conf,
                 dry_run=args.dry_run,
+                force=args.force,
                 p4_policy=args.p4_policy,
                 scale_width=scale_width,
                 prefetch_executor=None,
@@ -1119,6 +1152,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Log what would be written without creating any .xmp files.",
+    )
+    parser.add_argument(
+        "-f", "--force",
+        action="store_true",
+        default=False,
+        help="Ignore existing ratings/picks and re-analyze all images.",
     )
     parser.add_argument(
         "--dump-scores",
