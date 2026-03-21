@@ -10,13 +10,10 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-# Add project root to path for imports
-sys.path.append(str(Path(__file__).parent))
-
 from cull.detector import load_f1_model, load_coco_model, detect, Detection
 from cull.xmp_reader import read_xmp_rating
 from cull.cropper import calculate_crop, update_xmp_with_crop, has_crop_info
-from cull_photos import _load_image_rgb, _RAW_EXTS, _COOKED_EXTS
+from cull.loader import load_image_rgb, RAW_EXTS, COOKED_EXTS
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +34,7 @@ def process_image(img_path: Path, f1_model, coco_model, dry_run=False, overwrite
         log.debug("  [%s]  Already has crop information, skipping", img_path.name)
         return False
     
-    img_rgb = _load_image_rgb(img_path, scale_width=1280)
+    img_rgb = load_image_rgb(img_path, scale_width=1280)
     if img_rgb is None:
         log.warning("  [%s]  Failed to load image", img_path.name)
         return False
@@ -126,14 +123,14 @@ def main():
             # Found a rated image. Find the source file.
             base = xmp.stem
             found = False
-            for ext in _COOKED_EXTS:
+            for ext in COOKED_EXTS:
                 p = args.dir / f"{base}{ext}"
                 if p.exists():
                     candidates.append(p)
                     found = True
                     break
             if not found:
-                for ext in _RAW_EXTS:
+                for ext in RAW_EXTS:
                     p = args.dir / f"{base}{ext}"
                     if p.exists():
                         candidates.append(p)

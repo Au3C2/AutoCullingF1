@@ -1,0 +1,1001 @@
+filename,s_sharp,s_comp,raw_score,rating,vetoed,veto_reason,n_detections,burst_group
+DSC00827.heif,0.164651,0.488100,0.867227,-1,1,raw=0.867 < min_raw=3.100 (cut penalty applied? True),7,1
+DSC00845.heif,0.191518,0.923987,2.597244,-1,1,raw=2.597 < min_raw=3.100 (cut penalty applied? False),1,1
+DSC00849.heif,0.385376,0.840742,2.679918,-1,1,raw=2.680 < min_raw=3.100 (cut penalty applied? False),1,2
+DSC00851.heif,0.585937,0.931086,3.206622,1,0,,1,2
+DSC00879.heif,0.078860,0.721425,1.321853,-1,1,raw=1.322 < min_raw=3.100 (cut penalty applied? True),1,3
+DSC00880.heif,0.000000,0.798950,1.397375,-1,1,sharpness=0.000 < threshold=0.050,1,4
+DSC00886.heif,0.195605,0.825921,1.758210,-1,1,raw=1.758 < min_raw=3.100 (cut penalty applied? True),1,5
+DSC00887.heif,0.134698,0.804488,1.613267,-1,1,raw=1.613 < min_raw=3.100 (cut penalty applied? True),1,6
+DSC00888.heif,0.474007,0.648523,1.732319,-1,1,raw=1.732 < min_raw=3.100 (cut penalty applied? True),7,7
+DSC00890.heif,0.068722,0.487345,0.721445,-1,1,raw=0.721 < min_raw=3.100 (cut penalty applied? True),2,8
+DSC00892.heif,0.012670,0.393083,0.401711,-1,1,sharpness=0.013 < threshold=0.050,5,9
+DSC00893.heif,0.023169,0.419633,0.483837,-1,1,sharpness=0.023 < threshold=0.050,7,10
+DSC00894.heif,0.119746,0.830841,1.656723,-1,1,raw=1.657 < min_raw=3.100 (cut penalty applied? True),1,11
+DSC00895.heif,0.000000,0.442044,0.505109,-1,1,sharpness=0.000 < threshold=0.050,2,12
+DSC00896.heif,0.464153,0.830852,2.173359,-1,1,raw=2.173 < min_raw=3.100 (cut penalty applied? True),5,13
+DSC00897.heif,0.123302,0.832428,1.666022,-1,1,raw=1.666 < min_raw=3.100 (cut penalty applied? True),1,14
+DSC00942.heif,0.266575,0.859033,1.947445,-1,1,raw=1.947 < min_raw=3.100 (cut penalty applied? True),1,15
+DSC00951.heif,0.081216,0.000000,0.121824,-1,1,no_detection,0,16
+DSC00952.heif,0.275915,0.457472,0.957553,-1,1,raw=0.958 < min_raw=3.100 (cut penalty applied? True),2,17
+DSC00958.heif,0.084409,0.633988,1.111583,-1,1,raw=1.112 < min_raw=3.100 (cut penalty applied? True),2,18
+DSC00959.heif,0.126463,0.589886,1.064408,-1,1,raw=1.064 < min_raw=3.100 (cut penalty applied? True),2,19
+DSC00960.heif,1.000000,0.535783,2.239458,-1,1,raw=2.239 < min_raw=3.100 (cut penalty applied? True),3,20
+DSC00961.heif,0.193969,0.647742,1.310310,-1,1,raw=1.310 < min_raw=3.100 (cut penalty applied? True),1,21
+DSC00962.heif,0.174204,0.497395,0.904795,-1,1,raw=0.905 < min_raw=3.100 (cut penalty applied? True),2,22
+DSC00968.heif,0.867862,0.767953,2.621676,-1,1,raw=2.622 < min_raw=3.100 (cut penalty applied? True),8,23
+DSC00969.heif,0.052990,0.661136,1.132327,-1,1,raw=1.132 < min_raw=3.100 (cut penalty applied? True),1,24
+DSC00971.heif,0.235773,0.838072,1.848840,-1,1,raw=1.849 < min_raw=3.100 (cut penalty applied? True),1,25
+DSC00973.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,25
+DSC00978.heif,0.082967,0.674546,1.210815,-1,1,raw=1.211 < min_raw=3.100 (cut penalty applied? True),1,26
+DSC00980.heif,0.033452,0.425238,0.513274,-1,1,sharpness=0.033 < threshold=0.050,1,27
+DSC00982.heif,0.135062,0.528676,0.924282,-1,1,raw=0.924 < min_raw=3.100 (cut penalty applied? True),1,28
+DSC00983.heif,0.324433,0.832505,1.967913,-1,1,raw=1.968 < min_raw=3.100 (cut penalty applied? True),6,29
+DSC00984.heif,0.178714,0.545698,1.032316,-1,1,raw=1.032 < min_raw=3.100 (cut penalty applied? True),3,30
+DSC01017.heif,0.850866,0.728139,3.096647,-1,1,raw=3.097 < min_raw=3.100 (cut penalty applied? False),2,30
+DSC01027.heif,0.335416,0.752487,2.384341,-1,1,raw=2.384 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01111.heif,0.017849,0.557734,0.821108,-1,1,sharpness=0.018 < threshold=0.050,9,30
+DSC01148.heif,0.338427,0.874252,2.693270,-1,1,raw=2.693 < min_raw=3.100 (cut penalty applied? False),2,30
+DSC01149.heif,0.387805,0.928287,2.902424,-1,1,raw=2.902 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01166.heif,0.417933,0.705021,2.389451,-1,1,raw=2.389 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01181.heif,0.221317,0.894074,2.567161,-1,1,raw=2.567 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01196.heif,0.303238,0.691755,2.184245,-1,1,raw=2.184 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01202.heif,0.407208,0.723028,2.418383,-1,1,raw=2.418 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01203.heif,0.582118,0.760422,2.774231,-1,1,raw=2.774 < min_raw=3.100 (cut penalty applied? False),1,30
+DSC01208.heif,0.229597,0.820183,1.794853,-1,1,raw=1.795 < min_raw=3.100 (cut penalty applied? True),1,31
+DSC01209.heif,0.190683,0.858237,2.431616,-1,1,raw=2.432 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01217.heif,0.237074,0.858404,2.501622,-1,1,raw=2.502 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01228.heif,0.468975,0.895748,2.942833,-1,1,raw=2.943 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01234.heif,0.303741,0.907633,2.724695,-1,1,raw=2.725 < min_raw=3.100 (cut penalty applied? False),2,31
+DSC01235.heif,0.661328,0.815716,3.031281,-1,1,raw=3.031 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01236.heif,0.805253,0.731233,3.035961,-1,1,raw=3.036 < min_raw=3.100 (cut penalty applied? False),2,31
+DSC01248.heif,0.514210,0.923728,3.080635,-1,1,raw=3.081 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01260.heif,0.238846,0.899347,2.006638,-1,1,raw=2.007 < min_raw=3.100 (cut penalty applied? True),1,31
+DSC01272.heif,0.642076,0.895651,3.202241,1,0,,1,31
+DSC01273.heif,0.652967,0.910159,3.254849,1,0,,1,31
+DSC01276.heif,0.346477,0.857564,2.063627,-1,1,raw=2.064 < min_raw=3.100 (cut penalty applied? True),1,31
+DSC01286.heif,0.313682,0.826662,2.537178,-1,1,raw=2.537 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01310.heif,0.294886,0.900518,2.093622,-1,1,raw=2.094 < min_raw=3.100 (cut penalty applied? True),1,31
+DSC01335.heif,0.391119,0.851352,2.715058,-1,1,raw=2.715 < min_raw=3.100 (cut penalty applied? False),2,31
+DSC01339.heif,0.448281,0.757287,2.565639,-1,1,raw=2.566 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01346.heif,0.708388,0.804740,3.074431,-1,1,raw=3.074 < min_raw=3.100 (cut penalty applied? False),2,31
+DSC01351.heif,0.732467,0.720275,2.899387,-1,1,raw=2.899 < min_raw=3.100 (cut penalty applied? False),1,31
+DSC01367.heif,0.000000,0.501032,0.652579,-1,1,sharpness=0.000 < threshold=0.050,1,31
+DSC01385.heif,0.357878,0.834515,2.623104,-1,1,raw=2.623 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01386.heif,0.491732,0.886252,2.953229,-1,1,raw=2.953 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01388.heif,0.485939,0.764261,2.639560,-1,1,raw=2.640 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01399.heif,0.633248,0.880555,3.151260,1,0,,1,32
+DSC01403.heif,0.460993,0.937391,3.034967,-1,1,raw=3.035 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01404.heif,0.538944,0.935520,3.147216,1,0,,2,32
+DSC01426.heif,0.607573,0.781624,2.865421,-1,1,raw=2.865 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01440.heif,0.348137,0.869073,2.694888,-1,1,raw=2.695 < min_raw=3.100 (cut penalty applied? False),2,32
+DSC01441.heif,0.454083,0.744882,2.543329,-1,1,raw=2.543 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01446.heif,0.614709,0.853835,3.056650,-1,1,raw=3.057 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01457.heif,1.000000,0.969982,3.924956,3,0,,1,32
+DSC01460.heif,0.436753,0.966471,3.071307,-1,1,raw=3.071 < min_raw=3.100 (cut penalty applied? False),2,32
+DSC01462.heif,0.560189,0.813540,2.874135,-1,1,raw=2.874 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01467.heif,0.768753,0.846011,3.268158,1,0,,2,32
+DSC01471.heif,0.621537,0.837972,3.027237,-1,1,raw=3.027 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01477.heif,0.392156,0.924434,2.899318,-1,1,raw=2.899 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01482.heif,0.463822,0.852505,2.826995,-1,1,raw=2.827 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01486.heif,0.359077,0.844667,2.650283,-1,1,raw=2.650 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01491.heif,0.393456,0.904260,2.850835,-1,1,raw=2.851 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01492.heif,0.420070,0.761461,2.533757,-1,1,raw=2.534 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01493.heif,0.339586,0.912946,2.791745,-1,1,raw=2.792 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01498.heif,0.414586,0.890161,2.847280,-1,1,raw=2.847 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01501.heif,0.524528,0.854647,2.923410,-1,1,raw=2.923 < min_raw=3.100 (cut penalty applied? False),1,32
+DSC01502.heif,0.505446,0.480459,1.359316,-1,1,raw=1.359 < min_raw=3.100 (cut penalty applied? True),3,32
+DSC01503.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,33
+DSC01511.heif,0.324209,0.694589,2.222787,-1,1,raw=2.223 < min_raw=3.100 (cut penalty applied? False),1,33
+DSC01513.heif,0.617848,0.860031,3.076849,-1,1,raw=3.077 < min_raw=3.100 (cut penalty applied? False),1,34
+DSC01514.heif,0.383252,0.762569,2.481301,-1,1,raw=2.481 < min_raw=3.100 (cut penalty applied? False),1,34
+DSC01515.heif,0.718332,0.866794,3.244484,1,0,,1,34
+DSC01517.heif,0.437709,0.820203,2.707071,-1,1,raw=2.707 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01518.heif,0.353556,0.900504,2.781593,-1,1,raw=2.782 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01519.heif,0.427888,0.897910,2.886608,-1,1,raw=2.887 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01520.heif,0.359307,0.701706,2.293226,-1,1,raw=2.293 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01529.heif,0.786698,0.835535,3.268883,1,0,,3,35
+DSC01539.heif,0.423121,0.977247,3.077800,-1,1,raw=3.078 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01540.heif,0.039568,0.739131,1.307181,-1,1,sharpness=0.040 < threshold=0.050,2,35
+DSC01544.heif,0.526156,0.952162,3.169638,1,0,,1,35
+DSC01545.heif,0.566478,0.930386,3.175682,1,0,,1,35
+DSC01549.heif,0.274319,0.878666,2.608143,-1,1,raw=2.608 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01550.heif,0.311671,0.855188,2.605476,-1,1,raw=2.605 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01559.heif,0.671723,0.912889,3.289807,1,0,,1,35
+DSC01562.heif,0.146473,0.891363,2.448118,-1,1,raw=2.448 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01564.heif,0.283542,0.813746,2.459680,-1,1,raw=2.460 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01569.heif,0.707562,0.819924,3.111153,1,0,,1,35
+DSC01570.heif,0.780438,0.735390,3.009131,-1,1,raw=3.009 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01575.heif,0.323669,0.886531,2.701830,-1,1,raw=2.702 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01579.heif,0.461627,0.916628,2.984010,-1,1,raw=2.984 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01585.heif,0.335211,0.897773,2.747250,-1,1,raw=2.747 < min_raw=3.100 (cut penalty applied? False),3,35
+DSC01592.heif,0.244572,0.742878,2.224052,-1,1,raw=2.224 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01594.heif,0.244178,0.926204,2.681777,-1,1,raw=2.682 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01597.heif,0.437435,0.919666,2.955318,-1,1,raw=2.955 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01598.heif,0.474054,0.819462,2.759737,-1,1,raw=2.760 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01599.heif,0.519758,0.861653,2.933771,-1,1,raw=2.934 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01600.heif,0.789523,0.520715,1.886073,-1,1,raw=1.886 < min_raw=3.100 (cut penalty applied? True),4,35
+DSC01601.heif,0.666652,0.854527,3.136296,1,0,,2,35
+DSC01610.heif,0.465934,0.911686,2.978117,-1,1,raw=2.978 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01627.heif,0.594748,0.748670,2.763797,-1,1,raw=2.764 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01638.heif,0.566647,0.852389,2.980942,-1,1,raw=2.981 < min_raw=3.100 (cut penalty applied? False),1,35
+DSC01654.heif,0.556791,0.984494,3.296422,1,0,,1,35
+DSC01655.heif,0.634130,0.707359,2.719591,-1,1,raw=2.720 < min_raw=3.100 (cut penalty applied? False),2,35
+DSC01657.heif,0.355471,0.830092,2.608437,-1,1,raw=2.608 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01658.heif,0.388799,0.650390,2.209174,-1,1,raw=2.209 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01663.heif,0.400455,0.878443,2.796792,-1,1,raw=2.797 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01664.heif,0.231782,0.912629,2.629246,-1,1,raw=2.629 < min_raw=3.100 (cut penalty applied? False),2,36
+DSC01667.heif,0.377508,0.736561,2.407665,-1,1,raw=2.408 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01668.heif,0.440975,0.914825,2.948526,-1,1,raw=2.949 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01669.heif,0.430795,0.744932,2.508522,-1,1,raw=2.509 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01670.heif,0.460190,0.741402,2.543792,-1,1,raw=2.544 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01688.heif,0.605529,0.934576,3.244733,1,0,,1,36
+DSC01689.heif,0.540947,0.739761,2.660824,-1,1,raw=2.661 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01690.heif,0.246237,0.904674,2.631039,-1,1,raw=2.631 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01691.heif,0.500777,0.954575,3.137602,1,0,,1,36
+DSC01692.heif,0.432944,0.662069,2.304589,-1,1,raw=2.305 < min_raw=3.100 (cut penalty applied? False),2,36
+DSC01694.heif,0.826878,0.894539,3.476665,2,0,,2,36
+DSC01695.heif,0.889725,0.648887,2.956804,-1,1,raw=2.957 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01696.heif,0.730833,0.695075,2.833937,-1,1,raw=2.834 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01697.heif,0.507393,0.821304,2.814350,-1,1,raw=2.814 < min_raw=3.100 (cut penalty applied? False),1,36
+DSC01703.heif,0.398708,0.718458,2.394208,-1,1,raw=2.394 < min_raw=3.100 (cut penalty applied? False),1,37
+DSC01707.heif,0.190435,0.889841,2.510255,-1,1,raw=2.510 < min_raw=3.100 (cut penalty applied? False),2,37
+DSC01710.heif,0.520991,0.872463,2.962645,-1,1,raw=2.963 < min_raw=3.100 (cut penalty applied? False),1,38
+DSC01711.heif,0.595152,0.867504,3.061489,-1,1,raw=3.061 < min_raw=3.100 (cut penalty applied? False),1,38
+DSC01712.heif,0.605837,0.847346,3.027121,-1,1,raw=3.027 < min_raw=3.100 (cut penalty applied? False),1,38
+DSC01713.heif,0.472723,0.874910,2.896359,-1,1,raw=2.896 < min_raw=3.100 (cut penalty applied? False),1,38
+DSC01714.heif,0.395257,0.859914,2.742671,-1,1,raw=2.743 < min_raw=3.100 (cut penalty applied? False),1,38
+DSC01715.heif,0.489949,0.825467,2.798591,-1,1,raw=2.799 < min_raw=3.100 (cut penalty applied? False),3,38
+DSC01738.heif,1.000000,0.758617,3.396542,1,0,,1,39
+DSC01739.heif,0.907269,0.840113,2.861187,-1,1,raw=2.861 < min_raw=3.100 (cut penalty applied? True),2,40
+DSC01740.heif,0.724061,0.857538,2.629935,-1,1,raw=2.630 < min_raw=3.100 (cut penalty applied? True),3,41
+DSC01742.heif,0.411783,0.732863,1.849832,-1,1,raw=1.850 < min_raw=3.100 (cut penalty applied? True),3,42
+DSC01743.heif,0.629481,0.874893,3.131454,1,0,,6,42
+DSC01744.heif,0.637640,0.840243,3.057066,-1,1,raw=3.057 < min_raw=3.100 (cut penalty applied? False),3,43
+DSC01745.heif,0.671410,0.961434,3.410699,2,0,,3,43
+DSC01747.heif,0.781012,0.733626,3.005583,-1,1,raw=3.006 < min_raw=3.100 (cut penalty applied? False),4,43
+DSC01748.heif,0.427731,0.805982,2.656552,-1,1,raw=2.657 < min_raw=3.100 (cut penalty applied? False),3,44
+DSC01750.heif,0.271322,0.859935,2.556820,-1,1,raw=2.557 < min_raw=3.100 (cut penalty applied? False),1,45
+DSC01752.heif,0.417095,0.907765,2.895057,-1,1,raw=2.895 < min_raw=3.100 (cut penalty applied? False),1,45
+DSC01754.heif,0.516758,0.872254,2.955771,-1,1,raw=2.956 < min_raw=3.100 (cut penalty applied? False),2,46
+DSC01757.heif,0.412327,0.863931,2.778317,-1,1,raw=2.778 < min_raw=3.100 (cut penalty applied? False),1,47
+DSC01758.heif,0.695881,0.850057,2.568963,-1,1,raw=2.569 < min_raw=3.100 (cut penalty applied? True),1,48
+DSC01759.heif,0.668092,0.733208,2.835159,-1,1,raw=2.835 < min_raw=3.100 (cut penalty applied? False),2,49
+DSC01761.heif,0.544850,0.858849,2.964397,-1,1,raw=2.964 < min_raw=3.100 (cut penalty applied? False),2,50
+DSC01762.heif,0.766146,0.847211,3.267246,1,0,,2,51
+DSC01763.heif,0.944796,0.905897,3.681936,2,0,,2,51
+DSC01764.heif,0.905930,0.817230,3.401971,2,0,,2,51
+DSC01765.heif,0.915910,0.878032,3.568946,2,0,,2,51
+DSC01766.heif,0.859628,0.836934,3.381777,1,0,,1,51
+DSC01767.heif,0.638650,0.876105,3.148238,1,0,,1,51
+DSC01769.heif,0.886317,0.875635,3.518562,2,0,,1,52
+DSC01770.heif,0.945604,0.869426,3.591972,2,0,,1,52
+DSC01771.heif,0.904965,0.901416,3.610987,2,0,,2,52
+DSC01772.heif,0.936013,0.941407,3.757536,2,0,,1,52
+DSC01773.heif,0.882128,0.931628,3.652262,2,0,,1,52
+DSC01774.heif,0.519372,0.853810,2.913584,-1,1,raw=2.914 < min_raw=3.100 (cut penalty applied? False),1,53
+DSC01775.heif,0.802851,0.881951,3.409153,2,0,,1,53
+DSC01776.heif,0.700599,0.909556,3.324789,1,0,,1,53
+DSC01777.heif,0.713779,0.940081,3.420871,2,0,,1,53
+DSC01778.heif,0.537050,0.820854,2.857709,-1,1,raw=2.858 < min_raw=3.100 (cut penalty applied? False),1,53
+DSC01779.heif,0.748158,0.859674,3.271422,1,0,,1,54
+DSC01780.heif,0.813539,0.858980,3.367758,1,0,,1,54
+DSC01781.heif,0.817120,0.868384,3.396639,1,0,,2,54
+DSC01782.heif,0.749310,0.898388,3.369936,1,0,,2,54
+DSC01783.heif,0.685070,0.975975,3.467542,2,0,,2,54
+DSC01784.heif,0.632062,0.870201,3.123596,1,0,,3,54
+DSC01786.heif,0.387595,0.813935,2.616230,-1,1,raw=2.616 < min_raw=3.100 (cut penalty applied? False),2,54
+DSC01787.heif,0.941291,0.863441,3.570540,2,0,,1,54
+DSC01788.heif,0.766644,0.889288,3.373186,1,0,,2,54
+DSC01789.heif,0.516532,0.903021,3.032351,-1,1,raw=3.032 < min_raw=3.100 (cut penalty applied? False),1,54
+DSC01791.heif,0.591789,0.866110,3.052959,-1,1,raw=3.053 < min_raw=3.100 (cut penalty applied? False),2,55
+DSC01792.heif,0.678718,0.889936,3.242917,1,0,,1,55
+DSC01793.heif,0.488571,0.925003,3.045365,-1,1,raw=3.045 < min_raw=3.100 (cut penalty applied? False),1,55
+DSC01794.heif,0.547929,0.865565,2.985806,-1,1,raw=2.986 < min_raw=3.100 (cut penalty applied? False),2,55
+DSC01796.heif,0.568138,0.823457,2.910851,-1,1,raw=2.911 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01797.heif,0.607409,0.745856,2.775753,-1,1,raw=2.776 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01799.heif,0.528002,0.920998,3.094497,-1,1,raw=3.094 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01800.heif,0.560882,0.879822,3.040878,-1,1,raw=3.041 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01801.heif,0.529154,0.883214,3.001766,-1,1,raw=3.002 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01803.heif,0.773856,0.710621,2.937336,-1,1,raw=2.937 < min_raw=3.100 (cut penalty applied? False),1,56
+DSC01804.heif,0.818822,0.770090,3.153458,1,0,,1,56
+DSC01807.heif,0.650029,0.868487,3.146261,1,0,,1,57
+DSC01808.heif,0.691171,0.863065,3.194418,1,0,,2,58
+DSC01809.heif,0.743059,0.830903,3.191847,1,0,,2,58
+DSC01810.heif,0.749357,0.865551,3.287915,1,0,,1,58
+DSC01811.heif,0.659156,0.855975,3.128672,1,0,,1,58
+DSC01812.heif,0.730078,0.907852,3.364749,1,0,,1,58
+DSC01818.heif,0.284053,0.838886,2.523293,-1,1,raw=2.523 < min_raw=3.100 (cut penalty applied? False),1,58
+DSC01819.heif,0.309308,0.928168,2.784383,-1,1,raw=2.784 < min_raw=3.100 (cut penalty applied? False),1,58
+DSC01822.heif,0.000000,0.451352,0.528380,-1,1,sharpness=0.000 < threshold=0.050,1,59
+DSC01824.heif,0.373673,0.830304,2.036269,-1,1,raw=2.036 < min_raw=3.100 (cut penalty applied? True),10,60
+DSC01825.heif,0.175102,0.730940,1.490004,-1,1,raw=1.490 < min_raw=3.100 (cut penalty applied? True),6,61
+DSC01830.heif,0.203685,0.686361,1.421429,-1,1,raw=1.421 < min_raw=3.100 (cut penalty applied? True),1,62
+DSC01831.heif,0.121576,0.840165,1.682776,-1,1,raw=1.683 < min_raw=3.100 (cut penalty applied? True),7,63
+DSC01848.heif,0.787981,0.914230,2.867548,-1,1,raw=2.868 < min_raw=3.100 (cut penalty applied? True),1,63
+DSC01850.heif,1.000000,0.839800,3.599499,2,0,,1,63
+DSC01852.heif,0.403955,0.783615,2.564970,-1,1,raw=2.565 < min_raw=3.100 (cut penalty applied? False),1,63
+DSC01853.heif,0.429815,0.821366,2.698139,-1,1,raw=2.698 < min_raw=3.100 (cut penalty applied? False),2,64
+DSC01861.heif,0.352223,0.854461,2.064488,-1,1,raw=2.064 < min_raw=3.100 (cut penalty applied? True),1,64
+DSC01866.heif,0.452611,0.742919,2.536215,-1,1,raw=2.536 < min_raw=3.100 (cut penalty applied? False),1,64
+DSC01876.heif,0.923070,0.733207,3.217623,1,0,,1,64
+DSC01877.heif,0.441314,0.731579,2.490918,-1,1,raw=2.491 < min_raw=3.100 (cut penalty applied? False),2,64
+DSC01886.heif,0.743045,0.854104,3.249828,1,0,,1,64
+DSC01892.heif,0.514413,0.761045,2.074231,-1,1,raw=2.074 < min_raw=3.100 (cut penalty applied? True),2,65
+DSC01909.heif,0.499897,0.852146,2.880211,-1,1,raw=2.880 < min_raw=3.100 (cut penalty applied? False),1,66
+DSC01910.heif,0.578909,0.889359,3.091761,-1,1,raw=3.092 < min_raw=3.100 (cut penalty applied? False),1,66
+DSC01911.heif,0.485173,0.888695,2.949497,-1,1,raw=2.949 < min_raw=3.100 (cut penalty applied? False),2,66
+DSC01921.heif,0.703507,0.784018,3.015307,-1,1,raw=3.015 < min_raw=3.100 (cut penalty applied? False),1,66
+DSC01924.heif,0.496126,0.646898,2.361434,-1,1,raw=2.361 < min_raw=3.100 (cut penalty applied? False),1,66
+DSC01925.heif,0.736809,0.627771,2.674640,-1,1,raw=2.675 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01926.heif,0.626155,0.697917,2.684025,-1,1,raw=2.684 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01937.heif,0.409059,0.881195,2.816575,-1,1,raw=2.817 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01938.heif,0.673304,0.705563,2.773865,-1,1,raw=2.774 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01939.heif,0.711545,0.666428,2.733387,-1,1,raw=2.733 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01946.heif,0.735560,0.649588,2.727311,-1,1,raw=2.727 < min_raw=3.100 (cut penalty applied? False),1,67
+DSC01947.heif,0.613772,0.913191,3.203636,1,0,,1,67
+DSC01956.heif,0.677078,0.808128,2.435938,-1,1,raw=2.436 < min_raw=3.100 (cut penalty applied? True),2,68
+DSC01957.heif,0.742786,0.720375,2.915118,-1,1,raw=2.915 < min_raw=3.100 (cut penalty applied? False),1,68
+DSC01972.heif,0.436098,0.763468,2.562816,-1,1,raw=2.563 < min_raw=3.100 (cut penalty applied? False),1,68
+DSC01973.heif,0.792847,0.864248,3.349889,1,0,,2,68
+DSC01974.heif,0.658852,0.782844,2.945389,-1,1,raw=2.945 < min_raw=3.100 (cut penalty applied? False),1,68
+DSC01975.heif,0.727219,0.826241,3.156430,1,0,,1,69
+DSC01976.heif,0.614903,0.858801,3.069357,-1,1,raw=3.069 < min_raw=3.100 (cut penalty applied? False),1,69
+DSC01981.heif,0.544708,0.784101,2.777315,-1,1,raw=2.777 < min_raw=3.100 (cut penalty applied? False),1,70
+DSC01982.heif,1.000000,0.710241,3.275601,1,0,,1,71
+DSC01984.heif,1.000000,0.580177,2.950442,-1,1,raw=2.950 < min_raw=3.100 (cut penalty applied? False),1,71
+DSC01985.heif,1.000000,0.674674,3.186685,1,0,,1,71
+DSC01986.heif,0.693304,0.848142,3.160311,1,0,,1,72
+DSC01987.heif,0.913701,0.885775,3.584989,2,0,,1,72
+DSC01988.heif,1.000000,0.890479,3.726197,2,0,,1,72
+DSC01989.heif,0.789112,0.712410,2.364693,-1,1,raw=2.365 < min_raw=3.100 (cut penalty applied? True),1,73
+DSC01990.heif,0.943971,0.879595,3.614943,2,0,,1,73
+DSC01991.heif,0.969969,0.710967,3.232370,1,0,,1,73
+DSC01992.heif,0.847517,0.777916,3.216065,1,0,,2,73
+DSC01993.heif,0.709733,0.954913,3.451882,2,0,,1,73
+DSC01994.heif,1.000000,0.743331,3.358327,1,0,,1,73
+DSC01996.heif,0.631759,0.867099,3.115387,1,0,,1,73
+DSC01998.heif,0.756352,0.820320,3.185329,1,0,,1,74
+DSC01999.heif,0.653503,0.798650,2.976880,-1,1,raw=2.977 < min_raw=3.100 (cut penalty applied? False),1,74
+DSC02000.heif,0.527424,0.929266,3.114300,1,0,,1,74
+DSC02004.heif,1.000000,0.718481,3.296202,1,0,,1,75
+DSC02005.heif,1.000000,0.662558,3.156396,1,0,,2,75
+DSC02006.heif,1.000000,0.713890,3.284725,1,0,,1,75
+DSC02007.heif,1.000000,0.809568,3.523921,2,0,,1,75
+DSC02008.heif,1.000000,0.862397,3.655992,2,0,,1,75
+DSC02009.heif,1.000000,0.887650,3.719126,2,0,,2,75
+DSC02010.heif,1.000000,0.889760,3.724401,2,0,,1,75
+DSC02011.heif,0.618371,0.907871,3.197233,1,0,,1,75
+DSC02012.heif,0.646568,0.737900,2.814603,-1,1,raw=2.815 < min_raw=3.100 (cut penalty applied? False),1,75
+DSC02013.heif,0.691004,0.777245,2.979618,-1,1,raw=2.980 < min_raw=3.100 (cut penalty applied? False),1,75
+DSC02014.heif,0.873892,0.843814,3.420373,2,0,,2,76
+DSC02015.heif,1.000000,0.903555,3.758887,2,0,,1,76
+DSC02016.heif,1.000000,0.736354,3.340886,1,0,,1,76
+DSC02017.heif,1.000000,0.817624,3.544061,2,0,,2,76
+DSC02018.heif,1.000000,0.903663,3.759156,2,0,,1,76
+DSC02019.heif,0.864688,0.906829,3.564105,2,0,,1,76
+DSC02020.heif,0.835999,0.780711,3.205775,1,0,,1,76
+DSC02022.heif,0.772537,0.711390,2.937280,-1,1,raw=2.937 < min_raw=3.100 (cut penalty applied? False),1,76
+DSC02031.heif,0.808141,0.775002,3.149715,1,0,,1,77
+DSC02032.heif,0.711790,0.644856,2.679825,-1,1,raw=2.680 < min_raw=3.100 (cut penalty applied? False),2,77
+DSC02033.heif,0.878956,0.762055,3.223573,1,0,,1,77
+DSC02035.heif,1.000000,0.734216,3.335540,1,0,,1,77
+DSC02036.heif,0.566623,0.621987,2.404901,-1,1,raw=2.405 < min_raw=3.100 (cut penalty applied? False),1,77
+DSC02038.heif,0.448294,0.973480,3.106141,1,0,,1,77
+DSC02039.heif,0.389060,0.808005,2.603601,-1,1,raw=2.604 < min_raw=3.100 (cut penalty applied? False),2,77
+DSC02040.heif,0.730748,0.856790,2.638098,-1,1,raw=2.638 < min_raw=3.100 (cut penalty applied? True),2,78
+DSC02046.heif,0.449818,0.883362,2.283133,-1,1,raw=2.283 < min_raw=3.100 (cut penalty applied? True),1,78
+DSC02047.heif,0.367864,0.923153,2.859678,-1,1,raw=2.860 < min_raw=3.100 (cut penalty applied? False),1,78
+DSC02052.heif,0.524956,0.830422,2.263489,-1,1,raw=2.263 < min_raw=3.100 (cut penalty applied? True),2,79
+DSC02053.heif,0.413115,0.843112,2.727453,-1,1,raw=2.727 < min_raw=3.100 (cut penalty applied? False),1,79
+DSC02065.heif,0.455552,0.830370,2.759253,-1,1,raw=2.759 < min_raw=3.100 (cut penalty applied? False),1,80
+DSC02066.heif,0.639600,0.840667,3.061067,-1,1,raw=3.061 < min_raw=3.100 (cut penalty applied? False),2,80
+DSC02070.heif,0.432438,0.712082,2.428862,-1,1,raw=2.429 < min_raw=3.100 (cut penalty applied? False),1,81
+DSC02072.heif,0.466020,0.632984,2.281490,-1,1,raw=2.281 < min_raw=3.100 (cut penalty applied? False),1,81
+DSC02084.heif,0.439765,0.842068,2.164818,-1,1,raw=2.165 < min_raw=3.100 (cut penalty applied? True),2,82
+DSC02085.heif,0.591735,0.947126,3.255419,1,0,,1,82
+DSC02087.heif,0.401739,0.796671,2.594285,-1,1,raw=2.594 < min_raw=3.100 (cut penalty applied? False),2,82
+DSC02110.heif,0.236571,0.862857,1.911998,-1,1,raw=1.912 < min_raw=3.100 (cut penalty applied? True),1,82
+DSC02111.heif,0.538513,0.879692,3.007001,-1,1,raw=3.007 < min_raw=3.100 (cut penalty applied? False),1,82
+DSC02112.heif,0.500324,0.866979,2.917932,-1,1,raw=2.918 < min_raw=3.100 (cut penalty applied? False),2,82
+DSC02115.heif,0.552725,0.917484,3.122798,1,0,,1,82
+DSC02116.heif,0.481309,0.824123,2.782272,-1,1,raw=2.782 < min_raw=3.100 (cut penalty applied? False),2,82
+DSC02121.heif,0.375988,0.906241,2.829584,-1,1,raw=2.830 < min_raw=3.100 (cut penalty applied? False),1,82
+DSC02122.heif,0.548777,0.798838,2.820262,-1,1,raw=2.820 < min_raw=3.100 (cut penalty applied? False),1,82
+DSC02123.heif,0.402585,0.880538,2.805222,-1,1,raw=2.805 < min_raw=3.100 (cut penalty applied? False),1,82
+DSC02131.heif,0.776849,0.579514,2.614059,-1,1,raw=2.614 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02134.heif,0.306486,0.664518,2.121025,-1,1,raw=2.121 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02135.heif,0.268005,0.876116,2.592298,-1,1,raw=2.592 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02136.heif,0.437442,0.932939,2.988511,-1,1,raw=2.989 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02137.heif,0.240330,0.644451,1.971624,-1,1,raw=1.972 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02140.heif,0.551667,0.894848,3.064619,-1,1,raw=3.065 < min_raw=3.100 (cut penalty applied? False),2,83
+DSC02141.heif,0.898363,0.748191,3.218023,1,0,,1,83
+DSC02142.heif,0.512736,0.617734,2.313438,-1,1,raw=2.313 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02145.heif,0.423691,0.956427,3.026605,-1,1,raw=3.027 < min_raw=3.100 (cut penalty applied? False),2,83
+DSC02146.heif,0.636883,0.777964,2.900235,-1,1,raw=2.900 < min_raw=3.100 (cut penalty applied? False),1,83
+DSC02147.heif,0.853504,0.768616,3.201796,1,0,,1,83
+DSC02148.heif,0.136682,0.462808,0.762042,-1,1,raw=0.762 < min_raw=3.100 (cut penalty applied? True),14,84
+DSC02163.heif,0.751996,0.893326,3.361309,1,0,,1,84
+DSC02164.heif,0.576760,0.937649,3.209264,1,0,,1,84
+DSC02165.heif,0.235866,0.676032,2.043879,-1,1,raw=2.044 < min_raw=3.100 (cut penalty applied? False),2,84
+DSC02169.heif,0.579750,0.822649,2.926249,-1,1,raw=2.926 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02170.heif,0.797981,0.777278,3.140167,1,0,,1,85
+DSC02171.heif,0.676533,0.651661,2.643953,-1,1,raw=2.644 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02172.heif,0.375779,0.649053,2.186300,-1,1,raw=2.186 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02181.heif,0.264759,0.850479,2.523336,-1,1,raw=2.523 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02182.heif,0.661625,0.835579,3.081384,-1,1,raw=3.081 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02183.heif,0.425136,0.823032,2.695284,-1,1,raw=2.695 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02193.heif,1.000000,0.794040,3.485100,2,0,,2,85
+DSC02194.heif,0.727660,0.676176,2.781929,-1,1,raw=2.782 < min_raw=3.100 (cut penalty applied? False),2,85
+DSC02195.heif,0.823614,0.732109,3.065695,-1,1,raw=3.066 < min_raw=3.100 (cut penalty applied? False),1,85
+DSC02197.heif,0.954464,0.800936,3.434037,2,0,,2,86
+DSC02198.heif,1.000000,0.706785,3.266963,1,0,,1,86
+DSC02199.heif,0.692167,0.836056,3.128389,1,0,,1,86
+DSC02200.heif,1.000000,0.944682,3.861706,3,0,,1,86
+DSC02201.heif,1.000000,0.893928,3.734820,2,0,,1,86
+DSC02202.heif,0.743805,0.669554,2.789594,-1,1,raw=2.790 < min_raw=3.100 (cut penalty applied? False),3,86
+DSC02203.heif,0.737775,0.731934,2.936498,-1,1,raw=2.936 < min_raw=3.100 (cut penalty applied? False),2,86
+DSC02204.heif,0.667398,0.668511,2.672374,-1,1,raw=2.672 < min_raw=3.100 (cut penalty applied? False),1,86
+DSC02206.heif,0.621102,0.932110,3.261927,1,0,,1,86
+DSC02207.heif,0.657615,0.755321,2.874724,-1,1,raw=2.875 < min_raw=3.100 (cut penalty applied? False),1,86
+DSC02208.heif,0.586340,0.805421,2.893062,-1,1,raw=2.893 < min_raw=3.100 (cut penalty applied? False),2,86
+DSC02209.heif,0.573090,0.888143,3.079993,-1,1,raw=3.080 < min_raw=3.100 (cut penalty applied? False),1,86
+DSC02210.heif,0.389746,0.940356,2.935510,-1,1,raw=2.936 < min_raw=3.100 (cut penalty applied? False),2,86
+DSC02212.heif,0.647000,0.799662,2.969656,-1,1,raw=2.970 < min_raw=3.100 (cut penalty applied? False),1,87
+DSC02219.heif,0.838430,0.729623,2.481702,-1,1,raw=2.482 < min_raw=3.100 (cut penalty applied? True),1,88
+DSC02228.heif,0.732103,0.843546,2.607021,-1,1,raw=2.607 < min_raw=3.100 (cut penalty applied? True),1,88
+DSC02234.heif,1.000000,0.832017,3.580042,2,0,,1,89
+DSC02235.heif,1.000000,0.898358,3.745895,2,0,,1,89
+DSC02236.heif,0.919185,0.808886,3.400991,2,0,,2,89
+DSC02237.heif,1.000000,0.870052,3.675129,2,0,,1,89
+DSC02238.heif,1.000000,0.914961,3.787402,2,0,,2,89
+DSC02239.heif,0.883277,0.719967,3.124834,1,0,,1,89
+DSC02240.heif,0.566618,0.836857,2.942070,-1,1,raw=2.942 < min_raw=3.100 (cut penalty applied? False),1,89
+DSC02241.heif,0.567193,0.908614,3.122324,1,0,,1,89
+DSC02242.heif,0.834334,0.916957,3.543895,2,0,,1,89
+DSC02243.heif,0.674682,0.898741,3.258875,1,0,,3,89
+DSC02244.heif,0.701774,0.619684,2.601871,-1,1,raw=2.602 < min_raw=3.100 (cut penalty applied? False),2,89
+DSC02245.heif,0.692721,0.654877,2.676274,-1,1,raw=2.676 < min_raw=3.100 (cut penalty applied? False),1,89
+DSC02247.heif,0.881407,0.816670,2.763785,-1,1,raw=2.764 < min_raw=3.100 (cut penalty applied? True),1,90
+DSC02248.heif,1.000000,0.918419,3.796048,2,0,,1,90
+DSC02249.heif,1.000000,0.705376,3.263439,1,0,,1,90
+DSC02250.heif,1.000000,0.792042,3.480104,2,0,,1,90
+DSC02251.heif,1.000000,0.871481,3.678703,2,0,,1,90
+DSC02252.heif,1.000000,0.908034,3.770086,2,0,,1,90
+DSC02253.heif,1.000000,0.910611,3.776527,2,0,,1,90
+DSC02254.heif,0.620323,0.902598,3.186980,1,0,,1,90
+DSC02255.heif,0.789383,0.672519,2.865372,-1,1,raw=2.865 < min_raw=3.100 (cut penalty applied? False),1,90
+DSC02256.heif,0.693893,0.702443,2.796947,-1,1,raw=2.797 < min_raw=3.100 (cut penalty applied? False),1,90
+DSC02257.heif,0.660033,0.750615,2.866589,-1,1,raw=2.867 < min_raw=3.100 (cut penalty applied? False),1,90
+DSC02258.heif,0.511158,0.747079,2.634435,-1,1,raw=2.634 < min_raw=3.100 (cut penalty applied? False),3,90
+DSC02259.heif,0.327940,0.506182,1.157366,-1,1,raw=1.157 < min_raw=3.100 (cut penalty applied? True),6,90
+DSC02267.heif,0.661688,0.749263,2.865691,-1,1,raw=2.866 < min_raw=3.100 (cut penalty applied? False),1,91
+DSC02273.heif,0.336308,0.829869,1.979134,-1,1,raw=1.979 < min_raw=3.100 (cut penalty applied? True),1,92
+DSC02278.heif,0.513917,0.790170,2.146300,-1,1,raw=2.146 < min_raw=3.100 (cut penalty applied? True),1,93
+DSC02283.heif,0.589411,0.612757,2.416010,-1,1,raw=2.416 < min_raw=3.100 (cut penalty applied? False),1,94
+DSC02286.heif,0.796596,0.916844,3.487003,2,0,,1,94
+DSC02287.heif,0.420278,0.828806,2.702431,-1,1,raw=2.702 < min_raw=3.100 (cut penalty applied? False),1,94
+DSC02290.heif,0.245445,0.846691,2.484897,-1,1,raw=2.485 < min_raw=3.100 (cut penalty applied? False),1,94
+DSC02291.heif,0.753112,0.939129,3.477490,2,0,,1,94
+DSC02292.heif,0.269276,0.723425,2.212476,-1,1,raw=2.212 < min_raw=3.100 (cut penalty applied? False),2,94
+DSC02293.heif,0.489752,0.637828,2.329197,-1,1,raw=2.329 < min_raw=3.100 (cut penalty applied? False),1,95
+DSC02294.heif,0.635027,0.648642,2.574145,-1,1,raw=2.574 < min_raw=3.100 (cut penalty applied? False),1,95
+DSC02296.heif,0.256386,0.793843,2.369186,-1,1,raw=2.369 < min_raw=3.100 (cut penalty applied? False),1,95
+DSC02297.heif,0.649985,0.741004,2.827486,-1,1,raw=2.827 < min_raw=3.100 (cut penalty applied? False),1,95
+DSC02298.heif,0.221780,0.661634,1.986754,-1,1,raw=1.987 < min_raw=3.100 (cut penalty applied? False),1,95
+DSC02300.heif,0.412219,0.667883,2.288037,-1,1,raw=2.288 < min_raw=3.100 (cut penalty applied? False),2,96
+DSC02302.heif,0.351564,0.598511,2.023624,-1,1,raw=2.024 < min_raw=3.100 (cut penalty applied? False),2,96
+DSC02304.heif,0.354233,0.692655,2.262986,-1,1,raw=2.263 < min_raw=3.100 (cut penalty applied? False),1,96
+DSC02306.heif,0.446945,0.662261,2.326071,-1,1,raw=2.326 < min_raw=3.100 (cut penalty applied? False),1,97
+DSC02315.heif,0.530341,0.697658,2.539657,-1,1,raw=2.540 < min_raw=3.100 (cut penalty applied? False),1,97
+DSC02316.heif,0.441812,0.718154,2.458104,-1,1,raw=2.458 < min_raw=3.100 (cut penalty applied? False),2,97
+DSC02317.heif,0.524849,0.594616,2.273813,-1,1,raw=2.274 < min_raw=3.100 (cut penalty applied? False),7,98
+DSC02321.heif,0.596386,0.912247,3.175196,1,0,,2,98
+DSC02322.heif,0.556676,0.688785,2.556976,-1,1,raw=2.557 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02326.heif,0.469670,0.880213,2.905038,-1,1,raw=2.905 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02327.heif,0.508618,0.854822,2.899981,-1,1,raw=2.900 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02328.heif,0.336298,0.832824,2.586508,-1,1,raw=2.587 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02330.heif,0.853008,0.915291,3.567738,2,0,,1,98
+DSC02331.heif,1.000000,0.678838,3.197094,1,0,,1,98
+DSC02332.heif,0.802615,0.946895,3.571160,2,0,,1,98
+DSC02333.heif,0.530265,0.909306,3.068663,-1,1,raw=3.069 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02336.heif,0.676017,0.757927,2.908842,-1,1,raw=2.909 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02337.heif,0.032310,0.746729,1.315289,-1,1,sharpness=0.032 < threshold=0.050,2,98
+DSC02341.heif,0.491598,0.962202,3.142902,1,0,,1,98
+DSC02342.heif,0.598942,0.830104,2.973674,-1,1,raw=2.974 < min_raw=3.100 (cut penalty applied? False),2,98
+DSC02343.heif,0.552278,0.828688,2.900138,-1,1,raw=2.900 < min_raw=3.100 (cut penalty applied? False),2,98
+DSC02346.heif,0.467338,0.867592,2.869987,-1,1,raw=2.870 < min_raw=3.100 (cut penalty applied? False),2,98
+DSC02347.heif,0.493617,0.772865,2.672587,-1,1,raw=2.673 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02348.heif,0.312777,0.902470,2.725339,-1,1,raw=2.725 < min_raw=3.100 (cut penalty applied? False),1,98
+DSC02362.heif,0.544917,0.581935,2.272212,-1,1,raw=2.272 < min_raw=3.100 (cut penalty applied? False),1,99
+DSC02367.heif,0.536692,0.682830,2.512113,-1,1,raw=2.512 < min_raw=3.100 (cut penalty applied? False),2,99
+DSC02368.heif,0.201249,0.639768,1.901294,-1,1,raw=1.901 < min_raw=3.100 (cut penalty applied? False),2,99
+DSC02371.heif,0.446690,0.897442,2.913640,-1,1,raw=2.914 < min_raw=3.100 (cut penalty applied? False),1,99
+DSC02374.heif,0.287094,0.892337,2.661482,-1,1,raw=2.661 < min_raw=3.100 (cut penalty applied? False),1,99
+DSC02375.heif,0.345091,0.646715,2.134424,-1,1,raw=2.134 < min_raw=3.100 (cut penalty applied? False),2,99
+DSC02391.heif,0.757608,0.767982,3.056367,-1,1,raw=3.056 < min_raw=3.100 (cut penalty applied? False),2,99
+DSC02392.heif,0.516550,0.697132,2.517655,-1,1,raw=2.518 < min_raw=3.100 (cut penalty applied? False),2,99
+DSC02393.heif,0.659032,0.762799,2.895545,-1,1,raw=2.896 < min_raw=3.100 (cut penalty applied? False),1,99
+DSC02394.heif,0.716180,0.786437,3.040363,-1,1,raw=3.040 < min_raw=3.100 (cut penalty applied? False),1,99
+DSC02395.heif,0.414482,0.694735,2.358559,-1,1,raw=2.359 < min_raw=3.100 (cut penalty applied? False),3,99
+DSC02396.heif,0.579893,0.619887,2.419556,-1,1,raw=2.420 < min_raw=3.100 (cut penalty applied? False),1,100
+DSC02406.heif,0.604947,0.709123,2.680229,-1,1,raw=2.680 < min_raw=3.100 (cut penalty applied? False),1,101
+DSC02407.heif,0.577231,0.941529,2.619667,-1,1,raw=2.620 < min_raw=3.100 (cut penalty applied? True),1,101
+DSC02408.heif,0.617396,0.696134,2.666428,-1,1,raw=2.666 < min_raw=3.100 (cut penalty applied? False),1,101
+DSC02409.heif,0.764619,0.866212,3.312457,1,0,,1,101
+DSC02410.heif,0.753843,0.911286,3.408978,2,0,,1,101
+DSC02411.heif,0.507130,0.754701,2.647448,-1,1,raw=2.647 < min_raw=3.100 (cut penalty applied? False),2,101
+DSC02413.heif,0.477858,0.718864,2.513946,-1,1,raw=2.514 < min_raw=3.100 (cut penalty applied? False),1,102
+DSC02414.heif,0.886995,0.910623,3.607050,2,0,,1,102
+DSC02415.heif,0.994429,0.916874,3.783829,2,0,,1,102
+DSC02416.heif,0.809522,0.782736,3.171123,1,0,,1,102
+DSC02417.heif,0.792125,0.896722,3.429993,2,0,,1,102
+DSC02418.heif,0.771782,0.919447,3.456289,2,0,,1,102
+DSC02419.heif,0.501359,0.753654,2.636173,-1,1,raw=2.636 < min_raw=3.100 (cut penalty applied? False),2,102
+DSC02422.heif,0.528029,0.850840,2.919144,-1,1,raw=2.919 < min_raw=3.100 (cut penalty applied? False),1,103
+DSC02423.heif,0.391904,0.793581,2.571809,-1,1,raw=2.572 < min_raw=3.100 (cut penalty applied? False),1,103
+DSC02437.heif,0.553574,0.834158,2.915756,-1,1,raw=2.916 < min_raw=3.100 (cut penalty applied? False),1,103
+DSC02449.heif,0.606627,0.885009,3.122463,1,0,,1,103
+DSC02452.heif,0.627107,0.686964,2.658071,-1,1,raw=2.658 < min_raw=3.100 (cut penalty applied? False),2,104
+DSC02453.heif,0.637359,0.952833,2.738121,-1,1,raw=2.738 < min_raw=3.100 (cut penalty applied? True),2,104
+DSC02457.heif,0.697707,0.762560,2.952961,-1,1,raw=2.953 < min_raw=3.100 (cut penalty applied? False),3,105
+DSC02459.heif,0.640276,0.590424,2.436476,-1,1,raw=2.436 < min_raw=3.100 (cut penalty applied? False),1,105
+DSC02460.heif,0.747360,0.704673,2.882723,-1,1,raw=2.883 < min_raw=3.100 (cut penalty applied? False),1,105
+DSC02461.heif,0.719019,0.714869,2.865701,-1,1,raw=2.866 < min_raw=3.100 (cut penalty applied? False),1,105
+DSC02462.heif,0.596609,0.912803,3.176920,1,0,,1,105
+DSC02464.heif,0.640141,0.663130,2.618035,-1,1,raw=2.618 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02467.heif,0.513466,0.804721,2.782002,-1,1,raw=2.782 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02468.heif,0.632034,0.816536,2.989391,-1,1,raw=2.989 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02469.heif,0.448254,0.810543,2.698739,-1,1,raw=2.699 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02474.heif,0.368438,0.975458,2.991302,-1,1,raw=2.991 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02475.heif,0.411701,0.726941,2.434903,-1,1,raw=2.435 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02478.heif,1.000000,0.784671,3.461678,2,0,,1,106
+DSC02479.heif,0.922302,0.634594,2.969938,-1,1,raw=2.970 < min_raw=3.100 (cut penalty applied? False),2,106
+DSC02480.heif,0.593100,0.740260,2.740300,-1,1,raw=2.740 < min_raw=3.100 (cut penalty applied? False),1,106
+DSC02481.heif,0.770964,0.845540,3.270296,1,0,,1,106
+DSC02482.heif,0.550666,0.789825,2.800560,-1,1,raw=2.801 < min_raw=3.100 (cut penalty applied? False),2,106
+DSC02484.heif,0.351713,0.688268,2.248238,-1,1,raw=2.248 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02485.heif,0.495948,0.573868,2.178591,-1,1,raw=2.179 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02486.heif,0.711214,0.637210,2.659846,-1,1,raw=2.660 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02487.heif,0.619652,0.727732,2.748808,-1,1,raw=2.749 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02488.heif,0.603648,0.784532,2.866803,-1,1,raw=2.867 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02489.heif,0.469915,0.771421,2.633425,-1,1,raw=2.633 < min_raw=3.100 (cut penalty applied? False),1,107
+DSC02491.heif,0.235061,0.741607,1.606610,-1,1,raw=1.607 < min_raw=3.100 (cut penalty applied? True),1,108
+DSC02496.heif,0.183046,0.637129,1.267391,-1,1,raw=1.267 < min_raw=3.100 (cut penalty applied? True),2,109
+DSC02497.heif,0.490864,0.665629,2.400368,-1,1,raw=2.400 < min_raw=3.100 (cut penalty applied? False),2,109
+DSC02504.heif,1.000000,0.557392,2.893480,-1,1,raw=2.893 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02505.heif,0.931689,0.654615,3.034070,-1,1,raw=3.034 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02506.heif,0.931656,0.612945,2.929847,-1,1,raw=2.930 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02509.heif,0.770020,0.647764,2.174441,-1,1,raw=2.174 < min_raw=3.100 (cut penalty applied? True),2,110
+DSC02510.heif,0.277104,0.702668,2.172325,-1,1,raw=2.172 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02513.heif,0.456735,0.826224,2.750662,-1,1,raw=2.751 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02515.heif,0.404809,0.900746,2.859078,-1,1,raw=2.859 < min_raw=3.100 (cut penalty applied? False),1,110
+DSC02516.heif,0.274965,0.838575,2.508884,-1,1,raw=2.509 < min_raw=3.100 (cut penalty applied? False),2,110
+DSC02523.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,111
+DSC02527.heif,1.000000,0.417680,1.944199,-1,1,raw=1.944 < min_raw=3.100 (cut penalty applied? True),2,112
+DSC02528.heif,0.187607,0.503176,0.939351,-1,1,raw=0.939 < min_raw=3.100 (cut penalty applied? True),11,113
+DSC02530.heif,0.137919,0.449703,0.731135,-1,1,raw=0.731 < min_raw=3.100 (cut penalty applied? True),11,114
+DSC02551.heif,0.372114,0.884864,2.770332,-1,1,raw=2.770 < min_raw=3.100 (cut penalty applied? False),1,114
+DSC02555.heif,0.780600,0.861650,3.325025,1,0,,1,114
+DSC02563.heif,0.523853,0.688996,2.508270,-1,1,raw=2.508 < min_raw=3.100 (cut penalty applied? False),8,114
+DSC02603.heif,0.245872,0.826793,2.435791,-1,1,raw=2.436 < min_raw=3.100 (cut penalty applied? False),1,115
+DSC02611.heif,0.250817,0.708971,2.148654,-1,1,raw=2.149 < min_raw=3.100 (cut penalty applied? False),5,116
+DSC02619.heif,0.488154,0.766916,2.649521,-1,1,raw=2.650 < min_raw=3.100 (cut penalty applied? False),6,116
+DSC02622.heif,0.229602,0.925901,2.659154,-1,1,raw=2.659 < min_raw=3.100 (cut penalty applied? False),4,116
+DSC02623.heif,0.221059,0.846316,2.447378,-1,1,raw=2.447 < min_raw=3.100 (cut penalty applied? False),2,117
+DSC02626.heif,0.151583,0.853076,2.360064,-1,1,raw=2.360 < min_raw=3.100 (cut penalty applied? False),1,117
+DSC02629.heif,0.135280,0.882670,2.409595,-1,1,raw=2.410 < min_raw=3.100 (cut penalty applied? False),1,117
+DSC02631.heif,0.060453,0.898774,2.337615,-1,1,raw=2.338 < min_raw=3.100 (cut penalty applied? False),3,117
+DSC02633.heif,0.070797,0.768021,2.026248,-1,1,raw=2.026 < min_raw=3.100 (cut penalty applied? False),2,117
+DSC02635.heif,0.167859,0.894889,1.889010,-1,1,raw=1.889 < min_raw=3.100 (cut penalty applied? True),2,117
+DSC02643.heif,0.516295,0.938868,3.121612,1,0,,3,117
+DSC02645.heif,0.380260,0.742822,2.427445,-1,1,raw=2.427 < min_raw=3.100 (cut penalty applied? False),3,117
+DSC02648.heif,0.371876,0.909266,2.830979,-1,1,raw=2.831 < min_raw=3.100 (cut penalty applied? False),3,117
+DSC02651.heif,0.862576,0.583021,2.751417,-1,1,raw=2.751 < min_raw=3.100 (cut penalty applied? False),3,117
+DSC02653.heif,0.656099,0.615524,2.522958,-1,1,raw=2.523 < min_raw=3.100 (cut penalty applied? False),5,117
+DSC02658.heif,0.775564,0.705014,2.325881,-1,1,raw=2.326 < min_raw=3.100 (cut penalty applied? True),5,117
+DSC02660.heif,0.989867,0.699852,3.234431,1,0,,3,117
+DSC02665.heif,0.749058,0.706641,2.890191,-1,1,raw=2.890 < min_raw=3.100 (cut penalty applied? False),4,117
+DSC02668.heif,0.779124,0.648629,2.790259,-1,1,raw=2.790 < min_raw=3.100 (cut penalty applied? False),4,117
+DSC02669.heif,0.620025,0.642314,2.535822,-1,1,raw=2.536 < min_raw=3.100 (cut penalty applied? False),3,118
+DSC02670.heif,0.463110,0.759357,2.593056,-1,1,raw=2.593 < min_raw=3.100 (cut penalty applied? False),4,118
+DSC02671.heif,0.621363,0.660687,1.983762,-1,1,raw=1.984 < min_raw=3.100 (cut penalty applied? True),3,119
+DSC02672.heif,0.626767,0.733353,2.173533,-1,1,raw=2.174 < min_raw=3.100 (cut penalty applied? True),3,119
+DSC02674.heif,0.270912,0.869784,2.580827,-1,1,raw=2.581 < min_raw=3.100 (cut penalty applied? False),5,119
+DSC02676.heif,0.334198,0.814975,2.538736,-1,1,raw=2.539 < min_raw=3.100 (cut penalty applied? False),5,120
+DSC02679.heif,0.351204,0.809289,2.550027,-1,1,raw=2.550 < min_raw=3.100 (cut penalty applied? False),6,121
+DSC02683.heif,0.278281,0.806869,2.434594,-1,1,raw=2.435 < min_raw=3.100 (cut penalty applied? False),3,122
+DSC02688.heif,0.314450,0.896791,2.713653,-1,1,raw=2.714 < min_raw=3.100 (cut penalty applied? False),2,122
+DSC02692.heif,0.437647,0.653125,2.289283,-1,1,raw=2.289 < min_raw=3.100 (cut penalty applied? False),1,122
+DSC02693.heif,0.262200,0.480349,0.994173,-1,1,raw=0.994 < min_raw=3.100 (cut penalty applied? True),2,123
+DSC02694.heif,0.198928,0.834076,2.383583,-1,1,raw=2.384 < min_raw=3.100 (cut penalty applied? False),1,124
+DSC02695.heif,0.075426,0.842990,2.220615,-1,1,raw=2.221 < min_raw=3.100 (cut penalty applied? False),1,125
+DSC02697.heif,0.110925,0.829162,2.239292,-1,1,raw=2.239 < min_raw=3.100 (cut penalty applied? False),1,126
+DSC02698.heif,0.235347,0.890467,2.579188,-1,1,raw=2.579 < min_raw=3.100 (cut penalty applied? False),1,126
+DSC02699.heif,0.239956,0.848610,2.481459,-1,1,raw=2.481 < min_raw=3.100 (cut penalty applied? False),1,127
+DSC02700.heif,0.308072,0.889333,2.685440,-1,1,raw=2.685 < min_raw=3.100 (cut penalty applied? False),1,127
+DSC02701.heif,0.165042,0.859114,2.395347,-1,1,raw=2.395 < min_raw=3.100 (cut penalty applied? False),2,128
+DSC02702.heif,0.095360,0.783786,2.102505,-1,1,raw=2.103 < min_raw=3.100 (cut penalty applied? False),3,128
+DSC02704.heif,0.044115,0.819379,2.114620,-1,1,sharpness=0.044 < threshold=0.050,2,129
+DSC02706.heif,0.598257,0.703183,2.655343,-1,1,raw=2.655 < min_raw=3.100 (cut penalty applied? False),2,130
+DSC02709.heif,0.579092,0.657678,2.512833,-1,1,raw=2.513 < min_raw=3.100 (cut penalty applied? False),3,131
+DSC02710.heif,0.568197,0.626642,2.418901,-1,1,raw=2.419 < min_raw=3.100 (cut penalty applied? False),5,131
+DSC02731.heif,0.312432,0.851011,2.596176,-1,1,raw=2.596 < min_raw=3.100 (cut penalty applied? False),1,132
+DSC02732.heif,0.235931,0.837069,2.446568,-1,1,raw=2.447 < min_raw=3.100 (cut penalty applied? False),1,133
+DSC02733.heif,0.982968,0.640581,3.075904,-1,1,raw=3.076 < min_raw=3.100 (cut penalty applied? False),5,134
+DSC02734.heif,0.622004,0.727423,2.151563,-1,1,raw=2.152 < min_raw=3.100 (cut penalty applied? True),3,135
+DSC02739.heif,1.000000,0.833958,3.584894,2,0,,4,136
+DSC02771.heif,1.000000,0.866207,3.665518,2,0,,3,136
+DSC02776.heif,0.480513,0.714543,2.507127,-1,1,raw=2.507 < min_raw=3.100 (cut penalty applied? False),4,136
+DSC02777.heif,0.553872,0.720854,2.032944,-1,1,raw=2.033 < min_raw=3.100 (cut penalty applied? True),2,136
+DSC02778.heif,0.485483,0.744785,2.590186,-1,1,raw=2.590 < min_raw=3.100 (cut penalty applied? False),5,136
+DSC02779.heif,0.645017,0.707750,2.736901,-1,1,raw=2.737 < min_raw=3.100 (cut penalty applied? False),3,136
+DSC02780.heif,0.551055,0.588105,2.296844,-1,1,raw=2.297 < min_raw=3.100 (cut penalty applied? False),2,136
+DSC02781.heif,0.492826,0.744408,2.000258,-1,1,raw=2.000 < min_raw=3.100 (cut penalty applied? True),3,136
+DSC02782.heif,0.580939,0.571509,2.300182,-1,1,raw=2.300 < min_raw=3.100 (cut penalty applied? False),2,136
+DSC02783.heif,0.374608,0.609935,2.086750,-1,1,raw=2.087 < min_raw=3.100 (cut penalty applied? False),1,137
+DSC02784.heif,0.473321,0.714522,2.496286,-1,1,raw=2.496 < min_raw=3.100 (cut penalty applied? False),2,137
+DSC02785.heif,1.000000,0.582483,2.956207,-1,1,raw=2.956 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02786.heif,0.835855,0.617082,2.796487,-1,1,raw=2.796 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02787.heif,0.680879,0.626255,2.586957,-1,1,raw=2.587 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02788.heif,0.051072,0.533003,0.809115,-1,1,raw=0.809 < min_raw=3.100 (cut penalty applied? True),3,138
+DSC02789.heif,0.675071,0.625227,2.575673,-1,1,raw=2.576 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02790.heif,0.644991,0.447592,2.086466,-1,1,raw=2.086 < min_raw=3.100 (cut penalty applied? False),2,138
+DSC02791.heif,0.753759,0.497578,2.374583,-1,1,raw=2.375 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02792.heif,0.707109,0.540831,2.412741,-1,1,raw=2.413 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02793.heif,0.435515,0.608395,1.574260,-1,1,raw=1.574 < min_raw=3.100 (cut penalty applied? True),1,138
+DSC02794.heif,0.565171,0.720046,2.647871,-1,1,raw=2.648 < min_raw=3.100 (cut penalty applied? False),3,138
+DSC02795.heif,0.594827,0.749067,2.764909,-1,1,raw=2.765 < min_raw=3.100 (cut penalty applied? False),2,138
+DSC02796.heif,0.710557,0.763949,2.975708,-1,1,raw=2.976 < min_raw=3.100 (cut penalty applied? False),1,138
+DSC02797.heif,0.586961,0.768870,2.202617,-1,1,raw=2.203 < min_raw=3.100 (cut penalty applied? True),2,138
+DSC02798.heif,0.474032,0.533475,2.044734,-1,1,raw=2.045 < min_raw=3.100 (cut penalty applied? False),3,138
+DSC02799.heif,0.662686,0.639908,2.593798,-1,1,raw=2.594 < min_raw=3.100 (cut penalty applied? False),2,139
+DSC02800.heif,0.864524,0.495437,2.535378,-1,1,raw=2.535 < min_raw=3.100 (cut penalty applied? False),3,139
+DSC02801.heif,0.983141,0.655930,3.114537,1,0,,2,139
+DSC02802.heif,1.000000,0.717541,3.293852,1,0,,3,139
+DSC02803.heif,0.669567,0.669956,2.679239,-1,1,raw=2.679 < min_raw=3.100 (cut penalty applied? False),4,139
+DSC02804.heif,0.632672,0.628464,2.520168,-1,1,raw=2.520 < min_raw=3.100 (cut penalty applied? False),3,140
+DSC02805.heif,0.746773,0.589482,2.593865,-1,1,raw=2.594 < min_raw=3.100 (cut penalty applied? False),2,140
+DSC02806.heif,1.000000,0.657363,3.143408,1,0,,4,140
+DSC02807.heif,0.710950,0.727782,2.885880,-1,1,raw=2.886 < min_raw=3.100 (cut penalty applied? False),2,140
+DSC02808.heif,0.529858,0.451789,1.924259,-1,1,raw=1.924 < min_raw=3.100 (cut penalty applied? False),2,140
+DSC02809.heif,0.952873,0.535755,2.168697,-1,1,raw=2.169 < min_raw=3.100 (cut penalty applied? True),8,140
+DSC02810.heif,0.220436,0.757884,1.625365,-1,1,raw=1.625 < min_raw=3.100 (cut penalty applied? True),1,140
+DSC02811.heif,0.117605,0.456083,0.716614,-1,1,raw=0.717 < min_raw=3.100 (cut penalty applied? True),8,140
+DSC02812.heif,1.000000,0.555522,2.288805,-1,1,raw=2.289 < min_raw=3.100 (cut penalty applied? True),3,141
+DSC02813.heif,1.000000,0.617141,3.042851,-1,1,raw=3.043 < min_raw=3.100 (cut penalty applied? False),5,141
+DSC02814.heif,0.889960,0.665472,2.998620,-1,1,raw=2.999 < min_raw=3.100 (cut penalty applied? False),3,142
+DSC02815.heif,0.925462,0.660107,3.038461,-1,1,raw=3.038 < min_raw=3.100 (cut penalty applied? False),3,142
+DSC02816.heif,0.854034,0.712538,3.062396,-1,1,raw=3.062 < min_raw=3.100 (cut penalty applied? False),6,142
+DSC02817.heif,0.947418,0.736240,3.261727,1,0,,6,142
+DSC02818.heif,0.725838,0.698507,2.835025,-1,1,raw=2.835 < min_raw=3.100 (cut penalty applied? False),4,143
+DSC02819.heif,0.888673,0.687451,3.051637,-1,1,raw=3.052 < min_raw=3.100 (cut penalty applied? False),5,143
+DSC02820.heif,0.787054,0.669549,2.854453,-1,1,raw=2.854 < min_raw=3.100 (cut penalty applied? False),7,144
+DSC02821.heif,0.485915,0.798804,2.725884,-1,1,raw=2.726 < min_raw=3.100 (cut penalty applied? False),5,144
+DSC02823.heif,0.000000,0.734272,1.235679,-1,1,sharpness=0.000 < threshold=0.050,3,145
+DSC02824.heif,0.651603,0.753882,2.862109,-1,1,raw=2.862 < min_raw=3.100 (cut penalty applied? False),1,146
+DSC02825.heif,0.434357,0.814417,2.687579,-1,1,raw=2.688 < min_raw=3.100 (cut penalty applied? False),5,147
+DSC02826.heif,0.487880,0.710259,2.507467,-1,1,raw=2.507 < min_raw=3.100 (cut penalty applied? False),3,148
+DSC02827.heif,0.620410,0.826425,2.996677,-1,1,raw=2.997 < min_raw=3.100 (cut penalty applied? False),3,149
+DSC02828.heif,0.901128,0.592618,2.833236,-1,1,raw=2.833 < min_raw=3.100 (cut penalty applied? False),1,150
+DSC02829.heif,0.128417,0.737323,1.435933,-1,1,raw=1.436 < min_raw=3.100 (cut penalty applied? True),1,151
+DSC02830.heif,0.926523,0.627992,2.959765,-1,1,raw=2.960 < min_raw=3.100 (cut penalty applied? False),2,152
+DSC02831.heif,0.453496,0.815226,2.718308,-1,1,raw=2.718 < min_raw=3.100 (cut penalty applied? False),1,153
+DSC02832.heif,0.232173,0.850546,2.474624,-1,1,raw=2.475 < min_raw=3.100 (cut penalty applied? False),1,154
+DSC02833.heif,0.214523,0.864527,2.483102,-1,1,raw=2.483 < min_raw=3.100 (cut penalty applied? False),2,155
+DSC02834.heif,0.164166,0.834276,2.331937,-1,1,raw=2.332 < min_raw=3.100 (cut penalty applied? False),1,156
+DSC02835.heif,0.363449,0.793847,2.529790,-1,1,raw=2.530 < min_raw=3.100 (cut penalty applied? False),2,157
+DSC02836.heif,0.435405,0.845627,2.767174,-1,1,raw=2.767 < min_raw=3.100 (cut penalty applied? False),2,158
+DSC02837.heif,0.433970,0.871315,2.829242,-1,1,raw=2.829 < min_raw=3.100 (cut penalty applied? False),5,159
+DSC02838.heif,0.461985,0.804926,2.705293,-1,1,raw=2.705 < min_raw=3.100 (cut penalty applied? False),3,160
+DSC02839.heif,0.107839,0.818967,2.209176,-1,1,raw=2.209 < min_raw=3.100 (cut penalty applied? False),2,161
+DSC02840.heif,0.192682,0.807771,2.308451,-1,1,raw=2.308 < min_raw=3.100 (cut penalty applied? False),1,162
+DSC02841.heif,0.852095,0.656454,2.919278,-1,1,raw=2.919 < min_raw=3.100 (cut penalty applied? False),1,163
+DSC02842.heif,0.803575,0.582977,2.662805,-1,1,raw=2.663 < min_raw=3.100 (cut penalty applied? False),1,164
+DSC02843.heif,0.773902,0.702481,2.917056,-1,1,raw=2.917 < min_raw=3.100 (cut penalty applied? False),3,165
+DSC02844.heif,0.688458,0.704192,2.793169,-1,1,raw=2.793 < min_raw=3.100 (cut penalty applied? False),3,165
+DSC02845.heif,0.693024,0.801852,3.044168,-1,1,raw=3.044 < min_raw=3.100 (cut penalty applied? False),3,166
+DSC02846.heif,0.338608,0.845294,2.621147,-1,1,raw=2.621 < min_raw=3.100 (cut penalty applied? False),2,167
+DSC02847.heif,0.540964,0.830213,2.886978,-1,1,raw=2.887 < min_raw=3.100 (cut penalty applied? False),3,168
+DSC02848.heif,0.639108,0.786792,2.925642,-1,1,raw=2.926 < min_raw=3.100 (cut penalty applied? False),2,169
+DSC02849.heif,0.644422,0.848749,3.088505,-1,1,raw=3.089 < min_raw=3.100 (cut penalty applied? False),3,169
+DSC02850.heif,0.587248,0.863885,3.040585,-1,1,raw=3.041 < min_raw=3.100 (cut penalty applied? False),4,170
+DSC02851.heif,0.125940,0.841065,2.291573,-1,1,raw=2.292 < min_raw=3.100 (cut penalty applied? False),3,170
+DSC02852.heif,0.577499,0.801618,2.870295,-1,1,raw=2.870 < min_raw=3.100 (cut penalty applied? False),1,171
+DSC02853.heif,0.416299,0.814326,2.660265,-1,1,raw=2.660 < min_raw=3.100 (cut penalty applied? False),1,172
+DSC02854.heif,0.515752,0.836797,2.865621,-1,1,raw=2.866 < min_raw=3.100 (cut penalty applied? False),1,173
+DSC02855.heif,0.124551,0.840097,2.287068,-1,1,raw=2.287 < min_raw=3.100 (cut penalty applied? False),1,174
+DSC02858.heif,0.220901,0.815367,2.369768,-1,1,raw=2.370 < min_raw=3.100 (cut penalty applied? False),1,175
+DSC02859.heif,0.317995,0.814320,2.512794,-1,1,raw=2.513 < min_raw=3.100 (cut penalty applied? False),1,176
+DSC02860.heif,0.198339,0.827274,2.365694,-1,1,raw=2.366 < min_raw=3.100 (cut penalty applied? False),2,177
+DSC02861.heif,0.250758,0.859227,2.524204,-1,1,raw=2.524 < min_raw=3.100 (cut penalty applied? False),3,178
+DSC02862.heif,0.457394,0.837735,2.780429,-1,1,raw=2.780 < min_raw=3.100 (cut penalty applied? False),2,179
+DSC02872.heif,0.223603,0.831944,2.415264,-1,1,raw=2.415 < min_raw=3.100 (cut penalty applied? False),2,180
+DSC02873.heif,0.227152,0.755712,2.230008,-1,1,raw=2.230 < min_raw=3.100 (cut penalty applied? False),2,180
+DSC02874.heif,0.287060,0.782157,2.385981,-1,1,raw=2.386 < min_raw=3.100 (cut penalty applied? False),1,180
+DSC02875.heif,0.209992,0.855344,2.453350,-1,1,raw=2.453 < min_raw=3.100 (cut penalty applied? False),1,180
+DSC02876.heif,0.179105,0.810346,2.294522,-1,1,raw=2.295 < min_raw=3.100 (cut penalty applied? False),1,180
+DSC02883.heif,0.504409,0.844394,2.867599,-1,1,raw=2.868 < min_raw=3.100 (cut penalty applied? False),1,181
+DSC02890.heif,0.314272,0.820727,2.523227,-1,1,raw=2.523 < min_raw=3.100 (cut penalty applied? False),2,182
+DSC02892.heif,0.100603,0.857034,2.293490,-1,1,raw=2.293 < min_raw=3.100 (cut penalty applied? False),3,183
+DSC02898.heif,0.529621,0.826987,2.861900,-1,1,raw=2.862 < min_raw=3.100 (cut penalty applied? False),1,184
+DSC02903.heif,0.144151,0.818347,2.262094,-1,1,raw=2.262 < min_raw=3.100 (cut penalty applied? False),3,185
+DSC02905.heif,0.147167,0.848458,2.341896,-1,1,raw=2.342 < min_raw=3.100 (cut penalty applied? False),1,186
+DSC02907.heif,0.915280,0.829798,3.447413,2,0,,2,187
+DSC02910.heif,0.514224,0.705125,2.534147,-1,1,raw=2.534 < min_raw=3.100 (cut penalty applied? False),4,187
+DSC02914.heif,0.482868,0.905440,2.987902,-1,1,raw=2.988 < min_raw=3.100 (cut penalty applied? False),2,187
+DSC02915.heif,0.459551,0.922855,2.996465,-1,1,raw=2.996 < min_raw=3.100 (cut penalty applied? False),3,187
+DSC02916.heif,0.526169,0.924676,3.100943,1,0,,2,187
+DSC02918.heif,0.492723,0.835678,2.828279,-1,1,raw=2.828 < min_raw=3.100 (cut penalty applied? False),4,188
+DSC02920.heif,0.299192,0.845766,2.563203,-1,1,raw=2.563 < min_raw=3.100 (cut penalty applied? False),4,188
+DSC02922.heif,0.221430,0.714538,2.118490,-1,1,raw=2.118 < min_raw=3.100 (cut penalty applied? False),1,188
+DSC02923.heif,0.560539,0.748476,2.711999,-1,1,raw=2.712 < min_raw=3.100 (cut penalty applied? False),2,189
+DSC02924.heif,0.462993,0.715618,2.483535,-1,1,raw=2.484 < min_raw=3.100 (cut penalty applied? False),1,189
+DSC02932.heif,0.346478,0.819444,2.568325,-1,1,raw=2.568 < min_raw=3.100 (cut penalty applied? False),2,189
+DSC02936.heif,0.965611,0.763705,3.357679,1,0,,6,190
+DSC02937.heif,0.823752,0.784219,3.196174,1,0,,4,190
+DSC02938.heif,0.704767,0.791004,3.034660,-1,1,raw=3.035 < min_raw=3.100 (cut penalty applied? False),4,190
+DSC02939.heif,0.574687,0.888045,3.082142,-1,1,raw=3.082 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02940.heif,0.583166,0.900710,3.126524,1,0,,2,190
+DSC02941.heif,0.413103,0.733355,2.453043,-1,1,raw=2.453 < min_raw=3.100 (cut penalty applied? False),3,190
+DSC02943.heif,0.349310,0.602769,2.030887,-1,1,raw=2.031 < min_raw=3.100 (cut penalty applied? False),1,190
+DSC02944.heif,0.452878,0.785913,2.644100,-1,1,raw=2.644 < min_raw=3.100 (cut penalty applied? False),1,190
+DSC02945.heif,0.366933,0.907272,2.818579,-1,1,raw=2.819 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02946.heif,0.540451,0.949480,3.184376,1,0,,2,190
+DSC02947.heif,0.517467,0.710478,2.552397,-1,1,raw=2.552 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02948.heif,0.425965,0.778055,1.984085,-1,1,raw=1.984 < min_raw=3.100 (cut penalty applied? True),2,190
+DSC02949.heif,0.411936,0.884175,2.828341,-1,1,raw=2.828 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02950.heif,0.587872,0.904608,3.143328,1,0,,3,190
+DSC02951.heif,0.487443,0.765748,2.645535,-1,1,raw=2.646 < min_raw=3.100 (cut penalty applied? False),3,190
+DSC02952.heif,0.232968,0.875691,2.538680,-1,1,raw=2.539 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02953.heif,0.224381,0.856053,2.476704,-1,1,raw=2.477 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02954.heif,0.230345,0.782073,2.300700,-1,1,raw=2.301 < min_raw=3.100 (cut penalty applied? False),1,190
+DSC02955.heif,0.225298,0.787574,2.306882,-1,1,raw=2.307 < min_raw=3.100 (cut penalty applied? False),2,190
+DSC02956.heif,0.006637,0.569499,0.833701,-1,1,sharpness=0.007 < threshold=0.050,4,191
+DSC02958.heif,0.241298,0.893591,2.595925,-1,1,raw=2.596 < min_raw=3.100 (cut penalty applied? False),1,191
+DSC02959.heif,0.214486,0.888401,2.542731,-1,1,raw=2.543 < min_raw=3.100 (cut penalty applied? False),2,191
+DSC02963.heif,0.026598,0.000000,0.039897,-1,1,no_detection,0,192
+DSC02976.heif,0.258091,0.830197,2.462629,-1,1,raw=2.463 < min_raw=3.100 (cut penalty applied? False),1,192
+DSC02980.heif,0.403685,0.763726,1.914844,-1,1,raw=1.915 < min_raw=3.100 (cut penalty applied? True),1,192
+DSC02987.heif,0.395721,0.840361,2.694484,-1,1,raw=2.694 < min_raw=3.100 (cut penalty applied? False),1,192
+DSC02999.heif,0.802881,0.753829,3.088895,-1,1,raw=3.089 < min_raw=3.100 (cut penalty applied? False),3,192
+DSC03001.heif,0.626031,0.702758,2.695942,-1,1,raw=2.696 < min_raw=3.100 (cut penalty applied? False),8,192
+DSC03011.heif,0.710120,0.678771,2.762108,-1,1,raw=2.762 < min_raw=3.100 (cut penalty applied? False),2,192
+DSC03015.heif,0.948132,0.879177,3.620141,2,0,,2,192
+DSC03019.heif,0.929984,0.905529,3.658800,2,0,,4,192
+DSC03023.heif,0.463276,0.822801,2.751915,-1,1,raw=2.752 < min_raw=3.100 (cut penalty applied? False),3,192
+DSC03027.heif,0.643580,0.809696,2.989611,-1,1,raw=2.990 < min_raw=3.100 (cut penalty applied? False),3,192
+DSC03043.heif,0.546959,0.849419,2.943985,-1,1,raw=2.944 < min_raw=3.100 (cut penalty applied? False),4,193
+DSC03045.heif,0.492284,0.923139,3.046273,-1,1,raw=3.046 < min_raw=3.100 (cut penalty applied? False),2,193
+DSC03049.heif,0.547496,0.582457,2.277385,-1,1,raw=2.277 < min_raw=3.100 (cut penalty applied? False),2,193
+DSC03054.heif,0.373017,0.881384,2.762985,-1,1,raw=2.763 < min_raw=3.100 (cut penalty applied? False),5,193
+DSC03058.heif,0.356663,0.816505,2.576257,-1,1,raw=2.576 < min_raw=3.100 (cut penalty applied? False),2,193
+DSC03060.heif,0.495476,0.870637,2.919805,-1,1,raw=2.920 < min_raw=3.100 (cut penalty applied? False),3,193
+DSC03064.heif,0.506862,0.817508,2.804063,-1,1,raw=2.804 < min_raw=3.100 (cut penalty applied? False),1,193
+DSC03069.heif,0.294595,0.859583,1.990851,-1,1,raw=1.991 < min_raw=3.100 (cut penalty applied? True),3,193
+DSC03089.heif,1.000000,0.626218,3.065544,-1,1,raw=3.066 < min_raw=3.100 (cut penalty applied? False),5,194
+DSC03092.heif,0.973235,0.600787,2.961819,-1,1,raw=2.962 < min_raw=3.100 (cut penalty applied? False),5,194
+DSC03097.heif,0.540544,0.682517,2.517109,-1,1,raw=2.517 < min_raw=3.100 (cut penalty applied? False),2,194
+DSC03099.heif,0.489012,0.864593,2.895001,-1,1,raw=2.895 < min_raw=3.100 (cut penalty applied? False),2,194
+DSC03100.heif,0.536710,0.754923,2.692371,-1,1,raw=2.692 < min_raw=3.100 (cut penalty applied? False),2,194
+DSC03111.heif,0.957399,0.774110,3.371374,1,0,,2,194
+DSC03113.heif,0.868348,0.966395,3.718508,2,0,,1,194
+DSC03122.heif,0.720266,0.739587,2.929367,-1,1,raw=2.929 < min_raw=3.100 (cut penalty applied? False),4,195
+DSC03124.heif,0.629234,0.785405,2.907364,-1,1,raw=2.907 < min_raw=3.100 (cut penalty applied? False),3,195
+DSC03128.heif,0.565355,0.681226,2.551099,-1,1,raw=2.551 < min_raw=3.100 (cut penalty applied? False),3,196
+DSC03132.heif,0.911779,0.823220,3.425718,2,0,,2,197
+DSC03134.heif,0.253817,0.809716,2.405014,-1,1,raw=2.405 < min_raw=3.100 (cut penalty applied? False),2,198
+DSC03136.heif,0.609886,0.579996,1.764818,-1,1,raw=1.765 < min_raw=3.100 (cut penalty applied? True),3,199
+DSC03137.heif,0.560645,0.513417,2.124509,-1,1,raw=2.125 < min_raw=3.100 (cut penalty applied? False),2,200
+DSC03138.heif,0.781488,0.603519,2.681030,-1,1,raw=2.681 < min_raw=3.100 (cut penalty applied? False),2,201
+DSC03139.heif,0.773396,0.582058,2.615238,-1,1,raw=2.615 < min_raw=3.100 (cut penalty applied? False),2,202
+DSC03140.heif,0.550586,0.675111,2.513656,-1,1,raw=2.514 < min_raw=3.100 (cut penalty applied? False),3,203
+DSC03141.heif,0.654029,0.529253,1.704176,-1,1,raw=1.704 < min_raw=3.100 (cut penalty applied? True),4,204
+DSC03151.heif,0.261443,0.801642,2.396269,-1,1,raw=2.396 < min_raw=3.100 (cut penalty applied? False),2,205
+DSC03161.heif,0.496024,0.820480,2.795235,-1,1,raw=2.795 < min_raw=3.100 (cut penalty applied? False),1,206
+DSC03164.heif,0.297881,0.927570,2.765747,-1,1,raw=2.766 < min_raw=3.100 (cut penalty applied? False),2,206
+DSC03165.heif,0.189125,0.769006,2.206201,-1,1,raw=2.206 < min_raw=3.100 (cut penalty applied? False),2,206
+DSC03166.heif,0.364524,0.875173,2.734720,-1,1,raw=2.735 < min_raw=3.100 (cut penalty applied? False),3,206
+DSC03168.heif,0.379951,0.933594,2.903912,-1,1,raw=2.904 < min_raw=3.100 (cut penalty applied? False),1,206
+DSC03169.heif,0.300540,0.919226,2.748875,-1,1,raw=2.749 < min_raw=3.100 (cut penalty applied? False),1,206
+DSC03170.heif,0.153361,0.826896,2.297281,-1,1,raw=2.297 < min_raw=3.100 (cut penalty applied? False),1,207
+DSC03171.heif,0.720692,0.831397,3.159530,1,0,,1,208
+DSC03172.heif,0.602061,0.834170,2.988516,-1,1,raw=2.989 < min_raw=3.100 (cut penalty applied? False),1,208
+DSC03173.heif,0.284310,0.823657,2.485607,-1,1,raw=2.486 < min_raw=3.100 (cut penalty applied? False),1,209
+DSC03174.heif,0.334466,0.951744,2.881058,-1,1,raw=2.881 < min_raw=3.100 (cut penalty applied? False),1,209
+DSC03175.heif,0.235460,0.832144,2.433550,-1,1,raw=2.434 < min_raw=3.100 (cut penalty applied? False),1,209
+DSC03180.heif,0.900564,0.641344,2.954205,-1,1,raw=2.954 < min_raw=3.100 (cut penalty applied? False),1,209
+DSC03182.heif,0.230446,0.818803,2.392677,-1,1,raw=2.393 < min_raw=3.100 (cut penalty applied? False),2,210
+DSC03183.heif,0.321200,0.712456,2.262939,-1,1,raw=2.263 < min_raw=3.100 (cut penalty applied? False),1,210
+DSC03184.heif,0.372412,0.827354,2.627003,-1,1,raw=2.627 < min_raw=3.100 (cut penalty applied? False),2,210
+DSC03185.heif,0.356258,0.823932,2.594217,-1,1,raw=2.594 < min_raw=3.100 (cut penalty applied? False),1,210
+DSC03191.heif,0.060445,0.795455,2.079304,-1,1,raw=2.079 < min_raw=3.100 (cut penalty applied? False),4,210
+DSC03193.heif,0.165586,0.744902,2.110634,-1,1,raw=2.111 < min_raw=3.100 (cut penalty applied? False),1,211
+DSC03194.heif,0.479732,0.693141,2.452452,-1,1,raw=2.452 < min_raw=3.100 (cut penalty applied? False),1,212
+DSC03199.heif,0.452835,0.759763,2.578660,-1,1,raw=2.579 < min_raw=3.100 (cut penalty applied? False),2,212
+DSC03200.heif,0.460186,0.944973,3.052711,-1,1,raw=3.053 < min_raw=3.100 (cut penalty applied? False),3,212
+DSC03202.heif,0.523049,0.980260,3.235223,1,0,,1,212
+DSC03203.heif,0.532578,0.767779,2.718314,-1,1,raw=2.718 < min_raw=3.100 (cut penalty applied? False),1,212
+DSC03204.heif,0.504225,0.862505,2.912600,-1,1,raw=2.913 < min_raw=3.100 (cut penalty applied? False),2,212
+DSC03209.heif,0.273928,0.853063,1.943549,-1,1,raw=1.944 < min_raw=3.100 (cut penalty applied? True),2,212
+DSC03212.heif,0.645527,0.858917,3.115584,1,0,,1,212
+DSC03230.heif,0.574769,0.800934,2.864489,-1,1,raw=2.864 < min_raw=3.100 (cut penalty applied? False),2,213
+DSC03231.heif,0.276108,0.644919,1.426459,-1,1,raw=1.426 < min_raw=3.100 (cut penalty applied? True),1,214
+DSC03236.heif,0.068954,0.839225,1.601493,-1,1,raw=1.601 < min_raw=3.100 (cut penalty applied? True),7,214
+DSC03237.heif,0.069945,0.761419,1.408464,-1,1,raw=1.408 < min_raw=3.100 (cut penalty applied? True),2,214
+DSC03238.heif,0.928523,0.830511,3.469062,2,0,,1,215
+DSC03239.heif,0.042839,0.871219,1.642305,-1,1,sharpness=0.043 < threshold=0.050,1,215
+DSC03242.heif,1.000000,0.810449,3.526124,2,0,,1,216
+DSC03243.heif,1.000000,0.693795,3.234487,1,0,,2,216
+DSC03244.heif,1.000000,0.665132,3.162829,1,0,,2,216
+DSC03250.heif,1.000000,0.516127,2.190316,-1,1,raw=2.190 < min_raw=3.100 (cut penalty applied? True),5,216
+DSC03255.heif,0.107841,0.539884,0.911470,-1,1,raw=0.911 < min_raw=3.100 (cut penalty applied? True),5,216
+DSC03257.heif,0.128708,0.448267,0.713729,-1,1,raw=0.714 < min_raw=3.100 (cut penalty applied? True),4,216
+DSC03265.heif,0.039969,0.442983,0.567411,-1,1,sharpness=0.040 < threshold=0.050,1,217
+DSC03266.heif,0.348005,0.583410,1.380531,-1,1,raw=1.381 < min_raw=3.100 (cut penalty applied? True),12,218
+DSC03268.heif,0.537900,0.576843,1.648957,-1,1,raw=1.649 < min_raw=3.100 (cut penalty applied? True),1,219
+DSC03269.heif,0.015783,0.396663,0.415332,-1,1,sharpness=0.016 < threshold=0.050,2,220
+DSC03270.heif,0.043147,0.455323,0.603028,-1,1,sharpness=0.043 < threshold=0.050,1,221
+DSC03271.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,222
+DSC03273.heif,0.120562,0.502664,0.837503,-1,1,raw=0.838 < min_raw=3.100 (cut penalty applied? True),1,223
+DSC03274.heif,0.036537,0.633409,1.038329,-1,1,sharpness=0.037 < threshold=0.050,1,224
+DSC03275.heif,0.238674,0.649936,1.382852,-1,1,raw=1.383 < min_raw=3.100 (cut penalty applied? True),11,225
+DSC03276.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,226
+DSC03277.heif,0.014371,0.550719,0.798354,-1,1,sharpness=0.014 < threshold=0.050,1,227
+DSC03282.heif,1.000000,0.000000,1.500000,-1,1,no_detection,0,228
+DSC03283.heif,0.000000,0.461377,0.553442,-1,1,sharpness=0.000 < threshold=0.050,1,229
+DSC03284.heif,0.000000,0.462193,0.555483,-1,1,sharpness=0.000 < threshold=0.050,3,230
+DSC03286.heif,0.175337,0.580082,1.113209,-1,1,raw=1.113 < min_raw=3.100 (cut penalty applied? True),2,231
+DSC03287.heif,0.010696,0.750192,1.291522,-1,1,sharpness=0.011 < threshold=0.050,10,232
+DSC03290.heif,0.399068,0.554616,1.385143,-1,1,raw=1.385 < min_raw=3.100 (cut penalty applied? True),1,233
+DSC03291.heif,0.000000,0.494389,0.635974,-1,1,sharpness=0.000 < threshold=0.050,1,234
+DSC03292.heif,0.042573,0.421499,0.517608,-1,1,sharpness=0.043 < threshold=0.050,1,235
+DSC03293.heif,0.000000,0.720856,1.202141,-1,1,sharpness=0.000 < threshold=0.050,2,235
+DSC03294.heif,1.000000,0.489072,2.722680,-1,1,raw=2.723 < min_raw=3.100 (cut penalty applied? False),1,236
+DSC03295.heif,0.105855,0.614390,1.094759,-1,1,raw=1.095 < min_raw=3.100 (cut penalty applied? True),1,236
+DSC03296.heif,0.108322,0.377063,0.505140,-1,1,raw=0.505 < min_raw=3.100 (cut penalty applied? True),2,236
+DSC03297.heif,0.108011,0.391448,0.540636,-1,1,raw=0.541 < min_raw=3.100 (cut penalty applied? True),2,236
+DSC03298.heif,0.108665,0.654539,1.799346,-1,1,raw=1.799 < min_raw=3.100 (cut penalty applied? False),4,236
+DSC03299.heif,0.107725,0.594583,1.048044,-1,1,raw=1.048 < min_raw=3.100 (cut penalty applied? True),3,236
+DSC03300.heif,0.106763,0.354981,0.447598,-1,1,raw=0.448 < min_raw=3.100 (cut penalty applied? True),4,236
+DSC03301.heif,0.276545,0.563135,1.222656,-1,1,raw=1.223 < min_raw=3.100 (cut penalty applied? True),1,237
+DSC03302.heif,0.128822,0.580566,1.044649,-1,1,raw=1.045 < min_raw=3.100 (cut penalty applied? True),2,237
+DSC03303.heif,0.207736,0.852202,2.442108,-1,1,raw=2.442 < min_raw=3.100 (cut penalty applied? False),1,237
+DSC03304.heif,0.277609,0.547467,1.785082,-1,1,raw=1.785 < min_raw=3.100 (cut penalty applied? False),1,237
+DSC03305.heif,0.353182,0.475397,1.718266,-1,1,raw=1.718 < min_raw=3.100 (cut penalty applied? False),1,237
+DSC03306.heif,0.564928,0.525247,2.160510,-1,1,raw=2.161 < min_raw=3.100 (cut penalty applied? False),1,238
+DSC03307.heif,0.468521,0.374008,1.637800,-1,1,raw=1.638 < min_raw=3.100 (cut penalty applied? False),1,238
+DSC03308.heif,0.138103,0.488143,1.427513,-1,1,raw=1.428 < min_raw=3.100 (cut penalty applied? False),1,239
+DSC03309.heif,0.136426,0.596374,1.095575,-1,1,raw=1.096 < min_raw=3.100 (cut penalty applied? True),1,239
+DSC03310.heif,0.131715,0.591226,1.075636,-1,1,raw=1.076 < min_raw=3.100 (cut penalty applied? True),1,239
+DSC03311.heif,0.457096,0.847702,2.204899,-1,1,raw=2.205 < min_raw=3.100 (cut penalty applied? True),1,239
+DSC03312.heif,0.133005,0.594863,1.086664,-1,1,raw=1.087 < min_raw=3.100 (cut penalty applied? True),1,239
+DSC03313.heif,0.129059,0.000000,0.193589,-1,1,no_detection,0,239
+DSC03314.heif,0.129123,0.000000,0.193685,-1,1,no_detection,0,239
+DSC03315.heif,1.000000,0.493592,2.133981,-1,1,raw=2.134 < min_raw=3.100 (cut penalty applied? True),7,240
+DSC03316.heif,1.000000,0.471950,2.079874,-1,1,raw=2.080 < min_raw=3.100 (cut penalty applied? True),6,240
+DSC03317.heif,0.900791,0.580923,2.203494,-1,1,raw=2.203 < min_raw=3.100 (cut penalty applied? True),1,241
+DSC03318.heif,0.941803,0.608368,2.333626,-1,1,raw=2.334 < min_raw=3.100 (cut penalty applied? True),1,241
+DSC03319.heif,0.502503,0.619410,1.702280,-1,1,raw=1.702 < min_raw=3.100 (cut penalty applied? True),4,241
+DSC03320.heif,0.574335,0.688986,1.983967,-1,1,raw=1.984 < min_raw=3.100 (cut penalty applied? True),5,241
+DSC03321.heif,0.740407,0.692297,2.241352,-1,1,raw=2.241 < min_raw=3.100 (cut penalty applied? True),3,241
+DSC03322.heif,0.656086,0.715035,2.171717,-1,1,raw=2.172 < min_raw=3.100 (cut penalty applied? True),8,242
+DSC03323.heif,0.650341,0.778511,2.321790,-1,1,raw=2.322 < min_raw=3.100 (cut penalty applied? True),5,242
+DSC03324.heif,0.517291,0.836709,2.267709,-1,1,raw=2.268 < min_raw=3.100 (cut penalty applied? True),8,242
+DSC03325.heif,0.466891,0.717923,2.495144,-1,1,raw=2.495 < min_raw=3.100 (cut penalty applied? False),6,242
+DSC03326.heif,0.707269,0.531757,2.390295,-1,1,raw=2.390 < min_raw=3.100 (cut penalty applied? False),10,242
+DSC03327.heif,0.812471,0.555350,2.007081,-1,1,raw=2.007 < min_raw=3.100 (cut penalty applied? True),8,242
+DSC03328.heif,0.073804,0.679638,1.209801,-1,1,raw=1.210 < min_raw=3.100 (cut penalty applied? True),1,243
+DSC03329.heif,0.000000,0.484813,0.612033,-1,1,sharpness=0.000 < threshold=0.050,1,243
+DSC03330.heif,0.054885,0.772347,1.413194,-1,1,raw=1.413 < min_raw=3.100 (cut penalty applied? True),1,243
+DSC03331.heif,0.077594,0.758735,1.413229,-1,1,raw=1.413 < min_raw=3.100 (cut penalty applied? True),4,243
+DSC03332.heif,0.029435,0.594187,0.929619,-1,1,sharpness=0.029 < threshold=0.050,5,243
+DSC03333.heif,0.034969,0.606058,1.567599,-1,1,sharpness=0.035 < threshold=0.050,2,243
+DSC03334.heif,0.098927,0.735364,1.386801,-1,1,raw=1.387 < min_raw=3.100 (cut penalty applied? True),2,243
+DSC03335.heif,0.031887,0.770345,1.373693,-1,1,sharpness=0.032 < threshold=0.050,2,243
+DSC03336.heif,0.126551,0.521004,0.892336,-1,1,raw=0.892 < min_raw=3.100 (cut penalty applied? True),5,243
+DSC03337.heif,0.296760,0.554517,1.231432,-1,1,raw=1.231 < min_raw=3.100 (cut penalty applied? True),4,243
+DSC03338.heif,1.000000,0.708481,3.271202,1,0,,12,244
+DSC03339.heif,1.000000,0.714597,3.286494,1,0,,9,244
+DSC03340.heif,0.706432,0.718806,2.256663,-1,1,raw=2.257 < min_raw=3.100 (cut penalty applied? True),12,244
+DSC03341.heif,0.907783,0.661889,3.016397,-1,1,raw=3.016 < min_raw=3.100 (cut penalty applied? False),10,244
+DSC03342.heif,0.750251,0.658691,2.772103,-1,1,raw=2.772 < min_raw=3.100 (cut penalty applied? False),13,244
+DSC03343.heif,0.796888,0.686777,2.912274,-1,1,raw=2.912 < min_raw=3.100 (cut penalty applied? False),6,244
+DSC03344.heif,0.510342,0.648498,2.386757,-1,1,raw=2.387 < min_raw=3.100 (cut penalty applied? False),6,244
+DSC03345.heif,0.532439,0.680798,2.500653,-1,1,raw=2.501 < min_raw=3.100 (cut penalty applied? False),7,244
+DSC03346.heif,1.000000,0.740338,3.350844,1,0,,11,244
+DSC03347.heif,0.605638,0.597321,1.801761,-1,1,raw=1.802 < min_raw=3.100 (cut penalty applied? True),10,244
+DSC03348.heif,1.000000,0.571640,2.929101,-1,1,raw=2.929 < min_raw=3.100 (cut penalty applied? False),8,244
+DSC03349.heif,0.660557,0.743898,2.850581,-1,1,raw=2.851 < min_raw=3.100 (cut penalty applied? False),6,244
+DSC03350.heif,0.740309,0.643913,2.720245,-1,1,raw=2.720 < min_raw=3.100 (cut penalty applied? False),5,244
+DSC03351.heif,0.774960,0.710329,2.938264,-1,1,raw=2.938 < min_raw=3.100 (cut penalty applied? False),5,244
+DSC03352.heif,0.931892,0.746898,3.265083,1,0,,5,244
+DSC03353.heif,1.000000,0.716365,3.290912,1,0,,4,244
+DSC03354.heif,0.596656,0.671171,2.572913,-1,1,raw=2.573 < min_raw=3.100 (cut penalty applied? False),5,244
+DSC03355.heif,0.327209,0.868385,2.061775,-1,1,raw=2.062 < min_raw=3.100 (cut penalty applied? True),1,245
+DSC03356.heif,0.436394,0.760626,2.556156,-1,1,raw=2.556 < min_raw=3.100 (cut penalty applied? False),1,245
+DSC03357.heif,0.359460,0.810175,2.564627,-1,1,raw=2.565 < min_raw=3.100 (cut penalty applied? False),1,245
+DSC03358.heif,0.227852,0.936472,2.682957,-1,1,raw=2.683 < min_raw=3.100 (cut penalty applied? False),1,245
+DSC03359.heif,0.101738,0.862977,2.310050,-1,1,raw=2.310 < min_raw=3.100 (cut penalty applied? False),1,245
+DSC03360.heif,0.108439,0.862675,2.319348,-1,1,raw=2.319 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03361.heif,0.161276,0.950433,2.617997,-1,1,raw=2.618 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03362.heif,0.191891,0.752625,2.169400,-1,1,raw=2.169 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03363.heif,0.094582,0.843046,2.249488,-1,1,raw=2.249 < min_raw=3.100 (cut penalty applied? False),2,246
+DSC03364.heif,0.118280,0.842729,2.284244,-1,1,raw=2.284 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03365.heif,0.097287,0.900698,2.397677,-1,1,raw=2.398 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03366.heif,0.031969,0.917329,2.341275,-1,1,sharpness=0.032 < threshold=0.050,2,246
+DSC03367.heif,0.066159,0.737083,1.941945,-1,1,raw=1.942 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03368.heif,0.086803,0.529619,1.454253,-1,1,raw=1.454 < min_raw=3.100 (cut penalty applied? False),1,246
+DSC03369.heif,0.369185,0.756284,2.444487,-1,1,raw=2.444 < min_raw=3.100 (cut penalty applied? False),1,247
+DSC03370.heif,0.265675,0.728403,2.219519,-1,1,raw=2.220 < min_raw=3.100 (cut penalty applied? False),2,247
+DSC03371.heif,0.341989,0.755253,2.401117,-1,1,raw=2.401 < min_raw=3.100 (cut penalty applied? False),1,247
+DSC03372.heif,0.743519,0.798917,3.112572,1,0,,3,247
+DSC03373.heif,0.619495,0.698415,2.675280,-1,1,raw=2.675 < min_raw=3.100 (cut penalty applied? False),2,247
+DSC03374.heif,0.462034,0.663415,2.351590,-1,1,raw=2.352 < min_raw=3.100 (cut penalty applied? False),1,247
+DSC03375.heif,0.041701,0.501037,0.715144,-1,1,sharpness=0.042 < threshold=0.050,1,247
+DSC03376.heif,0.199997,0.832579,1.781444,-1,1,raw=1.781 < min_raw=3.100 (cut penalty applied? True),1,248
+DSC03377.heif,0.235608,0.837839,2.448010,-1,1,raw=2.448 < min_raw=3.100 (cut penalty applied? False),1,248
+DSC03378.heif,0.228408,0.851247,1.870729,-1,1,raw=1.871 < min_raw=3.100 (cut penalty applied? True),1,248
+DSC03379.heif,0.236122,0.887935,2.574020,-1,1,raw=2.574 < min_raw=3.100 (cut penalty applied? False),1,248
+DSC03380.heif,0.180006,0.793572,2.253939,-1,1,raw=2.254 < min_raw=3.100 (cut penalty applied? False),1,248
+DSC03381.heif,0.206729,0.848347,2.430960,-1,1,raw=2.431 < min_raw=3.100 (cut penalty applied? False),1,249
+DSC03382.heif,0.239461,0.835000,2.446690,-1,1,raw=2.447 < min_raw=3.100 (cut penalty applied? False),1,249
+DSC03383.heif,0.219971,0.862630,1.886531,-1,1,raw=1.887 < min_raw=3.100 (cut penalty applied? True),1,249
+DSC03384.heif,0.177486,0.805323,2.279537,-1,1,raw=2.280 < min_raw=3.100 (cut penalty applied? False),1,249
+DSC03385.heif,0.357840,0.850804,2.063769,-1,1,raw=2.064 < min_raw=3.100 (cut penalty applied? True),1,250
+DSC03386.heif,0.180692,0.915392,1.959518,-1,1,raw=1.960 < min_raw=3.100 (cut penalty applied? True),1,250
+DSC03387.heif,0.012111,0.000000,0.018166,-1,1,no_detection,0,250
+DSC03388.heif,0.000000,0.000000,0.000000,-1,1,no_detection,0,250
+DSC03389.heif,0.272988,0.849812,2.534013,-1,1,raw=2.534 < min_raw=3.100 (cut penalty applied? False),1,251
+DSC03390.heif,0.133550,0.797733,2.194657,-1,1,raw=2.195 < min_raw=3.100 (cut penalty applied? False),1,252
+DSC03391.heif,0.164322,0.857738,2.390828,-1,1,raw=2.391 < min_raw=3.100 (cut penalty applied? False),1,252
+DSC03392.heif,0.254476,0.671596,2.060705,-1,1,raw=2.061 < min_raw=3.100 (cut penalty applied? False),2,253
+DSC03393.heif,0.535480,0.613458,2.336866,-1,1,raw=2.337 < min_raw=3.100 (cut penalty applied? False),4,254
+DSC03394.heif,0.575505,0.652422,2.494313,-1,1,raw=2.494 < min_raw=3.100 (cut penalty applied? False),5,254
+DSC03395.heif,0.579753,0.573068,2.302301,-1,1,raw=2.302 < min_raw=3.100 (cut penalty applied? False),5,254
+DSC03396.heif,0.455261,0.614696,2.219630,-1,1,raw=2.220 < min_raw=3.100 (cut penalty applied? False),7,255
+DSC03397.heif,0.505428,0.628279,2.328841,-1,1,raw=2.329 < min_raw=3.100 (cut penalty applied? False),9,256
+DSC03398.heif,0.411297,0.631537,2.195789,-1,1,raw=2.196 < min_raw=3.100 (cut penalty applied? False),6,256
+DSC03399.heif,0.488222,0.603669,2.241506,-1,1,raw=2.242 < min_raw=3.100 (cut penalty applied? False),9,257
+DSC03400.heif,0.614646,0.706609,2.688492,-1,1,raw=2.688 < min_raw=3.100 (cut penalty applied? False),9,257
+DSC03401.heif,0.526696,0.627041,2.357645,-1,1,raw=2.358 < min_raw=3.100 (cut penalty applied? False),8,258
+DSC03402.heif,0.433178,0.600006,2.149781,-1,1,raw=2.150 < min_raw=3.100 (cut penalty applied? False),9,259
+DSC03403.heif,0.622969,0.651062,2.562109,-1,1,raw=2.562 < min_raw=3.100 (cut penalty applied? False),4,259
+DSC03404.heif,0.547160,0.567414,2.239276,-1,1,raw=2.239 < min_raw=3.100 (cut penalty applied? False),7,260
+DSC03405.heif,0.331464,0.555218,1.885241,-1,1,raw=1.885 < min_raw=3.100 (cut penalty applied? False),9,260
+DSC03406.heif,0.435318,0.596104,2.143239,-1,1,raw=2.143 < min_raw=3.100 (cut penalty applied? False),8,261
+DSC03407.heif,0.883124,0.518422,2.620740,-1,1,raw=2.621 < min_raw=3.100 (cut penalty applied? False),8,261
+DSC03408.heif,0.389993,0.611409,2.113512,-1,1,raw=2.114 < min_raw=3.100 (cut penalty applied? False),7,262
+DSC03409.heif,0.522689,0.616670,2.325709,-1,1,raw=2.326 < min_raw=3.100 (cut penalty applied? False),6,262
+DSC03410.heif,0.756847,0.571950,2.565145,-1,1,raw=2.565 < min_raw=3.100 (cut penalty applied? False),7,263
+DSC03411.heif,0.667767,0.523109,2.309423,-1,1,raw=2.309 < min_raw=3.100 (cut penalty applied? False),6,263
+DSC03412.heif,0.640525,0.616925,2.503100,-1,1,raw=2.503 < min_raw=3.100 (cut penalty applied? False),4,264
+DSC03413.heif,0.516251,0.695433,2.512959,-1,1,raw=2.513 < min_raw=3.100 (cut penalty applied? False),4,264
+DSC03414.heif,0.430870,0.610518,2.172600,-1,1,raw=2.173 < min_raw=3.100 (cut penalty applied? False),4,265
+DSC03415.heif,0.404144,0.640893,2.208450,-1,1,raw=2.208 < min_raw=3.100 (cut penalty applied? False),6,265
+DSC03416.heif,0.257914,0.621870,1.941545,-1,1,raw=1.942 < min_raw=3.100 (cut penalty applied? False),4,266
+DSC03417.heif,0.296023,0.744038,2.304130,-1,1,raw=2.304 < min_raw=3.100 (cut penalty applied? False),6,266
+DSC03418.heif,0.394742,0.507626,1.861178,-1,1,raw=1.861 < min_raw=3.100 (cut penalty applied? False),2,266
+DSC03419.heif,0.214773,0.820002,2.372166,-1,1,raw=2.372 < min_raw=3.100 (cut penalty applied? False),3,267
+DSC03420.heif,0.259124,0.977960,2.833585,-1,1,raw=2.834 < min_raw=3.100 (cut penalty applied? False),6,267
+DSC03421.heif,0.164100,0.839322,2.344454,-1,1,raw=2.344 < min_raw=3.100 (cut penalty applied? False),5,267
+DSC03422.heif,0.167994,0.559999,1.051988,-1,1,raw=1.052 < min_raw=3.100 (cut penalty applied? True),3,267
+DSC03423.heif,0.158956,0.764424,2.149494,-1,1,raw=2.149 < min_raw=3.100 (cut penalty applied? False),4,267
+DSC03424.heif,0.340504,0.877080,2.703454,-1,1,raw=2.703 < min_raw=3.100 (cut penalty applied? False),4,267
+DSC03425.heif,0.188460,0.768055,2.202827,-1,1,raw=2.203 < min_raw=3.100 (cut penalty applied? False),2,267
+DSC03426.heif,0.251669,0.871643,2.556613,-1,1,raw=2.557 < min_raw=3.100 (cut penalty applied? False),2,267
+DSC03427.heif,0.262168,0.774601,2.329754,-1,1,raw=2.330 < min_raw=3.100 (cut penalty applied? False),2,267
+DSC03428.heif,0.256987,0.841009,2.488004,-1,1,raw=2.488 < min_raw=3.100 (cut penalty applied? False),2,268
+DSC03429.heif,0.240208,0.901424,2.613872,-1,1,raw=2.614 < min_raw=3.100 (cut penalty applied? False),1,268
+DSC03430.heif,0.270329,0.757136,2.298334,-1,1,raw=2.298 < min_raw=3.100 (cut penalty applied? False),1,268
+DSC03431.heif,0.133520,0.855049,2.337903,-1,1,raw=2.338 < min_raw=3.100 (cut penalty applied? False),2,269
+DSC03432.heif,0.134615,0.745964,2.066833,-1,1,raw=2.067 < min_raw=3.100 (cut penalty applied? False),2,269
+DSC03433.heif,0.105081,0.779413,2.106153,-1,1,raw=2.106 < min_raw=3.100 (cut penalty applied? False),6,269
+DSC03434.heif,0.175939,0.454090,0.799135,-1,1,raw=0.799 < min_raw=3.100 (cut penalty applied? True),3,270
+DSC03435.heif,0.663950,0.535077,2.333618,-1,1,raw=2.334 < min_raw=3.100 (cut penalty applied? False),1,271
+DSC03436.heif,0.581028,0.413486,1.905257,-1,1,raw=1.905 < min_raw=3.100 (cut penalty applied? False),1,271
+DSC03437.heif,0.586259,0.478511,2.075667,-1,1,raw=2.076 < min_raw=3.100 (cut penalty applied? False),1,271
+DSC03438.heif,0.594186,0.584745,2.353140,-1,1,raw=2.353 < min_raw=3.100 (cut penalty applied? False),4,272
+DSC03439.heif,0.579022,0.559315,2.266820,-1,1,raw=2.267 < min_raw=3.100 (cut penalty applied? False),5,272
+DSC03440.heif,0.548217,0.620162,2.372730,-1,1,raw=2.373 < min_raw=3.100 (cut penalty applied? False),5,272
+DSC03441.heif,0.627471,0.641558,2.545102,-1,1,raw=2.545 < min_raw=3.100 (cut penalty applied? False),8,272
+DSC03442.heif,0.655934,0.518263,2.279558,-1,1,raw=2.280 < min_raw=3.100 (cut penalty applied? False),3,273
+DSC03443.heif,0.632978,0.606447,2.465585,-1,1,raw=2.466 < min_raw=3.100 (cut penalty applied? False),7,273
+DSC03444.heif,0.592359,0.585803,2.353045,-1,1,raw=2.353 < min_raw=3.100 (cut penalty applied? False),8,274
+DSC03445.heif,0.015099,0.812070,2.052823,-1,1,sharpness=0.015 < threshold=0.050,1,275
+DSC03446.heif,0.066730,0.924625,2.411657,-1,1,raw=2.412 < min_raw=3.100 (cut penalty applied? False),2,275
+DSC03447.heif,0.000000,0.850898,2.127245,-1,1,sharpness=0.000 < threshold=0.050,2,275
+DSC03448.heif,0.048530,0.940856,2.424936,-1,1,sharpness=0.049 < threshold=0.050,2,275
+DSC03449.heif,0.027336,0.898458,2.287149,-1,1,sharpness=0.027 < threshold=0.050,2,275
+DSC03450.heif,0.000000,0.749805,1.874512,-1,1,sharpness=0.000 < threshold=0.050,1,276
+DSC03451.heif,0.000000,0.641490,1.603725,-1,1,sharpness=0.000 < threshold=0.050,1,276
+DSC03452.heif,0.000000,0.683312,1.708279,-1,1,sharpness=0.000 < threshold=0.050,1,276
+DSC03453.heif,0.266835,0.719396,2.198744,-1,1,raw=2.199 < min_raw=3.100 (cut penalty applied? False),1,277
+DSC03454.heif,0.205684,0.853661,2.442679,-1,1,raw=2.443 < min_raw=3.100 (cut penalty applied? False),2,277
+DSC03455.heif,0.124356,0.801805,2.191046,-1,1,raw=2.191 < min_raw=3.100 (cut penalty applied? False),1,278
+DSC03456.heif,0.229913,0.316648,1.136489,-1,1,raw=1.136 < min_raw=3.100 (cut penalty applied? False),3,278
+DSC03457.heif,0.427461,0.856606,2.782707,-1,1,raw=2.783 < min_raw=3.100 (cut penalty applied? False),2,279
+DSC03458.heif,0.155141,0.836324,2.323523,-1,1,raw=2.324 < min_raw=3.100 (cut penalty applied? False),2,279
+DSC03459.heif,0.225933,0.846734,2.455735,-1,1,raw=2.456 < min_raw=3.100 (cut penalty applied? False),1,280
+DSC03460.heif,0.234045,0.916580,2.642518,-1,1,raw=2.643 < min_raw=3.100 (cut penalty applied? False),1,280
+DSC03461.heif,0.062923,0.726399,1.910382,-1,1,raw=1.910 < min_raw=3.100 (cut penalty applied? False),1,281
+DSC03462.heif,0.178284,0.618123,1.812732,-1,1,raw=1.813 < min_raw=3.100 (cut penalty applied? False),1,281
+DSC03463.heif,0.069896,0.688530,1.826168,-1,1,raw=1.826 < min_raw=3.100 (cut penalty applied? False),1,281
+DSC03464.heif,0.085029,0.857401,2.271046,-1,1,raw=2.271 < min_raw=3.100 (cut penalty applied? False),2,281
+DSC03465.heif,0.000000,0.000000,0.000000,-1,1,no_detection,0,282
+DSC03466.heif,0.000000,0.000000,0.000000,-1,1,no_detection,0,282
+DSC03467.heif,0.022927,0.475184,0.622349,-1,1,sharpness=0.023 < threshold=0.050,2,282
+DSC03468.heif,0.137484,0.841784,2.310685,-1,1,raw=2.311 < min_raw=3.100 (cut penalty applied? False),3,283
+DSC03469.heif,0.071356,0.836304,2.197794,-1,1,raw=2.198 < min_raw=3.100 (cut penalty applied? False),2,283
+DSC03470.heif,0.065121,0.774659,2.034328,-1,1,raw=2.034 < min_raw=3.100 (cut penalty applied? False),3,284
+DSC03471.heif,0.060925,0.725753,1.905769,-1,1,raw=1.906 < min_raw=3.100 (cut penalty applied? False),1,284
+DSC03472.heif,0.000000,0.657600,1.044000,-1,1,sharpness=0.000 < threshold=0.050,3,284
+DSC03473.heif,0.029929,0.793640,2.028995,-1,1,sharpness=0.030 < threshold=0.050,1,284
+DSC03474.heif,0.628115,0.430103,1.417429,-1,1,raw=1.417 < min_raw=3.100 (cut penalty applied? True),1,285
+DSC03475.heif,0.232903,0.809424,2.372914,-1,1,raw=2.373 < min_raw=3.100 (cut penalty applied? False),1,286
+DSC03476.heif,0.193521,0.778204,2.235792,-1,1,raw=2.236 < min_raw=3.100 (cut penalty applied? False),4,286
+DSC03477.heif,0.078435,0.670040,1.192753,-1,1,raw=1.193 < min_raw=3.100 (cut penalty applied? True),1,286
+DSC03478.heif,0.057979,0.518264,0.782629,-1,1,raw=0.783 < min_raw=3.100 (cut penalty applied? True),1,286
+DSC03479.heif,0.174486,0.736397,1.502722,-1,1,raw=1.503 < min_raw=3.100 (cut penalty applied? True),1,287
+DSC03480.heif,0.125911,0.702423,1.344925,-1,1,raw=1.345 < min_raw=3.100 (cut penalty applied? True),1,287
+DSC03481.heif,0.133987,0.688059,1.321127,-1,1,raw=1.321 < min_raw=3.100 (cut penalty applied? True),1,287
+DSC03482.heif,0.116744,0.755826,1.464680,-1,1,raw=1.465 < min_raw=3.100 (cut penalty applied? True),1,288
+DSC03483.heif,0.112889,0.869458,1.742977,-1,1,raw=1.743 < min_raw=3.100 (cut penalty applied? True),1,288
+DSC03484.heif,0.412983,0.744427,1.880541,-1,1,raw=1.881 < min_raw=3.100 (cut penalty applied? True),1,289
+DSC03485.heif,0.180821,0.750603,1.547738,-1,1,raw=1.548 < min_raw=3.100 (cut penalty applied? True),1,289
+DSC03486.heif,0.401435,0.852811,2.134179,-1,1,raw=2.134 < min_raw=3.100 (cut penalty applied? True),1,290
+DSC03487.heif,0.437526,0.824218,2.716833,-1,1,raw=2.717 < min_raw=3.100 (cut penalty applied? False),1,290
+DSC03488.heif,0.182015,0.838590,2.369498,-1,1,raw=2.369 < min_raw=3.100 (cut penalty applied? False),3,291
+DSC03489.heif,0.156894,0.881897,2.440083,-1,1,raw=2.440 < min_raw=3.100 (cut penalty applied? False),5,291
+DSC03490.heif,0.197929,0.814888,2.334115,-1,1,raw=2.334 < min_raw=3.100 (cut penalty applied? False),4,292
+DSC03491.heif,0.171214,0.827705,1.726083,-1,1,raw=1.726 < min_raw=3.100 (cut penalty applied? True),4,292
+DSC03492.heif,0.162496,0.849680,2.367944,-1,1,raw=2.368 < min_raw=3.100 (cut penalty applied? False),5,293
+DSC03493.heif,0.140595,0.923898,2.520638,-1,1,raw=2.521 < min_raw=3.100 (cut penalty applied? False),5,293
+DSC03494.heif,0.128378,0.821059,2.245215,-1,1,raw=2.245 < min_raw=3.100 (cut penalty applied? False),3,294
+DSC03495.heif,0.125391,0.908544,2.459446,-1,1,raw=2.459 < min_raw=3.100 (cut penalty applied? False),3,294
+DSC03496.heif,0.122669,0.872745,2.365865,-1,1,raw=2.366 < min_raw=3.100 (cut penalty applied? False),2,295
+DSC03497.heif,0.132357,0.767142,2.116390,-1,1,raw=2.116 < min_raw=3.100 (cut penalty applied? False),2,295
+DSC03498.heif,0.143803,0.815685,2.254917,-1,1,raw=2.255 < min_raw=3.100 (cut penalty applied? False),3,296
+DSC03499.heif,0.157339,0.937427,2.579576,-1,1,raw=2.580 < min_raw=3.100 (cut penalty applied? False),3,296
+DSC03500.heif,0.142026,0.795568,2.201958,-1,1,raw=2.202 < min_raw=3.100 (cut penalty applied? False),3,297
+DSC03501.heif,0.119048,0.822801,2.235574,-1,1,raw=2.236 < min_raw=3.100 (cut penalty applied? False),2,297
+DSC03502.heif,0.068965,0.815509,2.142221,-1,1,raw=2.142 < min_raw=3.100 (cut penalty applied? False),3,298
+DSC03503.heif,0.045990,0.928158,2.389381,-1,1,sharpness=0.046 < threshold=0.050,3,298
+DSC03504.heif,0.033261,0.820123,2.100199,-1,1,sharpness=0.033 < threshold=0.050,1,299
+DSC03505.heif,0.042446,0.755989,1.953642,-1,1,sharpness=0.042 < threshold=0.050,1,299
+DSC03506.heif,0.111695,0.683795,1.277031,-1,1,raw=1.277 < min_raw=3.100 (cut penalty applied? True),2,300
+DSC03507.heif,0.167217,0.870938,2.428169,-1,1,raw=2.428 < min_raw=3.100 (cut penalty applied? False),1,301
+DSC03508.heif,0.129087,0.868292,2.364359,-1,1,raw=2.364 < min_raw=3.100 (cut penalty applied? False),3,301
+DSC03509.heif,0.138333,0.894234,2.443084,-1,1,raw=2.443 < min_raw=3.100 (cut penalty applied? False),3,301
+DSC03510.heif,0.112158,0.825666,2.232401,-1,1,raw=2.232 < min_raw=3.100 (cut penalty applied? False),2,302
+DSC03511.heif,0.094388,0.818023,2.186639,-1,1,raw=2.187 < min_raw=3.100 (cut penalty applied? False),1,302
+DSC03512.heif,0.089038,0.687705,1.252819,-1,1,raw=1.253 < min_raw=3.100 (cut penalty applied? True),1,303
+DSC03513.heif,0.000000,0.000000,0.000000,-1,1,no_detection,0,303
+DSC03514.heif,0.289185,0.635757,2.023170,-1,1,raw=2.023 < min_raw=3.100 (cut penalty applied? False),4,304
+DSC03515.heif,0.321412,0.507780,1.751567,-1,1,raw=1.752 < min_raw=3.100 (cut penalty applied? False),3,304
+DSC03516.heif,0.401222,0.609765,2.126246,-1,1,raw=2.126 < min_raw=3.100 (cut penalty applied? False),3,305
+DSC03517.heif,0.358679,0.714802,2.325024,-1,1,raw=2.325 < min_raw=3.100 (cut penalty applied? False),3,305
+DSC03518.heif,0.238059,0.676444,2.048199,-1,1,raw=2.048 < min_raw=3.100 (cut penalty applied? False),1,306
+DSC03519.heif,0.229021,0.620361,1.894434,-1,1,raw=1.894 < min_raw=3.100 (cut penalty applied? False),3,306
+DSC03520.heif,0.182529,0.853036,2.406382,-1,1,raw=2.406 < min_raw=3.100 (cut penalty applied? False),2,307
+DSC03521.heif,0.123943,0.889037,2.408507,-1,1,raw=2.409 < min_raw=3.100 (cut penalty applied? False),2,307
+DSC03522.heif,0.204012,0.854189,2.441491,-1,1,raw=2.441 < min_raw=3.100 (cut penalty applied? False),6,308
+DSC03523.heif,0.160382,0.932511,2.571849,-1,1,raw=2.572 < min_raw=3.100 (cut penalty applied? False),5,308
+DSC03524.heif,0.160498,0.835007,2.328263,-1,1,raw=2.328 < min_raw=3.100 (cut penalty applied? False),3,309
+DSC03525.heif,0.129584,0.873743,2.378733,-1,1,raw=2.379 < min_raw=3.100 (cut penalty applied? False),2,309
+DSC03526.heif,0.141648,0.857620,2.356523,-1,1,raw=2.357 < min_raw=3.100 (cut penalty applied? False),4,310
+DSC03527.heif,0.139516,0.901500,2.463025,-1,1,raw=2.463 < min_raw=3.100 (cut penalty applied? False),3,310
+DSC03528.heif,0.162068,0.869964,2.418012,-1,1,raw=2.418 < min_raw=3.100 (cut penalty applied? False),3,311
+DSC03529.heif,0.142178,0.897972,2.458198,-1,1,raw=2.458 < min_raw=3.100 (cut penalty applied? False),2,311
+DSC03530.heif,0.153180,0.845265,2.342933,-1,1,raw=2.343 < min_raw=3.100 (cut penalty applied? False),4,312
+DSC03531.heif,0.121414,0.918842,2.479226,-1,1,raw=2.479 < min_raw=3.100 (cut penalty applied? False),2,312
+DSC03532.heif,0.175790,0.815880,2.303384,-1,1,raw=2.303 < min_raw=3.100 (cut penalty applied? False),2,313
+DSC03533.heif,0.146574,0.900796,2.471852,-1,1,raw=2.472 < min_raw=3.100 (cut penalty applied? False),3,313
+DSC03534.heif,0.149976,0.825971,2.289891,-1,1,raw=2.290 < min_raw=3.100 (cut penalty applied? False),2,314
+DSC03535.heif,0.137001,0.877697,2.399743,-1,1,raw=2.400 < min_raw=3.100 (cut penalty applied? False),2,314
+DSC03536.heif,0.091963,0.873803,2.322453,-1,1,raw=2.322 < min_raw=3.100 (cut penalty applied? False),3,315
+DSC03537.heif,0.073311,0.896662,2.351622,-1,1,raw=2.352 < min_raw=3.100 (cut penalty applied? False),3,315
+DSC03538.heif,0.120285,0.867770,2.349851,-1,1,raw=2.350 < min_raw=3.100 (cut penalty applied? False),2,316
+DSC03539.heif,0.104705,0.906987,2.424526,-1,1,raw=2.425 < min_raw=3.100 (cut penalty applied? False),2,316
+DSC03540.heif,0.227126,0.814818,2.377735,-1,1,raw=2.378 < min_raw=3.100 (cut penalty applied? False),3,317
+DSC03541.heif,0.104569,0.851538,2.285699,-1,1,raw=2.286 < min_raw=3.100 (cut penalty applied? False),2,317

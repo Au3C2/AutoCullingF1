@@ -1,182 +1,132 @@
 # Auto-Culling 🏎️📸
 
-F1 赛车摄影自动筛选工具 —— 从连拍数百张的 HIF 原片中，基于规则与深度学习自动挑选出最值得保留的照片，并生成 XMP 星级标注文件供 Lightroom 直接导入。
+[中文版](README_zh.md) | **English**
 
-## 功能概览
+An automated photo culling tool for F1 & motorsport photography. It systematically processes thousands of burst-shot images (HIF/RAW), identifies the best shots using deep learning and heuristic rules, and generates Lightroom-compatible XMP sidecars with ratings and auto-crops.
 
-- **连拍分组**：基于 EXIF 时间戳自动将连拍序列编组
-- **多阶段评分流水线**：综合锐度、构图、车辆朝向和完整性进行智能打分
-- **Top-N 自动优选**：在每组连拍中自动挑选最优的 N 张照片
-- **XMP 输出**：生成 Lightroom 可直接识别的 `.xmp` 星级评分文件
+---
 
-## 流水线架构
+## 🌟 Key Features
 
-```
-HIF 原片
-  │
-  ├─ P0: 锐度评估 (HF Ratio)
-  │     └─ 计算高频细节占比，过滤严重失焦/模糊
-  │
-  ├─ P1: 构图评分 (YOLO 检测 + 规则)
-  │     ├─ F1 赛车专用 YOLO 目标检测
-  │     ├─ 面积占比 + 居中度 + 完整性罚分
-  │     └─ 检测置信度加权
-  │
-  ├─ P3: 铁丝网检测 (MobileNetV2 二分类) [默认关闭]
-  │     └─ 识别铁丝网遮挡（精度高但对最终指标贡献有限）
-  │
-  ├─ P4: 车辆朝向与完整性 (MobileNetV3 多任务)
-  │     ├─ 5 类朝向分类: front / front_angle / side / rear_angle / rear
-  │     ├─ 2 类完整性分类: full / cut
-  │     ├─ 正尾部(rear)一票否决
-  │     └─ 截断车辆(cut)软性扣分 (penalty=0.6)
-  │
-  └─ 综合打分 → Top-N 筛选 → XMP 输出
-```
+- **Burst Grouping**: Automatically groups rapid-fire sequences based on EXIF timestamps.
+- **Multi-Stage Scoring Pipeline**:
+  - **P0 Sharpness**: High-frequency detail analysis (HF Ratio) to filter out-of-focus shots.
+  - **P1 Composition**: YOLO-based object detection (F1 specific + COCO) to evaluate subject size and centering.
+  - **P4 Orientation & Integrity**: MobileNetV3 multi-task model to classify car orientation (rejecting rear shots) and detect cut/occluded subjects.
+- **Top-N Selection**: Intelligently selects the best $N$ frames from each burst sequence.
+- **Auto-Cropping**: Automatically calculates and writes optimal crops to XMP based on subject position and target aspect ratio (3:2/2:3).
+- **Lightroom Integration**: Generates `.xmp` files that Lightroom Classic reads instantly for ratings (1-5 stars) and flags.
 
-## 评分公式
+---
 
-```
-raw_score = 1.5 × s_sharp + 2.5 × s_comp - (0.6 if cut else 0)
-```
+## 🚀 End-to-End Performance
 
-- `s_sharp`：锐度得分 ∈ [0, 1]（基于高频比率 HF Ratio）
-- `s_comp`：构图得分 ∈ [0, 1]（面积占比 + 居中度 + 完整性）
-- 否决条件：无检测目标 / 锐度 < 0.05 / raw < 3.1 / 正尾部朝向
+Measured on a sample of 1000 HEIF images (1280px decode scale). **"End-to-End"** throughput represents the entire workflow: file loading, decoding, multi-stage AI inference, and XMP generation.
 
-## 快速开始
+### macOS (Apple Silicon M4 Pro)
+Optimized for the Apple Neural Engine (ANE) using CoreML.
 
-### 环境准备
+| Backend | Hardware | End-to-End Throughput |
+| :--- | :--- | :--- |
+| **ONNX Runtime** | M-Series CPU | ~13.8 img/s |
+| **CoreML** | **Neural Engine (ANE)** | **~18.6 img/s (+35%)** |
 
+### Windows (Intel i9 + RTX 4070 Ti)
+Leverages CUDA acceleration and massively parallel prefetching.
+
+| Backend | Hardware | End-to-End Throughput |
+| :--- | :--- | :--- |
+| **CUDA** | **NVIDIA RTX 4070 Ti** | **~35.0 img/s** |
+| **CUDA** | **NVIDIA RTX 4090** | **~52.0+ img/s** |
+
+---
+
+## 🛠️ Quick Start
+
+### 1. Prerequisites
+
+- **Python 3.10+**
+- **FFmpeg**: Required for high-speed HIF decoding.
+  - **macOS**: `brew install ffmpeg`
+  - **Windows**: [Download](https://ffmpeg.org/download.html) and add to `PATH`.
+
+### 2. Installation
+
+We recommend using [uv](https://github.com/astral-sh/uv) for fast and reliable dependency management.
+
+**macOS / Linux:**
 ```bash
-# 使用 uv 创建虚拟环境并安装依赖
 uv sync
-
-# 激活虚拟环境
-source .venv/bin/activate   # Linux/macOS
-.venv\Scripts\activate      # Windows
-```
-
-### 运行自动筛选
-
-```bash
-python cull_photos.py /path/to/hif/folder --top-n 11 --output /path/to/output
-```
-
-## macOS 性能优化与 CoreML 支持
-
-在 Apple M 系列芯片（M1/M2/M3/M4）上，本项目支持使用 **Apple Neural Engine (ANE)** 进行硬件加速推理。
-
-### 1. 性能基准 (1280px / 1000张 HEIF)
-
-| 模式 | 后端设备 | 吞吐量 | 耗时 |
-| :--- | :--- | :--- | :--- |
-| **ONNX (原生)** | M-Chip CPU | 13.8 img/s | 72.5 s |
-| **CoreML (加速)** | **Neural Engine (ANE)** | **18.6 img/s** | **53.8 s** |
-
-> **提示**: CoreML 版本比 ONNX 版本整体快了约 **35%**，且大幅降低了 CPU 负载。
-
-### 2. 精确度分析 (ONNX vs CoreML)
-经过 1000 张照片的对比测试，CoreML 与 ONNX 的筛选结果**一致性高达 97.6%**。仅 2.4% 的照片因推理引擎精度差异在分值临界点产生星级波动（±1星），不影响最终筛选逻辑。
-
-### 3. 推荐使用方式 (Recommended Usage)
-
-系统会自动检测 macOS 环境并优先加载 `models/*.mlpackage` 模型。
-
-#### 方案 A: 使用 uv 直接运行 (推荐)
-无需手动激活环境，速度最快：
-```bash
-~/.local/bin/uv run cull_photos.py --input-dir /你的/照片/路径 --scale-width 1280 --workers 12
-```
-
-#### 方案 B: 标准虚拟环境运行
-```bash
-# 激活环境
 source .venv/bin/activate
-
-# 执行筛选
-python3 cull_photos.py --input-dir /你的/照片/路径 --scale-width 1280 --workers 12
 ```
 
-#### 进阶控制 (环境变量)
+**Windows (PowerShell):**
+```powershell
+uv sync
+.venv\Scripts\activate.ps1
+```
+
+### 3. Basic Usage
+
+Analyze a directory of images and generate XMP sidecars:
+
+**macOS:**
 ```bash
-# 强制使用 CoreML (ANE 加速)
-export CULL_BACKEND=coreml
-python cull_photos.py ...
-
-# 强制使用 ONNX (CPU 运行)
-export CULL_BACKEND=onnx
-python cull_photos.py ...
+python cull_photos.py --input-dir /path/to/photos --workers 8 --scale-width 1280
 ```
 
-### 4. 硬件解码要求
-为了在 Mac 上获得最佳速度，请确保已安装 `ffmpeg` (支持 `videotoolbox` 硬件加速):
-```bash
-brew install ffmpeg
+**Windows:**
+```powershell
+python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
 ```
 
-### 评估流水线性能
+**Common Options:**
+- `--workers N`: Number of parallel prefetch workers.
+- `--scale-width 1280`: Downscale images during decode for faster processing.
+- `--top-n 11`: Max keepers per burst group.
+- `--force`: Re-analyze even if XMP/Ratings already exist.
 
-```bash
-# 在采样测试集上运行评估
-python eval_multi_session.py --test-set test_set.csv --output scores.csv
-```
+---
 
-## 项目结构
+## 📂 Project Structure
 
-```
+```text
 auto_culling/
-├── cull/                          # 核心评分模块
-│   ├── composition.py             # P1: 构图评分（面积/居中/完整性）
-│   ├── detector.py                # YOLO 检测器封装
-│   ├── exif_reader.py             # EXIF 读取与连拍分组
-│   ├── fence_classifier.py        # P3: 铁丝网分类器
-│   ├── p4_classifier.py           # P4: 朝向+完整性分类器
-│   ├── scorer.py                  # 综合评分与 Top-N 选择
-│   └── sharpness.py               # P0: 锐度评估
-│
-├── cull_photos.py                 # 主程序入口
-├── eval_multi_session.py          # 多 session 评估脚本
-├── sample_test_set.py             # 测试集采样工具
-├── tune_params.py                 # 离线参数调优
-│
-├── train_fence_classifier.py      # P3 铁丝网分类器训练
-├── train_fence_classifier_v2.py   # P3 v2 训练脚本
-├── train_p4_multitask.py          # P4 多任务模型训练
-├── train_f1_yolo.py               # F1 YOLO 检测器训练
-├── extract_p4_rois.py             # P4 训练数据 ROI 提取
-│
-├── models/                        # ONNX 模型文件 (gitignored)
-├── fence_classifier_checkpoints/  # P3 模型权重
-├── p4_model_checkpoints/          # P4 模型权重
-│
-├── AGENTS.md                      # AI 辅助开发规范
-├── P4_ANNOTATION_GUIDE.md         # P4 数据标注指南
-└── pyproject.toml                 # 项目配置
+├── cull/                  # Core package (Sharpness, Composition, Detectors, Scorer)
+├── eval/                  # Evaluation & benchmarking scripts
+├── train/                 # Model training pipelines (YOLO, Classifiers)
+├── utils/                 # Utility scripts (Autocrop, EXIF tools, Model download)
+├── models/                # Model weights (Local ONNX/CoreML)
+├── results/               # Benchmark reports and experiment logs
+├── tests/                 # Automated test suite
+└── cull_photos.py         # Main entry point
 ```
 
-## 性能基准
+---
 
-在 7 个拍摄场次、2018 张测试图片上的评估结果：
+## 📊 Scoring Logic
 
-| 阶段配置 | F1 Score | Precision | Recall |
-|:---|:---|:---|:---|
-| P0 旧参数 (旧标签) | 0.5579 | — | — |
-| P0 旧参数 (修正标签) | 0.4338 | — | — |
-| **P0+P1 优化参数** | **0.5827** | 0.525 | 0.656 |
-| P0+P1+P4 (最终) | **0.5952** | 0.558 | 0.637 |
+The final `raw_score` is calculated as:
+$$score = 1.5 \times S_{sharp} + 2.5 \times S_{comp} - Penalty_{cut}$$
 
-> P0 参数优化贡献了约 **+16%** 的绝对 F1 提升（在修正标签后）。
-> P4 额外贡献了 **+1.2%** 的 F1 提升，同时显著提升了 Precision (+3.3%)。
+**Veto Rules (Automatic Rejection):**
+- No target detected.
+- Sharpness below threshold (0.05).
+- Car orientation is "Rear" (back view).
+- Low overall score (below 3.1).
 
-## 技术要点
+---
 
-- **Python 3.10** + PyTorch 2.6 + ONNX Runtime
-- **YOLO v8** 目标检测（F1 赛车专用微调模型 + COCO 通用模型双路检测）
-- **MobileNetV3** 多任务分类（朝向 + 完整性双 Head）
-- **Step-based 训练** + AMP 混合精度 + Early Stopping
-- **动态数据增强**：从 Full 样本裁剪生成无限 Cut 训练数据
+## 🧪 Testing
 
-## 许可
+Run the integration test suite to verify backend execution and XMP accuracy:
 
-Private project. All rights reserved.
+```bash
+pytest tests/test_cull.py
+```
+
+---
+
+## 📜 License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

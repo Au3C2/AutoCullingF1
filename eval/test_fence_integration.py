@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import tempfile
 import csv
+import sys
 from pathlib import Path
 
 # Setup logging

@@ -175,8 +175,17 @@ def load_coco_model():
                 log.info("COCO CoreML model loaded from %s", coreml_path)
                 return model
         
+        # Try to find local weights first to prevent unwanted downloads in root
+        for path in [Path("models/yolov8n.onnx"), Path("models/yolov8n.pt")]:
+            if path.exists():
+                model = YOLO(str(path))
+                log.info("COCO fallback model loaded from %s", path)
+                return model
+        
+        # If not found anywhere, use the string and let it manage it (will download to models/ if we can specify it, 
+        # but let's just use "yolov8n.pt" if absolutely necessary)
+        # Actually, let's keep it to yolov8n.pt as top-level fallback
         model = YOLO("yolov8n.pt")
-        log.info("COCO YOLOv8n model loaded")
         return model
     except Exception as exc:
         raise RuntimeError(f"Failed to load COCO YOLOv8n model: {exc}") from exc
@@ -282,3 +291,64 @@ def detect(
     h, w = img_rgb.shape[:2]
     detections.sort(key=lambda d: d.subject_score(w, h), reverse=True)
     return detections
+
+# ---------------------------------------------------------------------------
+# Cloud-API F1 detection fallback (inference_sdk)
+# ---------------------------------------------------------------------------
+
+
+class CloudF1Detector:
+    """Thin wrapper around inference_sdk for F1 detection via Roboflow cloud."""
+
+    MODEL_ID = "formula-one-car-detection/1"
+    API_URL  = "https://serverless.roboflow.com"
+
+    def __init__(self, api_key: str) -> None:
+        try:
+            from inference_sdk import InferenceHTTPClient  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "inference-sdk is required for cloud F1 detection.\n"
+                "  Install: pip install inference-sdk"
+            ) from exc
+        self._client = InferenceHTTPClient(
+            api_url=self.API_URL,
+            api_key=api_key,
+        )
+        log.info("Cloud F1 detector initialised (model: %s)", self.MODEL_ID)
+
+    def detect(self, img_rgb: np.ndarray, conf: float = 0.25) -> list[Detection]:
+        """Run cloud inference and return Detection list."""
+        from PIL import Image  # type: ignore
+        pil_img = Image.fromarray(img_rgb)
+
+        try:
+            result = self._client.infer(pil_img, model_id=self.MODEL_ID)
+        except Exception as exc:
+            log.warning("Cloud F1 inference failed: %s", exc)
+            return []
+
+        detections: list[Detection] = []
+        for pred in result.get("predictions", []):
+            if pred.get("confidence", 0) < conf:
+                continue
+            x   = pred["x"]
+            y   = pred["y"]
+            w   = pred["width"]
+            h   = pred["height"]
+            detections.append(Detection(
+                label="f1_car",
+                weight=1.0,
+                conf=float(pred["confidence"]),
+                x1=x - w / 2,
+                y1=y - h / 2,
+                x2=x + w / 2,
+                y2=y + h / 2,
+            ))
+
+        h_img, w_img = img_rgb.shape[:2]
+        detections.sort(
+            key=lambda d: d.subject_score(w_img, h_img), reverse=True
+        )
+        return detections
+

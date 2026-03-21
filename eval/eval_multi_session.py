@@ -24,10 +24,12 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+# Load package
 import cv2
 
 from cull.exif_reader import ExifData, read_exif, group_bursts
 from cull.detector import Detection, load_f1_model, load_coco_model, detect
+from cull.loader import load_image_rgb
 from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import (
@@ -36,64 +38,6 @@ from cull.scorer import (
 )
 
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Image loading (mirrors cull_photos.py logic)
-# ---------------------------------------------------------------------------
-
-def _load_image_rgb(path: Path, scale_width: int = 1280):
-    """Load HIF image via ffmpeg preview stream extraction."""
-    import subprocess
-    import numpy as np
-
-    try:
-        # Try ffmpeg preview stream extraction first (fastest for HIF)
-        result = subprocess.run(
-            [
-                "ffmpeg", "-hide_banner", "-loglevel", "error",
-                "-i", str(path),
-                "-map", "0:6",          # preview stream
-                "-frames:v", "1",
-                "-f", "rawvideo",
-                "-pix_fmt", "rgb24",
-                "-vcodec", "rawvideo",
-                "pipe:1",
-            ],
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode == 0 and len(result.stdout) > 0:
-            # Preview stream is 1664x1088
-            w, h = 1664, 1088
-            expected = w * h * 3
-            if len(result.stdout) == expected:
-                img = np.frombuffer(result.stdout, dtype=np.uint8).reshape(h, w, 3)
-                return img
-
-        # Fallback: ffmpeg generic decode
-        result = subprocess.run(
-            [
-                "ffmpeg", "-hide_banner", "-loglevel", "error",
-                "-i", str(path),
-                "-frames:v", "1",
-                "-f", "image2pipe",
-                "-vcodec", "png",
-                "pipe:1",
-            ],
-            capture_output=True,
-            timeout=60,
-        )
-        if result.returncode == 0:
-            buf = np.frombuffer(result.stdout, dtype=np.uint8)
-            img_bgr = cv2.imdecode(buf, cv2.IMREAD_COLOR)
-            if img_bgr is not None:
-                return cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-    except Exception as e:
-        log.warning("Failed to decode %s: %s", path.name, e)
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +106,7 @@ def _process_session(
             # Prefetch first frame
             pending_future = None
             if len(group.frames) > 0:
-                pending_future = pool.submit(_load_image_rgb, group.frames[0])
+                pending_future = pool.submit(load_image_rgb, group.frames[0])
 
             for frame_idx, frame_path in enumerate(group.frames):
                 is_first = frame_idx == 0
@@ -172,12 +116,12 @@ def _process_session(
                     img_rgb = pending_future.result()
                     pending_future = None
                 else:
-                    img_rgb = _load_image_rgb(frame_path)
+                    img_rgb = load_image_rgb(frame_path)
 
                 # Prefetch next
                 if frame_idx + 1 < len(group.frames):
                     pending_future = pool.submit(
-                        _load_image_rgb, group.frames[frame_idx + 1]
+                        load_image_rgb, group.frames[frame_idx + 1]
                     )
 
                 if img_rgb is None:

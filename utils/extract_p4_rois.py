@@ -4,9 +4,10 @@ from pathlib import Path
 import csv
 import cv2
 import random
+import sys
+from pathlib import Path
 
-# Use the existing project utilities
-from cull_photos import _load_image_rgb
+from cull.loader import load_image_rgb
 from cull.detector import load_f1_model, detect
 
 def crop_roi(img_rgb, detection, pad_ratio=0.0):
@@ -70,7 +71,7 @@ def main():
             
         try:
             # We scale down during decode to roughly 1280 to save memory/time
-            img_rgb = _load_image_rgb(path, scale_width=1280)
+            img_rgb = load_image_rgb(path, scale_width=1280)
             if img_rgb is None:
                 continue
                 

@@ -25,7 +25,7 @@ Usage
     # Recursive scan — process all images in subdirectories too
     python cull_photos.py --input-dir /path/to/session --recursive
 
-    # With F1 model (download first with models/download_f1_model.py)
+    # With F1 model (download first with utils/download_f1_model.py)
     python cull_photos.py \\
         --input-dir /path/to/photos \\
         --f1-model models/f1_yolov8n.onnx
@@ -63,7 +63,8 @@ import cv2
 import numpy as np
 
 from cull.exif_reader import ExifData, BurstGroup, read_exif, group_bursts
-from cull.detector import Detection, load_f1_model, load_coco_model, detect
+from cull.detector import Detection, CloudF1Detector, load_f1_model, load_coco_model, detect
+from cull.loader import load_image_rgb, update_image_metadata, RAW_EXTS, COOKED_EXTS, EXTENSIONS
 from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
@@ -98,16 +99,6 @@ def setup_logging(base_dir: Path):
     log.info("Logging to %s", log_file)
     return log_file
 
-# ---------------------------------------------------------------------------
-# Supported image extensions (case-insensitive comparison used at runtime)
-# ---------------------------------------------------------------------------
-_EXTENSIONS = {".hif", ".heif", ".heic", ".nef", ".arw", ".cr2", ".cr3",
-               ".orf", ".rw2", ".raf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
-
-_RAW_EXTS = {".arw", ".nef", ".cr2", ".cr3", ".orf", ".rw2", ".raf", ".dng"}
-_COOKED_EXTS = {".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".tif"}
-
-
 def _collect_images(input_dir: Path, recursive: bool = False) -> list[Path]:
     """Scan *input_dir* for supported image files, sorted by name.
     Uses os.scandir for high performance on Windows (prevents redundant stat() calls).
@@ -126,7 +117,7 @@ def _collect_images(input_dir: Path, recursive: bool = False) -> list[Path]:
                         if entry.name.startswith("._"):
                             continue
                         ext = os.path.splitext(entry.name)[1].lower()
-                        if ext in _EXTENSIONS:
+                        if ext in EXTENSIONS:
                             found.append(Path(entry.path))
                     elif recursive and entry.is_dir():
                         # Skip hidden directories (e.g., .git, .thumbnails)
@@ -141,347 +132,6 @@ def _collect_images(input_dir: Path, recursive: bool = False) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# Image loading
-# ---------------------------------------------------------------------------
-
-
-def _probe_embedded_preview(path: Path, min_width: int = 800) -> tuple[int, int, int] | None:
-    """Find an embedded preview stream suitable for fast decode.
-
-    Sony HIF files contain a Tile Grid (streams 0-5 that are stitched into
-    the full 7008x4672 image) plus several standalone streams at lower
-    resolutions.  The Tile Grid uses an internal complex filtergraph so we
-    cannot apply ``-vf scale`` on top of it.
-
-    This function probes the file and returns ``(stream_index, width, height)``
-    for the best standalone HEVC preview stream whose width >= *min_width*
-    and whose ``disposition.dependent`` flag is 0 (i.e. not a tile member).
-
-    Returns ``None`` if no suitable stream is found.
-    """
-    try:
-        proc = subprocess.run(
-            [
-                "ffprobe", "-v", "error",
-                "-select_streams", "v",
-                "-show_entries", "stream=index,width,height,codec_name:stream_disposition=dependent",
-                "-of", "json",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if proc.returncode != 0:
-            return None
-
-        import json
-        data = json.loads(proc.stdout)
-        best: tuple[int, int, int] | None = None
-        best_w = 0
-        for s in data.get("streams", []):
-            idx = s.get("index", -1)
-            w = s.get("width", 0)
-            h = s.get("height", 0)
-            codec = s.get("codec_name", "")
-            dep = s.get("disposition", {}).get("dependent", 0)
-
-            # Skip tile members (dependent=1) and non-HEVC streams
-            if dep == 1 or codec != "hevc":
-                continue
-            # Must be at least min_width
-            if w < min_width:
-                continue
-            # Pick the largest that is still smaller than the full grid
-            # (full grid is typically 7008 wide for A7C2)
-            if w > best_w and w < 5000:
-                best = (idx, w, h)
-                best_w = w
-
-        return best
-    except Exception:
-        return None
-
-
-def _probe_full_dimensions(path: Path) -> tuple[int, int] | None:
-    """Return (width, height) of the primary (full-res) image via ffprobe."""
-    try:
-        proc = subprocess.run(
-            [
-                "ffprobe", "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height",
-                "-of", "csv=p=0:s=x",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        # May return multiple lines for Tile Grid files; take the first
-        first_line = proc.stdout.strip().split("\n")[0].strip()
-        parts = first_line.split("x")
-        if len(parts) == 2:
-            return int(parts[0]), int(parts[1])
-    except Exception:
-        pass
-    return None
-
-
-# Cache the probed preview stream index for the first file in a directory.
-# All HIF files from the same camera/session share the same structure.
-_preview_stream_cache: dict[Path, tuple[int, int, int] | None] = {}
-
-
-def _get_preview_stream(path: Path) -> tuple[int, int, int] | None:
-    """Return (stream_index, width, height) for the preview stream, with caching."""
-    cache_key = path.parent
-    if cache_key not in _preview_stream_cache:
-        _preview_stream_cache[cache_key] = _probe_embedded_preview(path)
-        info = _preview_stream_cache[cache_key]
-        if info:
-            log.info("HIF preview stream: #%d (%dx%d) in %s",
-                     info[0], info[1], info[2], cache_key.name)
-        else:
-            log.info("No suitable HIF preview stream found in %s", cache_key.name)
-    return _preview_stream_cache[cache_key]
-
-
-def _load_image_ffmpeg(
-    path: Path,
-    scale_width: int = 1280,
-) -> np.ndarray | None:
-    """Decode an HIF image via ffmpeg, using the fastest available strategy.
-
-    Strategy priority:
-      1. Extract embedded preview stream (e.g. stream #6 at 1664x1088) — ~0.11s
-      2. Full-resolution Tile Grid decode + cv2.resize               — ~0.60s
-
-    Returns an RGB numpy array, or ``None`` on failure.
-    """
-    # --- Strategy 1: embedded preview stream (fastest) -----------------------
-    preview = _get_preview_stream(path)
-    if preview is not None:
-        s_idx, s_w, s_h = preview
-        expected_bytes = s_w * s_h * 3
-        try:
-            proc = subprocess.run(
-                [
-                    "ffmpeg", "-hide_banner", "-v", "error",
-                    "-hwaccel", "auto",  # Use available hardware acceleration
-                    "-i", str(path),
-                    "-map", f"0:{s_idx}",
-                    "-f", "rawvideo", "-pix_fmt", "rgb24",
-                    "-frames:v", "1",
-                    "-y", "pipe:1",
-                ],
-                capture_output=True,
-                timeout=30,
-            )
-            if proc.returncode == 0 and len(proc.stdout) == expected_bytes:
-                img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(s_h, s_w, 3)
-                # Optionally resize further if needed
-                if scale_width > 0 and s_w > scale_width * 1.2:
-                    new_h = int(round(s_h * scale_width / s_w))
-                    img = cv2.resize(img, (scale_width, new_h),
-                                     interpolation=cv2.INTER_AREA)
-                return img
-        except Exception:
-            pass
-        log.debug("Preview stream extraction failed for %s, trying full decode", path.name)
-
-    # --- Strategy 2: full-resolution decode + resize -------------------------
-    try:
-        proc = subprocess.run(
-            [
-                "ffmpeg", "-hide_banner", "-v", "error",
-                "-hwaccel", "auto",
-                "-i", str(path),
-                "-f", "rawvideo", "-pix_fmt", "rgb24",
-                "-frames:v", "1",
-                "-y", "pipe:1",
-            ],
-            capture_output=True,
-            timeout=60,
-        )
-    except Exception as exc:
-        log.warning("ffmpeg full decode failed for %s: %s", path.name, exc)
-        return None
-
-    if proc.returncode != 0 or len(proc.stdout) == 0:
-        return None
-
-    # Determine dimensions from the Tile Grid (default stream)
-    dims = _probe_full_dimensions(path)
-    if dims is None:
-        return None
-    full_w, full_h = dims
-    expected_bytes = full_w * full_h * 3
-    if len(proc.stdout) != expected_bytes:
-        log.warning("ffmpeg full-res size mismatch for %s: expected %d, got %d",
-                     path.name, expected_bytes, len(proc.stdout))
-        return None
-
-    img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(full_h, full_w, 3)
-    if scale_width > 0:
-        new_h = int(round(full_h * scale_width / full_w))
-        img = cv2.resize(img, (scale_width, new_h), interpolation=cv2.INTER_AREA)
-    return img
-
-
-def _load_image_rgb(
-    path: Path,
-    scale_width: int = 0,
-) -> np.ndarray | None:
-    """Load an image as an RGB numpy array.
-
-    For HIF/HEIF files, uses ffmpeg for fast decode + scale.  Falls back to
-    pillow-heif, then OpenCV.
-
-    When *scale_width* > 0, the image is scaled to that width (aspect-ratio
-    preserved) **during decode** for HIF files (via ffmpeg).  For non-HIF
-    files the image is loaded at full resolution and then resized.
-
-    Returns ``None`` on failure.
-    """
-    suffix = path.suffix.lower()
-
-    if suffix in (".hif", ".heif", ".heic"):
-        # --- Fast path: ffmpeg decode + scale --------------------------------
-        if scale_width > 0:
-            img = _load_image_ffmpeg(path, scale_width=scale_width)
-            if img is not None:
-                return img
-            log.warning(
-                "ffmpeg decode failed for %s — falling back to pillow-heif",
-                path.name,
-            )
-
-        # --- Fallback: pillow-heif -------------------------------------------
-        try:
-            import pillow_heif  # type: ignore
-            from PIL import Image  # type: ignore
-            pillow_heif.register_heif_opener()
-            pil_img = Image.open(path).convert("RGB")
-            arr = np.array(pil_img, dtype=np.uint8)
-            if scale_width > 0:
-                h, w = arr.shape[:2]
-                new_w = scale_width
-                new_h = int(round(h * new_w / w))
-                arr = cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-            return arr
-        except Exception as exc:
-            log.warning(
-                "pillow-heif failed for %s: %s — trying OpenCV",
-                path.name, exc,
-            )
-
-    # --- Non-HIF: Try OpenCV -------------------------------------------------
-    img_bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    
-    # --- RAW Fallback: Extract embedded preview via ExifTool -----------------
-    if img_bgr is None and suffix in _RAW_EXTS:
-        log.debug("OpenCV failed for RAW %s — trying ExifTool preview extraction", path.name)
-        # Try -JpgFromRaw then -PreviewImage
-        for tag in ["-JpgFromRaw", "-PreviewImage"]:
-            try:
-                proc = subprocess.run(
-                    ["exiftool", "-b", tag, str(path)],
-                    capture_output=True, timeout=10
-                )
-                if proc.returncode == 0 and len(proc.stdout) > 0:
-                    arr = np.frombuffer(proc.stdout, dtype=np.uint8)
-                    img_rgb = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    if img_rgb is not None:
-                        img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
-                        log.debug("Successfully extracted %s from %s", tag, path.name)
-                        img_bgr = img_rgb # used for return logic below
-                        break
-            except Exception:
-                continue
-
-    if img_bgr is None:
-        log.warning("Could not load image: %s (tried FFmpeg/Pillow/OpenCV/ExifTool)", path.name)
-        return None
-        
-    # If we got here, img_bgr is actually RGB if we used the ExifTool path, 
-    # or BGR if we used imread. Let's unify.
-    if suffix in _RAW_EXTS and 'img_rgb' in locals() and img_rgb is not None:
-        # already RGB
-        pass
-    else:
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        
-    if scale_width > 0:
-        h, w = img_rgb.shape[:2]
-        new_w = scale_width
-        new_h = int(round(h * new_w / w))
-        img_rgb = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    return img_rgb
-
-
-# ---------------------------------------------------------------------------
-# Cloud-API F1 detection fallback (inference_sdk)
-# ---------------------------------------------------------------------------
-
-
-class _CloudF1Detector:
-    """Thin wrapper around inference_sdk for F1 detection via Roboflow cloud."""
-
-    _MODEL_ID = "formula-one-car-detection/1"
-    _API_URL  = "https://serverless.roboflow.com"
-
-    def __init__(self, api_key: str) -> None:
-        try:
-            from inference_sdk import InferenceHTTPClient  # type: ignore
-        except ImportError as exc:
-            raise ImportError(
-                "inference-sdk is required for cloud F1 detection.\n"
-                "  Install: pip install inference-sdk"
-            ) from exc
-        self._client = InferenceHTTPClient(
-            api_url=self._API_URL,
-            api_key=api_key,
-        )
-        log.info("Cloud F1 detector initialised (model: %s)", self._MODEL_ID)
-
-    def detect(self, img_rgb: np.ndarray, conf: float = 0.25) -> list[Detection]:
-        """Run cloud inference and return Detection list."""
-        from PIL import Image  # type: ignore
-        pil_img = Image.fromarray(img_rgb)
-
-        try:
-            result = self._client.infer(pil_img, model_id=self._MODEL_ID)
-        except Exception as exc:
-            log.warning("Cloud F1 inference failed: %s", exc)
-            return []
-
-        detections: list[Detection] = []
-        for pred in result.get("predictions", []):
-            if pred.get("confidence", 0) < conf:
-                continue
-            x   = pred["x"]
-            y   = pred["y"]
-            w   = pred["width"]
-            h   = pred["height"]
-            detections.append(Detection(
-                label="f1_car",
-                weight=1.0,
-                conf=float(pred["confidence"]),
-                x1=x - w / 2,
-                y1=y - h / 2,
-                x2=x + w / 2,
-                y2=y + h / 2,
-            ))
-
-        h_img, w_img = img_rgb.shape[:2]
-        detections.sort(
-            key=lambda d: d.subject_score(w_img, h_img), reverse=True
-        )
-        return detections
-
-
-# ---------------------------------------------------------------------------
 # Per-burst-group processing
 # ---------------------------------------------------------------------------
 
@@ -491,7 +141,7 @@ def _process_group(
     exif_map: dict[Path, ExifData],
     f1_model,
     coco_model,
-    cloud_f1: _CloudF1Detector | None,
+    cloud_f1: CloudF1Detector | None,
     top_n: int,
     sharp_thresh: float,
     w_sharp: float,
@@ -521,7 +171,7 @@ def _process_group(
     pending_future = None
     if prefetch_executor is not None and len(frames) > 0:
         pending_future = prefetch_executor.submit(
-            _load_image_rgb, frames[0], scale_width,
+            load_image_rgb, frames[0], scale_width,
         )
 
     # Determine P4 check based on policy
@@ -590,12 +240,12 @@ def _process_group(
         if img_rgb_prefetched is not None:
             img_rgb = img_rgb_prefetched
         else:
-            img_rgb = _load_image_rgb(frame_path, scale_width=scale_width)
+            img_rgb = load_image_rgb(frame_path, scale_width=scale_width)
 
         # Submit next frame for prefetch (overlap decode with current processing)
         if prefetch_executor is not None and frame_idx + 1 < len(frames):
             pending_future = prefetch_executor.submit(
-                _load_image_rgb, frames[frame_idx + 1], scale_width,
+                load_image_rgb, frames[frame_idx + 1], scale_width,
             )
 
         if img_rgb is None:
@@ -668,20 +318,16 @@ def _process_group(
             if s.rating >= 1 and not s.is_manual and s.detections:
                 f1_cars = [d for d in s.detections if d.label == "f1_car"]
                 if len(f1_cars) == 1:
-                    # Normalized coords
                     det = f1_cars[0]
-                    # We need the image dims to normalize if detector returned pixels. 
-                    # Actually detector stores normalized usually? Check detector.py
-                    # In this pipeline, compositions/scorer use what detector returns.
-                    # Assumption: s.detections coordinates are already handled correctly 
-                    # for the original image if we use the same loader.
-                    # Wait, detect() returns relative coords? Let's check detection bbox 
-                    # in detector.py. If they are percentages, we are good.
-                    
-                    # For now assume det has normalized coords (0.0-1.0)
-                    # We need the image dimensions to calculate correct normalized crop for 3:2/2:3
-                    img_ar = s.img_w / s.img_h if s.img_w and s.img_h else 1.5
-                    s.crop = calculate_crop(det.x1, det.y1, det.x2, det.y2, img_ar=img_ar)
+                    # Ensure coordinates are normalized (0-1) for calculate_crop
+                    if s.img_w and s.img_h:
+                        nx1, ny1 = det.x1 / s.img_w, det.y1 / s.img_h
+                        nx2, ny2 = det.x2 / s.img_w, det.y2 / s.img_h
+                        img_ar = s.img_w / s.img_h
+                        s.crop = calculate_crop(nx1, ny1, nx2, ny2, img_ar=img_ar)
+                    else:
+                        # Fallback if dims missing
+                        s.crop = calculate_crop(det.x1, det.y1, det.x2, det.y2, img_ar=1.5)
 
     return scores
 
@@ -722,14 +368,14 @@ def run(args: argparse.Namespace) -> int:
     for p in image_paths:
         stem = p.stem.lower()
         ext = p.suffix.lower()
-        if ext in _RAW_EXTS:
+        if ext in RAW_EXTS:
             has_raw[stem] = True
         
         if stem not in stems:
             stems[stem] = p
         else:
             prev = stems[stem]
-            if ext in _COOKED_EXTS and prev.suffix.lower() in _RAW_EXTS:
+            if ext in COOKED_EXTS and prev.suffix.lower() in RAW_EXTS:
                 stems[stem] = p
     
     # These are the files we will actually process (decode & score)
@@ -738,7 +384,7 @@ def run(args: argparse.Namespace) -> int:
     # Track which cooked files are "standalone" (no RAW partner)
     standalone_cooked: set[Path] = set()
     for stem, p in stems.items():
-        if p.suffix.lower() in _COOKED_EXTS and not has_raw.get(stem):
+        if p.suffix.lower() in COOKED_EXTS and not has_raw.get(stem):
             standalone_cooked.add(p)
 
     log.info("Processing %d unique shots (%d standalone cooked)",
@@ -766,7 +412,7 @@ def run(args: argparse.Namespace) -> int:
     f1_onnx = Path(args.f1_model)
     if args.rf_api_key:
         log.info("Cloud F1 detector enabled (api_key provided)")
-        cloud_f1 = _CloudF1Detector(args.rf_api_key)
+        cloud_f1 = CloudF1Detector(args.rf_api_key)
     elif f1_onnx.exists():
         f1_model = load_f1_model(f1_onnx)
     else:
@@ -872,11 +518,10 @@ def run(args: argparse.Namespace) -> int:
     to_sync = [s for s in all_scores if s.path in standalone_cooked and not s.is_manual]
     if to_sync and not args.dry_run:
         log.info("Syncing metadata to %d standalone cooked files via ExifTool...", len(to_sync))
-        from apply_exif_ratings import update_single_image
         # Using a few workers to avoid overwhelming the system
         with ThreadPoolExecutor(max_workers=min(8, n_workers)) as sync_executor:
             for s in to_sync:
-                sync_executor.submit(update_single_image, s.path, s.rating)
+                sync_executor.submit(update_image_metadata, s.path, s.rating)
 
     # --- Dump per-image scores to CSV (for offline parameter tuning) ----------
     if args.dump_scores:
@@ -948,19 +593,6 @@ def _dump_scores_csv(
     log.info("Scores dumped to %s  (%d rows)", out_path, len(all_scores))
 
 
-# ---------------------------------------------------------------------------
-# Label-check evaluation (--label-check)
-# ---------------------------------------------------------------------------
-
-
-def _collect_images(input_dir: Path, recursive: bool) -> list[Path]:
-    """Collect image files from the input directory."""
-    image_paths: list[Path] = []
-    search_pattern = "**/*" if recursive else "*"
-    for p in input_dir.glob(search_pattern):
-        if p.is_file() and p.suffix.lower() in _COOKED_EXTS | _RAW_EXTS:
-            image_paths.append(p)
-    return sorted(image_paths)
 
 
 def _run_label_check(

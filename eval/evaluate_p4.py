@@ -1,3 +1,4 @@
+import sys
 import csv
 import logging
 from pathlib import Path
@@ -6,7 +7,7 @@ import numpy as np
 
 from cull.p4_classifier import get_p4_classifier
 from cull.detector import load_f1_model, detect
-from cull_photos import _load_image_rgb
+from cull.loader import load_image_rgb
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def main():
             continue
             
         try:
-            img_rgb = _load_image_rgb(path, scale_width=1280)
+            img_rgb = load_image_rgb(path, scale_width=1280)
             if img_rgb is None: continue
             
             dets = detect(img_rgb, f1_model, None, conf=0.3)

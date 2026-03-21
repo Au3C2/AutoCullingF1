@@ -5,36 +5,9 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
+from cull.loader import update_image_metadata
+
 logger = logging.getLogger(__name__)
-
-def update_single_image(img_path, rating):
-    """Update a single image's metadata using ExifTool."""
-    if not img_path.exists():
-        return False, f"File not found: {img_path.name}"
-
-    # Lightroom Metadata logic:
-    # Rating: 0-5
-    # Pick flag (XMP-xmpDM:Pick):
-    #   1  = Picked (Flagged)
-    #   0  = No flag
-    #   -1 = Rejected
-    
-    et_rating = max(0, rating)
-    pick_flag = 1 if rating > 0 else -1
-    
-    cmd = [
-        "exiftool",
-        "-overwrite_original",
-        f"-XMP-xmp:Rating={et_rating}",
-        f"-XMP-xmpDM:Pick={pick_flag}",
-        str(img_path)
-    ]
-    
-    try:
-        subprocess.run(cmd, check=True, capture_output=True)
-        return True, img_path.name
-    except subprocess.CalledProcessError as e:
-        return False, f"Error updating {img_path.name}: {e.stderr.decode().strip()}"
 
 def apply_ratings_to_jpg_multi(csv_path, img_dir, max_workers=8):
     csv_path = Path(csv_path)
@@ -62,7 +35,7 @@ def apply_ratings_to_jpg_multi(csv_path, img_dir, max_workers=8):
     start_time = time.perf_counter()
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_img = {executor.submit(update_single_image, path, rat): path for path, rat in tasks}
+        future_to_img = {executor.submit(update_image_metadata, path, rat): path for path, rat in tasks}
         
         for i, future in enumerate(as_completed(future_to_img), 1):
             success, message = future.result()
