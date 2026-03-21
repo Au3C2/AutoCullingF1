@@ -1,4 +1,4 @@
-# Auto-Culling 🏎️📸
+# Auto-Culling (F1 Exclusive) 🏎️📸
 
 [中文版](README_zh.md) | **English**
 

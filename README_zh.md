@@ -1,4 +1,4 @@
-# Auto-Culling 🏎️📸 —— 赛车摄影自动筛选工具
+# Auto-Culling (F1 专用) 🏎️📸 —— 赛车摄影自动筛选工具
 
 **中文版** | [English](README.md)
 
