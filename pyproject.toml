@@ -1,5 +1,5 @@
 [project]
-name = "f1-auto-culling"
+name = "AutoCullingF1"
 version = "0.2.0"
 description = "F1 motorsport photo auto-culling — rule-based XMP sidecar generator"
 readme = "README.md"
