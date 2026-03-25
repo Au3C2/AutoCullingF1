@@ -257,8 +257,8 @@ def load_image_rgb(
     return img_rgb
 
 
-def update_image_metadata(img_path: Path, rating: int) -> tuple[bool, str]:
-    """Update a single image's Rating and Pick flag using ExifTool."""
+def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float, float, float] | None = None) -> tuple[bool, str]:
+    """Update a single image's Rating, Pick flag, and optional Crop using ExifTool."""
     if not img_path.exists():
         return False, f"File not found: {img_path.name}"
 
@@ -273,8 +273,24 @@ def update_image_metadata(img_path: Path, rating: int) -> tuple[bool, str]:
         "-overwrite_original",
         f"-XMP-xmp:Rating={et_rating}",
         f"-XMP-xmpDM:Pick={pick_flag}",
-        str(img_path)
     ]
+
+    # Add Crop info if present (Lightroom-compatible crs namespace)
+    if crop:
+        t, l, b, r = crop
+        cmd.extend([
+            "-XMP-crs:HasCrop=True",
+            "-XMP-crs:AlreadyApplied=False",
+            f"-XMP-crs:CropTop={t:.6f}",
+            f"-XMP-crs:CropLeft={l:.6f}",
+            f"-XMP-crs:CropBottom={b:.6f}",
+            f"-XMP-crs:CropRight={r:.6f}",
+            "-XMP-crs:CropAngle=0",
+            "-XMP-crs:CropConstrainToWarp=0",
+            "-XMP-crs:CropConstrainToUnitSquare=1",
+        ])
+
+    cmd.append(str(img_path))
     
     try:
         subprocess.run(cmd, check=True, capture_output=True)

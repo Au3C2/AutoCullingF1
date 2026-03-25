@@ -508,7 +508,9 @@ def run(args: argparse.Namespace) -> int:
         log.info("  %8s : %d", label, rating_dist[r])
 
     # --- Write XMP sidecars --------------------------------------------------
-    xmp_pairs = [(s.path, s.rating, s.crop) for s in all_scores if not s.is_manual]
+    # Only write XMP for shots that have a RAW partner or are not standalone.
+    xmp_pairs = [(s.path, s.rating, s.crop) for s in all_scores 
+                 if not s.is_manual and s.path not in standalone_cooked]
     written = write_xmp_batch(xmp_pairs, overwrite=True, dry_run=args.dry_run)
 
     action = "Would write" if args.dry_run else "Wrote"
@@ -521,7 +523,7 @@ def run(args: argparse.Namespace) -> int:
         # Using a few workers to avoid overwhelming the system
         with ThreadPoolExecutor(max_workers=min(8, n_workers)) as sync_executor:
             for s in to_sync:
-                sync_executor.submit(update_image_metadata, s.path, s.rating)
+                sync_executor.submit(update_image_metadata, s.path, s.rating, s.crop)
 
     # --- Dump per-image scores to CSV (for offline parameter tuning) ----------
     if args.dump_scores:
