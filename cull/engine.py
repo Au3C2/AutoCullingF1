@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any
 
-import cv2
+import numpy as np
 from cull.exif_reader import ExifData, BurstGroup, read_exif, group_bursts
 from cull.detector import CloudF1Detector, load_f1_model, load_coco_model, detect
 from cull.loader import load_image_rgb, update_image_metadata, RAW_EXTS, COOKED_EXTS, EXTENSIONS
@@ -212,7 +212,7 @@ class CullingEngine:
             if img_rgb is None:
                 continue
 
-            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
             h, w = img_rgb.shape[:2]
 
             # Detection
@@ -224,7 +224,7 @@ class CullingEngine:
                 detections = detect(img_rgb, self.f1_model, self.coco_model, conf=self.config.conf)
 
             # Scoring
-            s_sharp = score_sharpness(img_bgr, detections[0] if detections else None)
+            s_sharp = score_sharpness(img_rgb, detections[0] if detections else None)
             s_comp = score_composition(detections, w, h, prev_detections, frame_idx == 0)
             
             img_score = score_image(
@@ -234,6 +234,13 @@ class CullingEngine:
                 check_p4=check_p4, img_rgb=img_rgb, img_w=w, img_h=h
             )
             scores.append(img_score)
+            
+            log.info(
+                "  [%s]  sharp=%.3f  comp=%.3f  raw=%.2f  Rating=%+d%s",
+                frame_path.name, s_sharp, s_comp, img_score.raw_score,
+                img_score.rating, f"  ({img_score.veto_reason})" if img_score.vetoed else ""
+            )
+
             prev_detections = detections if detections else None
 
         select_best_n(scores, top_n=self.config.top_n)

@@ -16,6 +16,7 @@ An automated photo culling tool for F1 & motorsport photography. It systematical
 - **Top-N Selection**: Intelligently selects the best $N$ frames from each burst sequence.
 - **Auto-Cropping**: Automatically calculates and writes optimal crops to XMP based on subject position and target aspect ratio (3:2/2:3).
 - **Lightroom Integration**: Generates `.xmp` files that Lightroom Classic reads instantly for ratings (1-5 stars) and flags.
+- **Lite & Portable**: Completely removed heavy dependencies (Torch, OpenCV). The entire engine is now powered by **ONNX Runtime** and **Pillow**, enabling a <50MB compressed distribution.
 
 ---
 
@@ -87,6 +88,32 @@ python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
 - `--force`: Re-analyze even if XMP/Ratings already exist.
 
 ---
+
+## 📦 Binary Distribution (LITE)
+
+The **LITE version** is a standalone executable that does not require Python or any heavy AI frameworks installed on your system. It is optimized for speed and portability.
+
+### 1. Download & Use (Pre-compiled)
+1. Download the latest `cull_photos_lite.zip` from our releases.
+2. Unzip to any folder.
+3. Run the command directly:
+   - **macOS:** `./dist/cull_photos/cull_photos --input-dir /path/to/photos`
+   - **Windows:** `.\dist\cull_photos\cull_photos.exe --input-dir C:\Photos`
+
+### 2. Build Your Own (Packaging)
+If you want to compile the binary yourself using `pyinstaller`:
+
+**Step 1: Install PyInstaller**
+```bash
+uv pip install pyinstaller
+```
+
+**Step 2: Build the Lite Binary**
+```bash
+# Using the provided spec file (optimized to exclude Torch/CV2)
+pyinstaller cull_photos.spec --noconfirm
+```
+The output will be available in `dist/cull_photos/`.
 
 ## 📂 Project Structure
 

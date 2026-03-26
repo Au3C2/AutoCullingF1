@@ -16,6 +16,7 @@
 - **Top-N 筛选策略**：在每一组连拍中自动挑选得分最高的 $N$ 张。
 - **自动裁剪**：基于车辆主体位置与目标纵横比（3:2/2:3）自动生成最佳裁剪方案。
 - **Lightroom 深度集成**：生成对应的 `.xmp` 附属文件，Lightroom Classic 导入时将自动识别星级评分 (1-5★) 与裁剪框。
+- **极简便携 (Lite)**：彻底移除了 Torch、OpenCV 等沉重依赖。全流程基于 **ONNX Runtime** 与 **Pillow**，压缩包大小仅约 50MB。
 
 ---
 
@@ -87,6 +88,32 @@ python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
 - `--force`: 忽略已有 XMP 评分，强制全量重新检测。
 
 ---
+
+## 📦 极简发行版 (LITE)
+
+**LITE 版本** 是一个独立的可执行文件，无需安装 Python 或任何复杂的 AI 框架即可在你的系统上直接运行。它针对便携性与极速分发进行了极致优化。
+
+### 1. 下载与使用 (预编译)
+1. 从 Release 页面下载最新的 `cull_photos_lite.zip`。
+2. 解压到任意文件夹。
+3. 直接运行命令（以管理员权限运行性能更好）：
+   - **macOS:** `./dist/cull_photos/cull_photos --input-dir /你的照片路径`
+   - **Windows:** `.\dist\cull_photos\cull_photos.exe --input-dir C:\Photos`
+
+### 2. 自行打包 (Packaging)
+如果你希望基于当前代码自行编译二进制文件：
+
+**第一步：安装 PyInstaller**
+```bash
+uv pip install pyinstaller
+```
+
+**第二步：执行打包脚本**
+```bash
+# 使用已优化的 spec 文件（已排除 Torch/CV2 等冗余库）
+pyinstaller cull_photos.spec --noconfirm
+```
+打包产物将生成在 `dist/cull_photos/` 目录下。
 
 ## 📂 项目结构
 

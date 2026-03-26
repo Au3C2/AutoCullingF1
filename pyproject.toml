@@ -1,16 +1,18 @@
 [project]
 name = "AutoCullingF1"
-version = "0.2.0"
-description = "F1 motorsport photo auto-culling — rule-based XMP sidecar generator"
+version = "0.2.1"
+description = "F1 motorsport photo auto-culling (ONNX LITE VERSION)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "tqdm>=4.67.3",
     "pillow-heif>=0.18.0",
-    "opencv-python>=4.10.0",
-    "ultralytics>=8.3.0",
-    "roboflow>=1.1.0",
-    "inference-sdk>=0.60.0",
+    "pillow-avif-plugin>=1.5.5",
+    "opencv-python-headless>=4.10.0",
+    "onnxruntime==1.23.2",
+    "onnx>=1.17.0",
+    "numpy>=1.26.0",
+    "pillow>=10.0.0",
 ]
 
 [build-system]
