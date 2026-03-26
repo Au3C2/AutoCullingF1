@@ -82,3 +82,4 @@ p4_model_checkpoints/*.onnx
 *.ARW
 *.bin
 auto_cull
+external/
