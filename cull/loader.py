@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -21,6 +22,24 @@ EXTENSIONS = {".hif", ".heif", ".heic", ".nef", ".arw", ".cr2", ".cr3",
 
 RAW_EXTS = {".arw", ".nef", ".cr2", ".cr3", ".orf", ".rw2", ".raf", ".dng"}
 COOKED_EXTS = {".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".tif"}
+
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        base_path = Path(__file__).parent.parent.resolve()
+    return base_path / relative_path
+
+def _find_exiftool_path() -> str:
+    """Return path to bundled exiftool if exists, otherwise assume system-wide."""
+    bundled = get_resource_path("external/exiftool/exiftool")
+    if bundled.exists():
+        lib_path = bundled.parent / "lib"
+        if lib_path.exists():
+            return f"perl -I {lib_path} {bundled}"
+        return str(bundled)
+    return "exiftool"
 
 def probe_embedded_preview(path: Path, min_width: int = 800) -> Tuple[int, int, int] | None:
     try:
@@ -116,7 +135,9 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     if suffix in RAW_EXTS:
         for tag in ["-JpgFromRaw", "-PreviewImage"]:
             try:
-                proc = subprocess.run(["exiftool", "-b", tag, str(path)], capture_output=True, timeout=10)
+                exiftool_cmd = _find_exiftool_path().split()
+                cmd = [*exiftool_cmd, "-b", tag, str(path)]
+                proc = subprocess.run(cmd, capture_output=True, timeout=10)
                 if proc.returncode == 0 and len(proc.stdout) > 0:
                     import io
                     pil_img = Image.open(io.BytesIO(proc.stdout)).convert("RGB")
@@ -130,7 +151,8 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
 
 def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float, float, float] | None = None) -> tuple[bool, str]:
     et_rating, pick_flag = max(0, rating), (1 if rating > 0 else -1)
-    cmd = ["exiftool", "-overwrite_original", f"-XMP-xmp:Rating={et_rating}", f"-XMP-xmpDM:Pick={pick_flag}"]
+    exiftool_cmd = _find_exiftool_path().split()
+    cmd = [*exiftool_cmd, "-overwrite_original", f"-XMP-xmp:Rating={et_rating}", f"-XMP-xmpDM:Pick={pick_flag}"]
     if crop:
         t, l, b, r = crop
         cmd.extend(["-XMP-crs:HasCrop=True", "-XMP-crs:AlreadyApplied=False", 

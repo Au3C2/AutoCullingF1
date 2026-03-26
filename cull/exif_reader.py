@@ -14,11 +14,35 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        # Assuming this file is in cull/exif_reader.py, 
+        # project root is parent.parent
+        base_path = Path(__file__).parent.parent.resolve()
+    return base_path / relative_path
+
+def _find_exiftool_path() -> str:
+    """Return path to bundled exiftool if exists, otherwise assume system-wide."""
+    # Bundled path: external/exiftool/exiftool
+    bundled = get_resource_path("external/exiftool/exiftool")
+    if bundled.exists():
+        # Important: specify the include path for the bundled lib!
+        # -I flag for Perl
+        lib_path = bundled.parent / "lib"
+        if lib_path.exists():
+            return f"perl -I {lib_path} {bundled}"
+        return str(bundled)
+    return "exiftool"
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -79,8 +103,9 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
     if not paths:
         return []
 
+    exiftool_cmd = _find_exiftool_path().split()
     cmd = [
-        "exiftool",
+        *exiftool_cmd,
         "-json",
         "-n",                   # numeric values (no units/text decoration)
         *[f"-{f}" for f in _EXIFTOOL_FIELDS],

@@ -10,6 +10,8 @@ datas = [
     ('models/f1_yolov8n.onnx', 'models'),
     ('models/yolov8n.onnx', 'models'),
     ('models/p4_car_model.onnx', 'models'),
+    ('external/exiftool/exiftool', 'external/exiftool'),
+    ('external/exiftool/lib', 'external/exiftool/lib'),
 ]
 
 binaries = []
