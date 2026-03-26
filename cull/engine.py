@@ -154,16 +154,18 @@ class CullingEngine:
         elapsed = time.perf_counter() - t_start
         
         if progress_callback:
-            progress_callback("Writing XMP sidecars...", 0.95)
+            progress_callback("Saving metadata...", 0.95)
             
-        # Write XMP sidecars for all analyzed shots
+        # Write XMP sidecars for shots that need them (RAW or RAW+JPG pairs)
+        # Skip standalone JPG/HIF files since we sync metadata directly into them.
         xmp_pairs = [(s.path, s.rating, s.crop) for s in self.all_scores 
-                     if not s.is_manual]
+                     if not s.is_manual and s.path not in self.standalone_cooked]
         write_xmp_batch(xmp_pairs, overwrite=True, dry_run=self.config.dry_run)
 
         if not self.config.dry_run:
             to_sync = [s for s in self.all_scores if s.path in self.standalone_cooked and not s.is_manual]
             if to_sync:
+                log.info("Syncing metadata to %d standalone JPG/HIF files...", len(to_sync))
                 with ThreadPoolExecutor(max_workers=min(8, self.config.workers)) as sync_executor:
                     for s in to_sync:
                         sync_executor.submit(update_image_metadata, s.path, s.rating, s.crop)

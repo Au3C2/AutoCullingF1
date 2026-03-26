@@ -1,9 +1,18 @@
 import logging
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image
 
 log = logging.getLogger(__name__)
+
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        base_path = Path(__file__).parent.parent.resolve()
+    return base_path / relative_path
 
 ORIENT_MAP = {
     0: 'front',
@@ -80,6 +89,10 @@ def get_p4_classifier() -> P4Classifier | None:
     global _p4_classifier
     if _p4_classifier is None:
         model_path = Path("models/p4_car_model.onnx")
+        if not model_path.exists():
+            bundled = get_resource_path("models/p4_car_model.onnx")
+            if bundled.exists(): model_path = bundled
+        
         if model_path.exists():
             _p4_classifier = P4Classifier(str(model_path))
         else:

@@ -12,8 +12,17 @@ import ast
 
 import numpy as np
 from PIL import Image
+import sys
 
 log = logging.getLogger(__name__)
+
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        base_path = Path(__file__).parent.parent.resolve()
+    return base_path / relative_path
 
 _COCO_INTEREST: dict[int, tuple[str, float]] = {
     2:  ("coco_car",        0.7),
@@ -135,6 +144,9 @@ class LiteYOLO:
 def load_f1_model(onnx_path: Path): return LiteYOLO(onnx_path) if onnx_path.exists() else None
 def load_coco_model():
     p = Path("models/yolov8n.onnx")
+    if not p.exists():
+        bundled = get_resource_path("models/yolov8n.onnx")
+        if bundled.exists(): p = bundled
     return LiteYOLO(p) if p.exists() else None
 
 def detect(img_rgb: np.ndarray, f1: LiteYOLO | None, coco: LiteYOLO | None, conf: float = _CONF_THRESHOLD) -> list[Detection]:

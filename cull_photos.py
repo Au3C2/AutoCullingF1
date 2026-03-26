@@ -16,6 +16,16 @@ import time
 
 log = logging.getLogger(__name__)
 
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        base_path = Path(__file__).parent.resolve()
+    
+    return base_path / relative_path
+
 def setup_logging(base_dir: Path):
     log_dir = base_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -64,6 +74,15 @@ def run(args: argparse.Namespace) -> int:
         label_check=args.label_check,
         label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None
     )
+
+    # Resolve model paths for bundled version
+    f1_model = config.f1_model_path
+    if not f1_model.exists():
+        # Try finding it in bundled data
+        bundled_f1 = get_resource_path(f"models/{f1_model.name}")
+        if bundled_f1.exists():
+            config.f1_model_path = bundled_f1
+            log.debug("Using bundled F1 model: %s", bundled_f1)
 
     engine = CullingEngine(config)
     
