@@ -337,6 +337,10 @@ def _process_group(
 # ---------------------------------------------------------------------------
 
 
+from cull.engine import CullingEngine, EngineConfig
+
+log = logging.getLogger(__name__)
+
 def run(args: argparse.Namespace) -> int:
     input_dir = Path(args.input_dir)
     if not input_dir.is_dir():
@@ -344,152 +348,44 @@ def run(args: argparse.Namespace) -> int:
         return 1
         
     log_file = setup_logging(input_dir)
-
-    # --- Collect image files -------------------------------------------------
-    image_paths = _collect_images(input_dir, recursive=args.recursive)
-    if not image_paths:
-        log.error("No supported image files found in %s", input_dir)
-        return 1
-
-    log.info("Found %d image files in %s%s",
-             len(image_paths), input_dir,
-             " (recursive)" if args.recursive else "")
-
-    # --- Rename --------------------------------------------------------------
-    if args.rename:
-        log.info("Renaming images by EXIF timestamp...")
-        new_map = rename_images(image_paths, dry_run=args.dry_run)
-        image_paths = sorted(list(new_map.values()))
-
-    # --- Prioritize JPG/HIF over RAW -----------------------------------------
-    stems: dict[str, Path] = {}
-    has_raw: dict[str, bool] = {}
     
-    for p in image_paths:
-        stem = p.stem.lower()
-        ext = p.suffix.lower()
-        if ext in RAW_EXTS:
-            has_raw[stem] = True
-        
-        if stem not in stems:
-            stems[stem] = p
-        else:
-            prev = stems[stem]
-            if ext in COOKED_EXTS and prev.suffix.lower() in RAW_EXTS:
-                stems[stem] = p
-    
-    # These are the files we will actually process (decode & score)
-    image_paths = sorted(stems.values())
-    
-    # Track which cooked files are "standalone" (no RAW partner)
-    standalone_cooked: set[Path] = set()
-    for stem, p in stems.items():
-        if p.suffix.lower() in COOKED_EXTS and not has_raw.get(stem):
-            standalone_cooked.add(p)
-
-    log.info("Processing %d unique shots (%d standalone cooked)",
-             len(image_paths), len(standalone_cooked))
-
-    # --- Read EXIF & group bursts --------------------------------------------
-    log.info("Reading EXIF metadata …")
-    exif_list = read_exif(image_paths)
-    exif_map  = {e.path: e for e in exif_list}
-
-    log.info("Grouping burst sequences …")
-    groups = group_bursts(exif_list)
-    log.info(
-        "  %d groups  (%d burst, %d single)",
-        len(groups),
-        sum(1 for g in groups if g.is_burst),
-        sum(1 for g in groups if not g.is_burst),
+    # Map argparse Namespace to EngineConfig
+    config = EngineConfig(
+        input_dir=input_dir,
+        recursive=args.recursive,
+        f1_model_path=Path(args.f1_model),
+        rf_api_key=args.rf_api_key,
+        top_n=args.top_n,
+        sharp_thresh=args.sharp_thresh,
+        w_sharp=args.w_sharp,
+        w_comp=args.w_comp,
+        min_raw=args.min_raw,
+        conf=args.conf,
+        dry_run=args.dry_run,
+        force=args.force,
+        p4_policy=args.p4_policy,
+        scale_width=args.scale_width,
+        autocrop=not args.crop_off,
+        rename=args.rename,
+        workers=args.workers,
+        dump_scores=Path(args.dump_scores) if args.dump_scores else None,
+        label_check=args.label_check,
+        label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None
     )
 
-    # --- Load detection models -----------------------------------------------
-    f1_model    = None
-    cloud_f1    = None
-    coco_model  = load_coco_model()
-
-    f1_onnx = Path(args.f1_model)
-    if args.rf_api_key:
-        log.info("Cloud F1 detector enabled (api_key provided)")
-        cloud_f1 = CloudF1Detector(args.rf_api_key)
-    elif f1_onnx.exists():
-        f1_model = load_f1_model(f1_onnx)
-    else:
-        log.warning(
-            "No F1 model available (--f1-model not found and --rf-api-key not set). "
-            "Only COCO detection will be used."
-        )
-
-    # --- P4 Policy check ---
-    if args.p4_policy == "auto":
-        dir_name = input_dir.name.lower()
-        keywords = ["f1", "gp", "grand prix", "race", "quali", "practice"]
-        is_f1 = any(k in dir_name for k in keywords)
-        is_sprint = "sprint_quali" in dir_name
-        if is_f1 and not is_sprint:
-            log.info("P4 Multi-task model: ENABLED (auto-policy match)")
-        else:
-            reason = "sprint_quali excluded" if is_sprint else "no keywords found"
-            log.info("P4 Multi-task model: DISABLED (auto-policy: %s)", reason)
-    elif args.p4_policy == "always":
-        log.info("P4 Multi-task model: ENABLED (policy: always)")
-    else:
-        log.info("P4 Multi-task model: DISABLED (policy: never)")
-
-    # --- Decode scale and prefetch config ------------------------------------
-    scale_width = args.scale_width
-    n_workers   = args.workers
-    log.info("Decode scale: %s,  prefetch workers: %d",
-             f"{scale_width}px" if scale_width > 0 else "full-res",
-             n_workers)
-
-    # --- Process each group (Parallel) ---------------------------------------
-    all_scores: list[ImageScore] = []
-    t_start = time.perf_counter()
-
-    # Create a wrapper for parallel execution
-    def process_one_group(g_info):
-        idx, group = g_info
-        label = "burst" if group.is_burst else "single"
-        log.info("Processing Group %d/%d  [%s, %d frame(s)]", idx, len(groups), label, len(group.frames))
-        
-        try:
-            group_scores = _process_group(
-                group=group,
-                exif_map=exif_map,
-                f1_model=f1_model,
-                coco_model=coco_model,
-                cloud_f1=cloud_f1,
-                top_n=args.top_n,
-                sharp_thresh=args.sharp_thresh,
-                w_sharp=args.w_sharp,
-                w_comp=args.w_comp,
-                min_raw=args.min_raw,
-                conf=args.conf,
-                dry_run=args.dry_run,
-                force=args.force,
-                p4_policy=args.p4_policy,
-                scale_width=scale_width,
-                autocrop=not args.crop_off,
-                prefetch_executor=None,
-            )
-            for s in group_scores:
-                s.burst_group = idx
-            return group_scores
-        except Exception as e:
-            log.error("Error processing group %d: %s", idx, e)
-            return []
-
-    with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        group_results = list(executor.map(process_one_group, enumerate(groups, start=1)))
+    engine = CullingEngine(config)
     
-    for res in group_results:
-        all_scores.extend(res)
+    # Progress callback for CLI
+    def progress(msg, p):
+        log.info("[%d%%] %s", int(p * 100), msg)
 
-    elapsed = time.perf_counter() - t_start
+    try:
+        all_scores, elapsed = engine.run(progress_callback=progress)
+    except Exception as e:
+        log.exception("Engine failed: %s", e)
+        return 1
 
-    # --- Summary statistics --------------------------------------------------
+    # Summary statistics
     n_total   = len(all_scores)
     n_reject  = sum(1 for s in all_scores if s.rating == -1)
     n_keep    = n_total - n_reject
@@ -507,213 +403,18 @@ def run(args: argparse.Namespace) -> int:
         label = "Rejected" if r == -1 else f"{r}★"
         log.info("  %8s : %d", label, rating_dist[r])
 
-    # --- Write XMP sidecars --------------------------------------------------
-    # Only write XMP for shots that have a RAW partner or are not standalone.
-    xmp_pairs = [(s.path, s.rating, s.crop) for s in all_scores 
-                 if not s.is_manual and s.path not in standalone_cooked]
-    written = write_xmp_batch(xmp_pairs, overwrite=True, dry_run=args.dry_run)
+    # Dump scores CSV if requested
+    if config.dump_scores:
+        engine.export_scores_csv(config.dump_scores)
 
-    action = "Would write" if args.dry_run else "Wrote"
-    log.info("%s %d XMP sidecar(s) alongside original files.", action, len(written))
-
-    # --- Sync to standalone cooked files -------------------------------------
-    to_sync = [s for s in all_scores if s.path in standalone_cooked and not s.is_manual]
-    if to_sync and not args.dry_run:
-        log.info("Syncing metadata to %d standalone cooked files via ExifTool...", len(to_sync))
-        # Using a few workers to avoid overwhelming the system
-        with ThreadPoolExecutor(max_workers=min(8, n_workers)) as sync_executor:
-            for s in to_sync:
-                sync_executor.submit(update_image_metadata, s.path, s.rating, s.crop)
-
-    # --- Dump per-image scores to CSV (for offline parameter tuning) ----------
-    if args.dump_scores:
-        _dump_scores_csv(all_scores, Path(args.dump_scores), input_dir,
-                         args.label_check or args.label_check_dir is not None)
-
-    # --- Label check (compare with ARW ground truth) -------------------------
-    if args.label_check:
-        _run_label_check(all_scores, input_dir, args.label_check_dir)
+    # Label check if requested
+    if config.label_check:
+        engine.run_label_check(config.label_check_dir)
 
     return 0
 
-
-# ---------------------------------------------------------------------------
-# Dump per-image scores to CSV (for offline parameter tuning)
-# ---------------------------------------------------------------------------
-
-
-def _dump_scores_csv(
-    all_scores: list[ImageScore],
-    out_path: Path,
-    input_dir: Path,
-    include_gt: bool,
-) -> None:
-    """Write per-image scores to a CSV file for offline parameter tuning.
-
-    Columns: filename, s_sharp, s_comp, raw_score, rating, vetoed,
-    veto_reason, n_detections, burst_group, [has_arw].
-
-    When *include_gt* is True, also writes a ``has_arw`` column by scanning
-    for same-stem ARW files (ground truth).
-    """
-    # Build ARW ground truth set if needed
-    arw_stems: set[str] = set()
-    if include_gt:
-        for search_dir in [input_dir, input_dir.parent]:
-            if search_dir.is_dir():
-                for p in search_dir.iterdir():
-                    if p.suffix.lower() == ".arw":
-                        arw_stems.add(p.stem.lower())
-        log.info("Ground truth: %d ARW stems found for CSV export", len(arw_stems))
-
-    fieldnames = [
-        "filename", "s_sharp", "s_comp", "raw_score", "rating",
-        "vetoed", "veto_reason", "n_detections", "burst_group",
-    ]
-    if include_gt:
-        fieldnames.append("has_arw")
-
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = _csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for s in all_scores:
-            row: dict = {
-                "filename": s.path.name,
-                "s_sharp": f"{s.s_sharp:.6f}",
-                "s_comp": f"{s.s_comp:.6f}",
-                "raw_score": f"{s.raw_score:.6f}",
-                "rating": s.rating,
-                "vetoed": int(s.vetoed),
-                "veto_reason": s.veto_reason,
-                "n_detections": s.n_detections,
-                "burst_group": s.burst_group,
-            }
-            if include_gt:
-                row["has_arw"] = int(s.path.stem.lower() in arw_stems)
-            writer.writerow(row)
-
-    log.info("Scores dumped to %s  (%d rows)", out_path, len(all_scores))
-
-
-
-
-def _run_label_check(
-    all_scores: list[ImageScore],
-    input_dir: Path,
-    arw_dir: Path | None,
-) -> None:
-    """Compare system ratings against ARW ground truth and report metrics.
-
-    Ground truth rule: if a same-stem .ARW file exists, the image is a "keep"
-    (label=1).  Otherwise it is a "discard" (label=0).
-
-    For the F1 photo directory layout::
-
-        session/
-        ├── *.ARW           ← ground truth (keep)
-        └── HIF/*.HIF       ← all shots
-
-    When *arw_dir* is ``None``, the function searches both:
-      1. The HIF file's own directory (same dir)
-      2. The HIF file's parent directory (one level up, i.e. session root)
-
-    When *arw_dir* is provided, it is used as the sole directory to search.
-    """
-    log.info("\n" + "=" * 60)
-    log.info("LABEL CHECK — comparing with ARW ground truth")
-    log.info("=" * 60)
-
-    # Build set of ARW stems (case-insensitive)
-    arw_stems: set[str] = set()
-
-    if arw_dir is not None:
-        # User-specified directory
-        if arw_dir.is_dir():
-            arw_stems = {p.stem.lower() for p in arw_dir.iterdir()
-                         if p.suffix.lower() == ".arw"}
-            log.info("ARW directory: %s  (%d ARW files)", arw_dir, len(arw_stems))
-        else:
-            log.error("ARW check directory not found: %s", arw_dir)
-            return
-    else:
-        # Auto-detect: check input_dir itself + parent
-        for search_dir in [input_dir, input_dir.parent]:
-            if search_dir.is_dir():
-                for p in search_dir.iterdir():
-                    if p.suffix.lower() == ".arw":
-                        arw_stems.add(p.stem.lower())
-        log.info("Auto-detected %d ARW files (searched %s and %s)",
-                 len(arw_stems), input_dir, input_dir.parent)
-
-    if not arw_stems:
-        log.warning("No ARW files found — cannot run label check.")
-        return
-
-    # Classify each scored image
-    tp = fp = fn = tn = 0
-    mismatches: list[tuple[str, str, str]] = []  # (filename, predicted, actual)
-
-    for score in all_scores:
-        stem = score.path.stem.lower()
-        actual_keep = stem in arw_stems
-        predicted_keep = score.rating > 0  # Rating 1-5 = keep, -1 = reject
-
-        if predicted_keep and actual_keep:
-            tp += 1
-        elif predicted_keep and not actual_keep:
-            fp += 1
-            mismatches.append((score.path.name, "KEEP", "discard"))
-        elif not predicted_keep and actual_keep:
-            fn += 1
-            mismatches.append((score.path.name, "REJECT", "keep"))
-        else:
-            tn += 1
-
-    total = tp + fp + fn + tn
-    accuracy = (tp + tn) / total if total > 0 else 0.0
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
-    log.info("")
-    log.info("Confusion matrix:")
-    log.info("                 Predicted KEEP    Predicted REJECT")
-    log.info("  Actual keep:     TP = %-5d        FN = %-5d", tp, fn)
-    log.info("  Actual discard:  FP = %-5d        TN = %-5d", fp, tn)
-    log.info("")
-    log.info("  Total images:  %d", total)
-    log.info("  ARW (keep):    %d  (%.1f%%)", tp + fn, 100 * (tp + fn) / total if total else 0)
-    log.info("  No-ARW (disc): %d  (%.1f%%)", fp + tn, 100 * (fp + tn) / total if total else 0)
-    log.info("")
-    log.info("  Accuracy:   %.4f  (%d / %d correct)", accuracy, tp + tn, total)
-    log.info("  Precision:  %.4f  (of predicted keeps, %.1f%% are real keeps)",
-             precision, 100 * precision)
-    log.info("  Recall:     %.4f  (of real keeps, %.1f%% are recovered)",
-             recall, 100 * recall)
-    log.info("  F1 score:   %.4f", f1)
-
-    # Show rating distribution for actual-keep vs actual-discard
-    keep_ratings: dict[int, int] = {}
-    disc_ratings: dict[int, int] = {}
-    for score in all_scores:
-        stem = score.path.stem.lower()
-        bucket = keep_ratings if stem in arw_stems else disc_ratings
-        bucket[score.rating] = bucket.get(score.rating, 0) + 1
-
-    log.info("")
-    log.info("Rating distribution by ground truth:")
-    log.info("  Rating   Keep(ARW)  Discard(no-ARW)")
-    for r in sorted(set(list(keep_ratings.keys()) + list(disc_ratings.keys()))):
-        label = "Reject" if r == -1 else f"  {r}★  "
-        log.info("  %6s    %-5d      %-5d", label, keep_ratings.get(r, 0), disc_ratings.get(r, 0))
-
-    # Show some mismatches for debugging
-    if mismatches:
-        n_show = min(20, len(mismatches))
-        log.info("")
-        log.info("Sample mismatches (showing %d of %d):", n_show, len(mismatches))
-        for name, pred, actual in mismatches[:n_show]:
-            log.info("  %-25s  predicted=%-7s  actual=%s", name, pred, actual)
+# (Keep _collect_images and other helper functions if they are still used by LabelCheck, 
+# although they should ideally be in the Engine as well. For now, I'll move them to Engine)
 
 
 # ---------------------------------------------------------------------------
