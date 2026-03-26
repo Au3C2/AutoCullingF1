@@ -1,13 +1,6 @@
 """
-fence_classifier.py — Wire fence detection inference.
-
-Loads pretrained fence binary classifier and provides inference functions.
-Models: ResNet18 (fastest), MobileNetV2 (best F1), ResNet50 (balanced)
-
-Usage:
-    classifier = FenceClassifier(arch='mobilenetv2')
-    pred_binary, confidence = classifier.predict_image(img_path)  # 0 or 1, [0, 1]
-    batch_preds = classifier.predict_batch(img_paths)              # array of 0/1
+fence_classifier.py — Wire fence detection inference (LITE VERSION).
+Uses onnxruntime and remove torch/cv2 deps.
 """
 
 from __future__ import annotations
@@ -17,210 +10,69 @@ from pathlib import Path
 from typing import Union
 
 import numpy as np
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
-import cv2
+from PIL import Image
 
 log = logging.getLogger(__name__)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 class FenceClassifier:
-    """Wire fence binary classifier."""
+    """Wire fence binary classifier using ONNX."""
     
-    def __init__(self, arch: str = "mobilenetv2", checkpoint_dir: str = "fence_classifier_checkpoints"):
-        """
-        Initialize fence classifier.
-        
-        Args:
-            arch: Model architecture ('resnet18', 'resnet50', 'mobilenetv2')
-            checkpoint_dir: Directory containing model checkpoints
-        """
+    def __init__(self, arch: str = "mobilenetv2", checkpoint_dir: str = "models"):
         self.arch = arch
-        self.checkpoint_dir = Path(checkpoint_dir)
-        self.model = self._build_and_load_model()
-        self.model.eval()
+        self.model_path = Path(checkpoint_dir) / f"fence_{arch}.onnx"
+        self.session = None
         
-        # Preprocessing transform (must match training)
-        self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-        
-        log.info(f"FenceClassifier initialized: {arch}, device={device}")
-    
-    def _build_and_load_model(self) -> nn.Module:
-        """Build model architecture and load weights."""
-        # Build model
-        if self.arch == "resnet18":
-            model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-            in_features = model.fc.in_features
-            model.fc = nn.Linear(in_features, 1)
-        elif self.arch == "resnet50":
-            model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-            in_features = model.fc.in_features
-            model.fc = nn.Linear(in_features, 1)
-        elif self.arch == "mobilenetv2":
-            model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
-            in_features = model.classifier[1].in_features
-            model.classifier[1] = nn.Linear(in_features, 1)
-        else:
-            raise ValueError(f"Unknown arch: {self.arch}")
-        
-        # Load checkpoint
-        checkpoint_path = self.checkpoint_dir / self.arch / "best.pt"
-        if not checkpoint_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-        
-        state_dict = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(state_dict)
-        model = model.to(device)
-        return model
+        try:
+            import onnxruntime as ort
+            if self.model_path.exists():
+                self.session = ort.InferenceSession(str(self.model_path))
+                log.info(f"FenceClassifier loaded from {self.model_path}")
+            else:
+                log.warning(f"Fence ONNX model not found at {self.model_path}. Fence veto disabled.")
+        except Exception as e:
+            log.warning(f"Failed to initialize FenceClassifier ONNX: {e}")
+            self.session = None
+            
+        # Standard ImageNet Normalize
+        self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     
     def predict_image(self, img_path: Union[str, Path]) -> tuple[int, float]:
-        """
-        Predict fence class for a single image.
-        
-        Args:
-            img_path: Path to image file
-        
-        Returns:
-            (pred_class, confidence)
-            - pred_class: 0 (no fence) or 1 (fence)
-            - confidence: probability of predicted class [0, 1]
-        """
         img_path = Path(img_path)
-        
-        # Load image
         try:
-            img = cv2.imdecode(np.fromfile(str(img_path), dtype=np.uint8), cv2.IMREAD_COLOR)
-            if img is None:
-                log.warning(f"Failed to load {img_path}, returning pred=0")
-                return 0, 0.0
-        except Exception as e:
-            log.warning(f"Error loading {img_path}: {e}, returning pred=0")
+            pil_img = Image.open(img_path).convert("RGB")
+            return self.predict_roi(np.array(pil_img), (0, 0, pil_img.width, pil_img.height))
+        except Exception:
             return 0, 0.0
         
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        return self.predict_roi(img, (0, 0, img.shape[1], img.shape[0]))
-        
     def predict_roi(self, img_rgb: np.ndarray, bbox: tuple[int, int, int, int]) -> tuple[int, float]:
-        """
-        Predict fence class for a specific ROI in an RGB image.
-        """
+        if self.session is None: return 0, 0.0
+            
         x1, y1, x2, y2 = bbox
         h, w = img_rgb.shape[:2]
         
-        # No expansion; extract exactly bounding box as detected by YOLO.
         x1, y1 = max(0, int(x1)), max(0, int(y1))
         x2, y2 = min(w, int(x2)), min(h, int(y2))
         
-        if x2 <= x1 or y2 <= y1:
-            return 0, 0.0
+        if x2 <= x1 or y2 <= y1: return 0, 0.0
             
-        roi = img_rgb[y1:y2, x1:x2]
-        if roi.size == 0:
-            return 0, 0.0
+        roi_arr = img_rgb[y1:y2, x1:x2]
+        if roi_arr.size == 0: return 0, 0.0
             
-        img_tensor = self.transform(roi).unsqueeze(0).to(device)
+        # Pillow Resize
+        roi_pil = Image.fromarray(roi_arr).resize((224, 224), Image.BILINEAR)
+        roi = np.array(roi_pil).astype(np.float32) / 255.0
+        roi = (roi - self.mean) / self.std
+        roi = np.transpose(roi, (2, 0, 1))
+        roi = np.expand_dims(roi, axis=0)
         
-        with torch.no_grad():
-            logit = self.model(img_tensor).squeeze()
-            prob = torch.sigmoid(logit).item()
-            pred = 1 if prob > 0.5 else 0
+        outputs = self.session.run(None, {self.session.get_inputs()[0].name: roi})
+        logit = outputs[0][0][0]
+        prob = 1.0 / (1.0 + np.exp(-logit))
+        pred = 1 if prob > 0.5 else 0
         
-        return pred, prob
-    
+        return pred, float(prob)
+
     def predict_batch(self, img_paths: list[Union[str, Path]], batch_size: int = 32) -> np.ndarray:
-        """
-        Predict fence class for a batch of images.
-        
-        Args:
-            img_paths: List of image paths
-            batch_size: Batch size for inference
-        
-        Returns:
-            Array of predictions (0 or 1) with same length as img_paths
-        """
-        preds = []
-        for i in range(0, len(img_paths), batch_size):
-            batch_paths = img_paths[i : i + batch_size]
-            batch_imgs = []
-            
-            for img_path in batch_paths:
-                try:
-                    img = cv2.imdecode(
-                        np.fromfile(str(img_path), dtype=np.uint8), cv2.IMREAD_COLOR
-                    )
-                    if img is None:
-                        batch_imgs.append(np.zeros((3, 224, 224), dtype=np.float32))
-                        continue
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img_tensor = self.transform(img)
-                    batch_imgs.append(img_tensor)
-                except Exception as e:
-                    log.warning(f"Error loading {img_path}: {e}")
-                    batch_imgs.append(torch.zeros(3, 224, 224))
-            
-            if batch_imgs:
-                batch_tensor = torch.stack(batch_imgs).to(device)
-                with torch.no_grad():
-                    logits = self.model(batch_tensor).squeeze()
-                    probs = torch.sigmoid(logits)
-                    batch_preds = (probs > 0.5).float().cpu().numpy()
-                preds.extend(batch_preds)
-        
-        return np.array(preds, dtype=np.int32)
-    
-    def predict_with_confidence(
-        self, img_paths: list[Union[str, Path]], batch_size: int = 32
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Predict fence class and confidence for a batch of images.
-        
-        Args:
-            img_paths: List of image paths
-            batch_size: Batch size for inference
-        
-        Returns:
-            (preds, confidences)
-            - preds: Array of predictions (0 or 1)
-            - confidences: Array of confidence scores [0, 1]
-        """
-        preds = []
-        confidences = []
-        
-        for i in range(0, len(img_paths), batch_size):
-            batch_paths = img_paths[i : i + batch_size]
-            batch_imgs = []
-            
-            for img_path in batch_paths:
-                try:
-                    img = cv2.imdecode(
-                        np.fromfile(str(img_path), dtype=np.uint8), cv2.IMREAD_COLOR
-                    )
-                    if img is None:
-                        batch_imgs.append(torch.zeros(3, 224, 224))
-                        continue
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img_tensor = self.transform(img)
-                    batch_imgs.append(img_tensor)
-                except Exception as e:
-                    log.warning(f"Error loading {img_path}: {e}")
-                    batch_imgs.append(torch.zeros(3, 224, 224))
-            
-            if batch_imgs:
-                batch_tensor = torch.stack(batch_imgs).to(device)
-                with torch.no_grad():
-                    logits = self.model(batch_tensor).squeeze()
-                    probs = torch.sigmoid(logits)
-                    batch_preds = (probs > 0.5).float().cpu().numpy()
-                    batch_confs = probs.cpu().numpy()
-                preds.extend(batch_preds)
-                confidences.extend(batch_confs)
-        
-        return np.array(preds, dtype=np.int32), np.array(confidences, dtype=np.float32)
+        results = [self.predict_image(p)[0] for p in img_paths]
+        return np.array(results, dtype=np.int32)

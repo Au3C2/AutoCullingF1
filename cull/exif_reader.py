@@ -14,11 +14,45 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        base_path = Path(sys._MEIPASS)
+    except Exception:
+        # Assuming this file is in cull/exif_reader.py, 
+        # project root is parent.parent
+        base_path = Path(__file__).parent.parent.resolve()
+    return base_path / relative_path
+
+def _find_exiftool_path() -> list[str]:
+    """Return command list for exiftool (bundled or system-wide)."""
+    # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
+    ext = ".exe" if sys.platform == "win32" else ""
+    bundled_perl = get_resource_path(f"external/exiftool/perl{ext}")
+    bundled_pl = get_resource_path("external/exiftool/exiftool.pl")
+    lib_path = get_resource_path("external/exiftool/lib")
+
+    if bundled_perl.exists() and bundled_pl.exists() and lib_path.exists():
+        return [str(bundled_perl), "-I", str(lib_path), str(bundled_pl)]
+
+    # 2. Check for bundled binary/launcher
+    bundled_bin = get_resource_path(f"external/exiftool/exiftool{ext}")
+    if bundled_bin.exists():
+        # If it's the perl launcher (with a lib folder), but we didn't find perl.exe 
+        # above, we still need to hope 'perl' is in the path OR that it's a standalone exe.
+        if lib_path.exists():
+            return ["perl", "-I", str(lib_path), str(bundled_bin)]
+        return [str(bundled_bin)]
+
+    # 3. Fallback to system-wide
+    return ["exiftool"]
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -78,9 +112,10 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
     """
     if not paths:
         return []
-
+        
+    cmd_base = _find_exiftool_path()
     cmd = [
-        "exiftool",
+        *cmd_base,
         "-json",
         "-n",                   # numeric values (no units/text decoration)
         *[f"-{f}" for f in _EXIFTOOL_FIELDS],

@@ -44,10 +44,10 @@ log = logging.getLogger(__name__)
 # Constants  (v5 — tuned via offline grid search with user feedback fixed labels)
 # ---------------------------------------------------------------------------
 
-SHARP_THRESH: float = 0.05   # veto threshold — below this → Rating -1
-W_SHARP: float = 1.5          # weight for sharpness in raw score formula
-W_COMP: float = 2.5           # weight for composition in raw score formula
-MIN_RAW: float = 3.1          # minimum raw score — below this → Rating -1
+SHARP_THRESH: float = 0.05
+W_SHARP: float = 1.5
+W_COMP: float = 2.5
+MIN_RAW: float = 3.1
 
 # Fence detection (P3)
 ENABLE_FENCE_VETO: bool = False  # enable fence veto (set to False to disable)

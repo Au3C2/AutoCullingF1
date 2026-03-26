@@ -24,6 +24,7 @@ yolo26n.pt
 
 # Generated XMP sidecars (output artefacts — not committed)
 *.xmp
+# Note: we do NOT commit XMP files even for tests; the test script uses an internal baseline.
 
 # Training runs (large — regenerate via train_f1_yolo.py)
 runs/
@@ -69,6 +70,7 @@ p4_model_checkpoints/*.onnx
 
 # Raw image files
 *.jpg
+!tests/test_img/*.jpg
 *.jpeg
 *.png
 *.bmp
@@ -81,3 +83,5 @@ p4_model_checkpoints/*.onnx
 *.NEF
 *.ARW
 *.bin
+auto_cull
+external/
