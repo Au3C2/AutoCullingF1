@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import platform
+import subprocess
 from pathlib import Path
 
 from cull.engine import CullingEngine, EngineConfig
@@ -25,6 +27,41 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).parent.resolve()
     
     return base_path / relative_path
+
+def select_folder(default_dir: Path) -> Path | None:
+    """Prompt user to select a folder using native dialog."""
+    if platform.system() == "Darwin":
+        # AppleScript for native macOS picker
+        # We use a system-level confirm dialog to ensure it comes to front
+        script = (
+            f'tell application "System Events"\n'
+            f'  activate\n'
+            f'  set theFolder to choose folder with prompt "Select photo directory to cull" '
+            f'default location POSIX file "{default_dir}"\n'
+            f'  return POSIX path of theFolder\n'
+            f'end tell'
+        )
+        try:
+            out = subprocess.check_output(['osascript', '-e', script], text=True).strip()
+            return Path(out) if out else None
+        except Exception:
+            return None
+    elif platform.system() == "Windows":
+        # PowerShell for native Windows picker
+        script = (
+            f"Add-Type -AssemblyName System.Windows.Forms; "
+            f"$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+            f"$f.SelectedPath = '{default_dir}'; "
+            f"$f.Description = 'Select photo directory to cull'; "
+            f"$f.ShowNewFolderButton = $false; "
+            f"if($f.ShowDialog() -eq 'OK') {{ $f.SelectedPath }}"
+        )
+        try:
+            out = subprocess.check_output(['powershell', '-Command', script], text=True).strip()
+            return Path(out) if out else None
+        except Exception:
+            return None
+    return None
 
 def setup_logging(base_dir: Path):
     log_dir = base_dir / "logs"
@@ -128,7 +165,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument("--input-dir", type=Path, required=True, help="Directory to process.")
+    parser.add_argument("--input-dir", type=Path, default=None, help="Directory to process. If omitted, a folder picker will open.")
     parser.add_argument("--recursive", action="store_true", help="Recursive scan.")
     parser.add_argument("--f1-model", type=Path, default=Path("models/f1_yolov8n.onnx"), help="Path to F1 ONNX model.")
     parser.add_argument("--rf-api-key", default=None, help="Roboflow API key.")
@@ -154,6 +191,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    
+    # GUI Fallback: if no input-dir provided and we are in a TTY or double-clicked
+    if args.input_dir is None:
+        # Determine current app/script directory for default location
+        if getattr(sys, 'frozen', False):
+            # If running as bundled executable, use the dir containing the exe
+            default_dir = Path(sys.executable).parent
+        else:
+            default_dir = Path(__file__).parent.resolve()
+            
+        selected = select_folder(default_dir)
+        if selected:
+            args.input_dir = selected
+        else:
+            print("No directory selected. Exiting.")
+            return 0
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
