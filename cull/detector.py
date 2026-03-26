@@ -85,6 +85,7 @@ class LiteYOLO:
             providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
             providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(model_path), providers=providers)
+            log.info(f"YOLO LITE active providers: {self.session.get_providers()}")
             self.input_name = self.session.get_inputs()[0].name
             meta = self.session.get_modelmeta().custom_metadata_map
             self.imgsz = (640, 640)

@@ -31,20 +31,56 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).parent.parent.resolve()
     return base_path / relative_path
 
-def _find_exiftool_path() -> str:
-    """Return path to bundled exiftool if exists, otherwise assume system-wide."""
-    bundled = get_resource_path("external/exiftool/exiftool")
-    if bundled.exists():
-        lib_path = bundled.parent / "lib"
+def _find_exiftool_path() -> list[str]:
+    """Return command list for exiftool (bundled or system-wide)."""
+    # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
+    ext = ".exe" if sys.platform == "win32" else ""
+    bundled_perl = get_resource_path(f"external/exiftool/perl{ext}")
+    bundled_pl = get_resource_path("external/exiftool/exiftool.pl")
+    lib_path = get_resource_path("external/exiftool/lib")
+
+    if bundled_perl.exists() and bundled_pl.exists() and lib_path.exists():
+        return [str(bundled_perl), "-I", str(lib_path), str(bundled_pl)]
+
+    # 2. Check for bundled binary/launcher
+    bundled_bin = get_resource_path(f"external/exiftool/exiftool{ext}")
+    if bundled_bin.exists():
         if lib_path.exists():
-            return f"perl -I {lib_path} {bundled}"
-        return str(bundled)
-    return "exiftool"
+            return ["perl", "-I", str(lib_path), str(bundled_bin)]
+        return [str(bundled_bin)]
+
+    # 3. Fallback to system-wide
+    return ["exiftool"]
+
+def _find_ffmpeg_path() -> str:
+    """Return path to bundled ffmpeg if exists, otherwise assume system-wide."""
+    ext = ".exe" if sys.platform == "win32" else ""
+    # 1. Bundled (if we decided to bundle, but we won't for size)
+    bundled = get_resource_path(f"external/ffmpeg/ffmpeg{ext}")
+    if bundled.exists(): return str(bundled)
+    # 2. Known local path on this machine
+    for cand in [Path(r"D:\ProgramData\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe")]:
+        if cand.exists(): return str(cand)
+    # 3. System-wide
+    return "ffmpeg"
+
+def _find_ffprobe_path() -> str:
+    """Return path to bundled ffprobe if exists, otherwise assume system-wide."""
+    ext = ".exe" if sys.platform == "win32" else ""
+    # 1. Bundled
+    bundled = get_resource_path(f"external/ffmpeg/ffprobe{ext}")
+    if bundled.exists(): return str(bundled)
+    # 2. Known local path
+    for cand in [Path(r"D:\ProgramData\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe")]:
+        if cand.exists(): return str(cand)
+    # 3. System-wide
+    return "ffprobe"
 
 def probe_embedded_preview(path: Path, min_width: int = 800) -> Tuple[int, int, int] | None:
     try:
+        ffprobe_bin = _find_ffprobe_path()
         proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", 
+            [ffprobe_bin, "-v", "error", "-select_streams", "v", "-show_entries", 
              "stream=index,width,height,codec_name:stream_disposition=dependent", "-of", "json", str(path)],
             capture_output=True, text=True, timeout=10
         )
@@ -65,8 +101,9 @@ def probe_embedded_preview(path: Path, min_width: int = 800) -> Tuple[int, int, 
 
 def probe_full_dimensions(path: Path) -> Tuple[int, int] | None:
     try:
+        ffprobe_bin = _find_ffprobe_path()
         proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", 
+            [ffprobe_bin, "-v", "error", "-select_streams", "v:0", "-show_entries", 
              "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
             capture_output=True, text=True, timeout=10
         )
@@ -88,7 +125,15 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     if preview is not None:
         idx, w, h = preview
         try:
-            cmd = ["ffmpeg", "-hide_banner", "-v", "error", "-hwaccel", "auto", "-i", str(path), "-map", f"0:{idx}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-y", "pipe:1"]
+            ffmpeg_bin = _find_ffmpeg_path()
+            # Use hardware acceleration if available (cuda for NVIDIA, d3d11va for generic Windows)
+            hw_accel = "cuda" if sys.platform == "win32" else "auto"
+            cmd = [
+                ffmpeg_bin, "-hide_banner", "-v", "error", 
+                "-hwaccel", hw_accel, 
+                "-i", str(path), "-map", f"0:{idx}", 
+                "-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-y", "pipe:1"
+            ]
             proc = subprocess.run(cmd, capture_output=True, timeout=30)
             if proc.returncode == 0 and len(proc.stdout) == w * h * 3:
                 img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(h, w, 3)
@@ -135,7 +180,7 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     if suffix in RAW_EXTS:
         for tag in ["-JpgFromRaw", "-PreviewImage"]:
             try:
-                exiftool_cmd = _find_exiftool_path().split()
+                exiftool_cmd = _find_exiftool_path()
                 cmd = [*exiftool_cmd, "-b", tag, str(path)]
                 proc = subprocess.run(cmd, capture_output=True, timeout=10)
                 if proc.returncode == 0 and len(proc.stdout) > 0:
@@ -151,7 +196,7 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
 
 def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float, float, float] | None = None) -> tuple[bool, str]:
     et_rating, pick_flag = max(0, rating), (1 if rating > 0 else -1)
-    exiftool_cmd = _find_exiftool_path().split()
+    exiftool_cmd = _find_exiftool_path()
     cmd = [*exiftool_cmd, "-overwrite_original", f"-XMP-xmp:Rating={et_rating}", f"-XMP-xmpDM:Pick={pick_flag}"]
     if crop:
         t, l, b, r = crop

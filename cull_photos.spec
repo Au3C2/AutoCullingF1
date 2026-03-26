@@ -6,13 +6,27 @@ from PyInstaller.utils.hooks import collect_data_files
 block_cipher = None
 
 # Assets to bundle: Bundle the ONNX models!
+is_win = sys.platform == "win32"
+exiftool_exe = 'external/exiftool/exiftool.exe' if is_win else 'external/exiftool/exiftool'
+
 datas = [
     ('models/f1_yolov8n.onnx', 'models'),
     ('models/yolov8n.onnx', 'models'),
     ('models/p4_car_model.onnx', 'models'),
-    ('external/exiftool/exiftool', 'external/exiftool'),
+    (exiftool_exe, 'external/exiftool'),
     ('external/exiftool/lib', 'external/exiftool/lib'),
 ]
+
+# Include other exiftool files for the launcher if on Windows
+if is_win:
+     # We might need the other dlls and pl files from exiftool_files which we flattened
+     # Let's just bundle the whole external/exiftool directory as a safe measure
+     datas = [
+        ('models/f1_yolov8n.onnx', 'models'),
+        ('models/yolov8n.onnx', 'models'),
+        ('models/p4_car_model.onnx', 'models'),
+        ('external/exiftool/*', 'external/exiftool'),
+     ]
 
 binaries = []
 
@@ -36,6 +50,8 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # Single File implementation
+exe_name = 'auto_cull_v0.1_win_x64' if is_win else 'auto_cull'
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -43,11 +59,11 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='auto_cull', # Rename to a cleaner name
+    name=exe_name, 
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
-    upx=True,
+    strip=False,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,

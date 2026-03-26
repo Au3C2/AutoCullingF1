@@ -31,18 +31,28 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).parent.parent.resolve()
     return base_path / relative_path
 
-def _find_exiftool_path() -> str:
-    """Return path to bundled exiftool if exists, otherwise assume system-wide."""
-    # Bundled path: external/exiftool/exiftool
-    bundled = get_resource_path("external/exiftool/exiftool")
-    if bundled.exists():
-        # Important: specify the include path for the bundled lib!
-        # -I flag for Perl
-        lib_path = bundled.parent / "lib"
+def _find_exiftool_path() -> list[str]:
+    """Return command list for exiftool (bundled or system-wide)."""
+    # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
+    ext = ".exe" if sys.platform == "win32" else ""
+    bundled_perl = get_resource_path(f"external/exiftool/perl{ext}")
+    bundled_pl = get_resource_path("external/exiftool/exiftool.pl")
+    lib_path = get_resource_path("external/exiftool/lib")
+
+    if bundled_perl.exists() and bundled_pl.exists() and lib_path.exists():
+        return [str(bundled_perl), "-I", str(lib_path), str(bundled_pl)]
+
+    # 2. Check for bundled binary/launcher
+    bundled_bin = get_resource_path(f"external/exiftool/exiftool{ext}")
+    if bundled_bin.exists():
+        # If it's the perl launcher (with a lib folder), but we didn't find perl.exe 
+        # above, we still need to hope 'perl' is in the path OR that it's a standalone exe.
         if lib_path.exists():
-            return f"perl -I {lib_path} {bundled}"
-        return str(bundled)
-    return "exiftool"
+            return ["perl", "-I", str(lib_path), str(bundled_bin)]
+        return [str(bundled_bin)]
+
+    # 3. Fallback to system-wide
+    return ["exiftool"]
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -102,10 +112,10 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
     """
     if not paths:
         return []
-
-    exiftool_cmd = _find_exiftool_path().split()
+        
+    cmd_base = _find_exiftool_path()
     cmd = [
-        *exiftool_cmd,
+        *cmd_base,
         "-json",
         "-n",                   # numeric values (no units/text decoration)
         *[f"-{f}" for f in _EXIFTOOL_FIELDS],
