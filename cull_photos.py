@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 
 from cull.engine import CullingEngine, EngineConfig
+from cull.loader import subprocess_flags
+from cull.protocol import JsonLinesHandler, emit
 from cull.scorer import SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
 import time
 
@@ -57,13 +59,14 @@ def select_folder(default_dir: Path) -> Path | None:
             f"if($f.ShowDialog() -eq 'OK') {{ $f.SelectedPath }}"
         )
         try:
-            out = subprocess.check_output(['powershell', '-Command', script], text=True).strip()
+            out = subprocess.check_output(['powershell', '-Command', script], text=True,
+                                          **subprocess_flags()).strip()
             return Path(out) if out else None
         except Exception:
             return None
     return None
 
-def setup_logging(base_dir: Path):
+def setup_logging(base_dir: Path, console: bool = True) -> Path | None:
     log_dir = base_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -74,21 +77,15 @@ def setup_logging(base_dir: Path):
     fh = logging.FileHandler(log_file)
     fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
     root_log.addHandler(fh)
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter('%(message)s'))
-    root_log.addHandler(ch)
+    if console:
+        ch = logging.StreamHandler()
+        ch.setFormatter(logging.Formatter('%(message)s'))
+        root_log.addHandler(ch)
     log.info("Logging to %s", log_file)
     return log_file
 
-def run(args: argparse.Namespace) -> int:
-    input_dir = Path(args.input_dir)
-    if not input_dir.is_dir():
-        log.error("Input directory not found: %s", input_dir)
-        return 1
-        
-    setup_logging(input_dir)
-        
-    # Map argparse Namespace to EngineConfig
+def _build_config(args: argparse.Namespace, input_dir: Path) -> EngineConfig:
+    """Map argparse Namespace → EngineConfig (shared by CLI and JSON modes)."""
     config = EngineConfig(
         input_dir=input_dir,
         recursive=args.recursive,
@@ -120,9 +117,131 @@ def run(args: argparse.Namespace) -> int:
         if bundled_f1.exists():
             config.f1_model_path = bundled_f1
             log.debug("Using bundled F1 model: %s", bundled_f1)
+    return config
+
+
+def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
+    """JSON Lines sidecar mode for the Tauri GUI.
+
+    Streams structured events (stage/group/frame/done/cancelled/error) as one
+    JSON object per line on stdout, and reads commands from stdin: the bare
+    line ``cancel`` aborts a running job; after completion the process stays
+    alive and answers preview requests (``{"cmd": "preview", ...}``) so the
+    GUI can decode thumbnails without respawning the engine.
+    """
+    import base64
+    import io
+    import json
+    import threading
+    from cull.gui.preview import render_pil  # reuse overlay thumbnail renderer
+    from cull.scorer import ImageScore
+
+    setup_logging(input_dir, console=False)
+    config = _build_config(args, input_dir)
+    cancel_event = threading.Event()
+    log.info("json-lines mode: stdin=%r isatty=%s", sys.stdin, getattr(sys.stdin, "isatty", lambda: None)())
+
+    def stdin_reader() -> None:
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
+                if line == "cancel":
+                    cancel_event.set()
+                    continue
+                try:
+                    cmd = json.loads(line)
+                except Exception:
+                    continue
+                if cmd.get("cmd") == "preview":
+                    log.info("preview: rendering %s size=%s", cmd["path"], cmd.get("size"))
+                    try:
+                        pil = render_pil(
+                            ImageScore(path=Path(cmd["path"]), s_sharp=0.0, s_comp=0.0,
+                                       raw_score=0.0, rating=0),
+                            max_size=int(cmd.get("size", 520)))
+                    except Exception as exc:
+                        log.info("preview: render raised: %r", exc)
+                        pil = None
+                    log.info("preview: rendered=%s", pil is not None)
+                    if pil is None:
+                        emit({"type": "preview", "path": cmd["path"], "png": None})
+                        log.info("preview: emitted null")
+                    else:
+                        buf = io.BytesIO()
+                        pil.save(buf, format="PNG")
+                        emit({"type": "preview", "path": cmd["path"],
+                              "png": base64.b64encode(buf.getvalue()).decode("ascii")})
+                        log.info("preview: emitted png %d bytes", buf.tell())
+                elif cmd.get("cmd") == "quit":
+                    return
+        except Exception:
+            pass
+
+    # Attach the JSON handler to the root logger; engine INFO records (which
+    # include the per-group/per-frame lines) become structured events.
+    root = logging.getLogger()
+    previous_level = root.level
+    if previous_level > logging.INFO:
+        root.setLevel(logging.INFO)
+    handler = JsonLinesHandler(sys.stdout)
+    root.addHandler(handler)
+    stdin_thread = threading.Thread(target=stdin_reader, daemon=True)
+    stdin_thread.start()
 
     engine = CullingEngine(config)
-    
+    try:
+        pre_paths = engine._collect_images(config.input_dir, config.recursive)
+        emit({"type": "total", "frames": len(pre_paths)})
+        emit({"type": "paths", "paths": {p.name: str(p) for p in pre_paths}})
+    except Exception:
+        pass
+
+    def progress(msg: str, p: float) -> None:
+        emit({"type": "stage", "msg": msg, "pct": p})
+
+    try:
+        scores, elapsed = engine.run(progress_callback=progress, cancel_event=cancel_event)
+    except Exception as exc:
+        emit({"type": "error", "message": str(exc)})
+        return 1
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous_level)
+
+    if cancel_event.is_set():
+        emit({"type": "cancelled", "count": len(scores)})
+        return 0
+
+    total = len(scores)
+    keep = sum(1 for s in scores if s.rating > 0)
+    stars: dict[int, int] = {}
+    for s in scores:
+        if s.rating > 0:
+            stars[s.rating] = stars.get(s.rating, 0) + 1
+    emit({"type": "done", "elapsed": elapsed, "total": total, "keep": keep,
+          "reject": total - keep, "stars": stars})
+
+    # Stay alive for preview requests until the GUI sends "quit".
+    stdin_thread.join(timeout=None)
+    return 0
+
+
+def run(args: argparse.Namespace) -> int:
+    input_dir = Path(args.input_dir)
+    if not input_dir.is_dir():
+        log.error("Input directory not found: %s", input_dir)
+        return 1
+
+    if args.json_lines:
+        return run_json_lines(args, input_dir)
+
+    setup_logging(input_dir)
+    config = _build_config(args, input_dir)
+
+    engine = CullingEngine(config)
+
     def progress(msg, p):
         log.info("[%d%%] %s", int(p * 100), msg)
 
@@ -186,6 +305,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scale-width", type=int, default=1280)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--json-lines", action="store_true",
+                        help="JSON Lines sidecar mode for the Tauri GUI (events on stdout, "
+                             "cancel/preview commands on stdin)")
 
     return parser.parse_args(argv)
 
@@ -208,12 +330,13 @@ def main(argv: list[str] | None = None) -> int:
             print("No directory selected. Exiting.")
             return 0
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-        stream=sys.stdout,
-    )
+    if not args.json_lines:
+        logging.basicConfig(
+            level=logging.DEBUG if args.verbose else logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+            stream=sys.stdout,
+        )
     return run(args)
 
 if __name__ == "__main__":

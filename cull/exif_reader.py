@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from cull.loader import subprocess_flags
+
 log = logging.getLogger(__name__)
 
 def get_resource_path(relative_path: str) -> Path:
@@ -132,6 +134,7 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             capture_output=True,
             text=True,
             check=True,
+            **subprocess_flags(stdin_devnull=False),
         )
     except FileNotFoundError:
         raise RuntimeError(

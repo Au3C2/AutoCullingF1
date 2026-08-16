@@ -115,6 +115,44 @@ pyinstaller cull_photos.spec --noconfirm
 ```
 打包产物将生成在 `dist/cull_photos/` 目录下。
 
+---
+
+## 🖥️ 桌面图形界面
+
+主桌面应用为 **Tauri 2** 壳（`ui/` 静态前端 + `src-tauri/` Rust 应用）：深色现代 UI 由系统 WebView 渲染（Windows 用 WebView2，macOS 用 WKWebView），外壳本体约 10MB。筛选引擎以打包的 Python sidecar（`cull_photos.py --json-lines`）形式运行，通过 stdio 流式推送事件——GUI 每次任务只启动一次引擎，任务结束后进程驻留用于解码预览，点击预览无需重新启动进程。
+
+- **流式结果**：每帧打分完成后立即插入结果列表，无需等待全部筛选结束即可开始点选预览。
+- **实时进度**：权重重映射的阶段进度条（打分阶段占据大部分进度）+ 逐帧计数（"已打分 X/Y，保留 A / 丢弃 B"）。
+- **功能齐全**：参数面板覆盖全部 CLI 选项（基本 + 高级）；设置保存在浏览器 localStorage 中，跨会话持久。
+- **结果查看**：可排序/筛选的评分表格（星级、评分、否决原因）；点击行即可在**固定尺寸预览窗格**中查看照片，窗格大小永不随内容变化。
+- **随时取消**：运行中可停止任务——已打分的结果保留展示，且不会写入任何文件。
+- **日志与导出**：实时日志面板、汇总统计（吞吐、保留/丢弃、星级分布）、原生保存对话框一键导出 CSV。
+
+**硬件后端（按平台自动选择）**：Windows 默认优先 CUDA（`onnxruntime-gpu` + `nvidia-cudnn-cu12`），macOS 优先 MLX 再 CoreML，其余平台使用 CPU；不可用的后端自动降级到 CPU。Windows 上源码方式运行会自动启用 CUDA；打包后的可执行文件为纯 CPU 版（CUDA 运行时无法随包分发，否则体积增加约 1GB）。
+
+源码方式运行：
+```bash
+python cull_gui.py                    # 轻量 CustomTkinter 备用 GUI
+cd src-tauri && cargo tauri dev       # Tauri UI（需要 Rust 工具链）
+```
+
+以不抢焦点方式启动打包后的 Tauri 应用（例如不打断全屏游戏）：
+```powershell
+Start-Process -FilePath "...\auto-culling-gui.exe" -WindowStyle Minimized
+```
+Rust 侧诊断日志写入可执行文件旁的 `gui.log`。
+
+构建 Tauri 应用：
+```bash
+pyinstaller cull_sidecar.spec --noconfirm          # 1. 构建 windowed sidecar
+cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-gnu.exe
+tauri build --no-bundle                            # 2. 构建外壳 + sidecar
+# Windows: src-tauri/target/release/auto-culling.exe（旁边带 cull-sidecar.exe）
+# macOS:   src-tauri/target/release/auto-culling
+```
+
+旧版 CustomTkinter GUI 仍可用 `pyinstaller cull_gui.spec --noconfirm` 构建（产物 `dist/auto_cull_gui_v0.1_win_x64.exe`）。打包后的程序以 `CREATE_NO_WINDOW` 方式启动子进程，任务开始阶段不会再闪现命令行窗口。
+
 ## 📂 项目结构
 
 ```text
@@ -146,11 +184,16 @@ $$score = 1.5 \times S_{锐度} + 2.5 \times S_{构图} - 惩罚_{截断/遮挡}
 
 ## 🧪 自动化测试
 
-运行集成测试套件以验证后端推理准确性与 XMP 字段正确性：
+运行完整测试套件（CLI 流水线、GUI 逻辑与视图层、取消语义）：
 
 ```bash
-pytest tests/test_cull.py
+pytest tests/
 ```
+
+说明：
+- `tests/test_package.py` 额外验证打包后的二进制，需要构建产物位于项目根目录（否则自动跳过）。
+- GUI 视图层测试会实例化真实窗口并通过泵事件循环驱动。它们需要显示环境，无显示时自动跳过；无头 Linux CI 可用 `xvfb-run pytest tests/`。
+- `pyproject.toml` 中配置了 `--capture=sys`：fd 级捕获在 Windows 上会导致 Tcl/Tk 初始化偶发失败。
 
 ---
 

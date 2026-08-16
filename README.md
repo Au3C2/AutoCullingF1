@@ -115,6 +115,44 @@ pyinstaller cull_photos.spec --noconfirm
 ```
 The output will be available in `dist/cull_photos/`.
 
+---
+
+## 🖥️ Desktop GUI
+
+The primary desktop app is a **Tauri 2** shell (`ui/` static frontend + Rust in `src-tauri/`): a modern dark UI rendered by the OS webview (WebView2 on Windows, WKWebView on macOS), with an installer-sized shell of ~10MB. The culling engine runs as a bundled Python sidecar (`cull_photos.py --json-lines`) that streams events over stdio — the GUI spawns the engine once per job and keeps it alive afterwards to decode previews, so there is no per-click process startup.
+
+- **Streaming results**: rows appear in the table the moment each frame is scored — no need to wait for the whole job.
+- **Live progress**: remapped phase bar (the scoring phase spans most of the bar) plus per-frame counters ("scored X/Y, keep A / discard B").
+- **Full control**: every CLI option in the parameter panel (basic + advanced); settings persist in the browser's localStorage between sessions.
+- **Result review**: sortable/filterable table of ratings, scores and veto reasons; click a row to preview the photo in a **fixed-size preview pane** that never reflows the layout.
+- **Cancellation**: stop a running job at any time — already-scored frames stay visible and nothing is written to disk.
+- **Logs & export**: live log panel, summary statistics (throughput, keep/discard, star distribution) and one-click CSV export via the native save dialog.
+
+**Hardware backend (auto-selected per platform):** Windows prefers CUDA (`onnxruntime-gpu` + `nvidia-cudnn-cu12`), macOS prefers MLX then CoreML, everything else uses CPU. Unavailable providers degrade gracefully to CPU. Running from source on Windows uses CUDA automatically; the packaged binaries ship CPU-only (the CUDA runtime cannot be bundled without adding ~1GB) and fall back to CPU.
+
+Run from source (dev mode):
+```bash
+python cull_gui.py                    # lightweight CustomTkinter fallback GUI
+cd src-tauri && cargo tauri dev       # Tauri UI (requires Rust toolchain)
+```
+
+Launch the packaged Tauri app without stealing focus (e.g. from a fullscreen game):
+```powershell
+Start-Process -FilePath "...\auto-culling-gui.exe" -WindowStyle Minimized
+```
+Rust-side diagnostics are written to `gui.log` next to the executable.
+
+Build the Tauri app:
+```bash
+pyinstaller cull_sidecar.spec --noconfirm          # 1. windowed sidecar
+cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-gnu.exe
+tauri build --no-bundle                            # 2. shell + sidecar
+# Windows: src-tauri/target/release/auto-culling.exe (+ cull-sidecar.exe beside it)
+# macOS:   src-tauri/target/release/auto-culling
+```
+
+The legacy CustomTkinter GUI can still be built with `pyinstaller cull_gui.spec --noconfirm` (output `dist/auto_cull_gui_v0.1_win_x64.exe`). Packaged binaries launch subprocesses with `CREATE_NO_WINDOW`, so no command-line windows flash while a job is starting.
+
 ## 📂 Project Structure
 
 ```text
@@ -146,11 +184,16 @@ $$score = 1.5 \times S_{sharp} + 2.5 \times S_{comp} - Penalty_{cut}$$
 
 ## 🧪 Testing
 
-Run the integration test suite to verify backend execution and XMP accuracy:
+Run the full suite (CLI pipeline, GUI logic + view layer, cancellation semantics):
 
 ```bash
-pytest tests/test_cull.py
+pytest tests/
 ```
+
+Notes:
+- `tests/test_package.py` additionally validates the packaged binary; it requires the built executable in the project root and is skipped otherwise.
+- The GUI view-layer tests instantiate the real window and drive it by pumping the event loop. They need a display and skip automatically without one; on headless Linux CI use `xvfb-run pytest tests/`.
+- `pyproject.toml` sets `--capture=sys`: fd-level capture makes Tcl/Tk initialization fail intermittently on Windows.
 
 ---
 

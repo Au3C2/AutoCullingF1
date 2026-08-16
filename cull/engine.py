@@ -6,6 +6,7 @@ Handles file scanning, model loading, and the culling pipeline.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -125,8 +126,15 @@ class CullingEngine:
         else:
             log.warning("No F1 model available.")
 
-    def run(self, progress_callback: Callable[[str, float], None] | None = None):
-        """Execute the culling process."""
+    def run(self, progress_callback: Callable[[str, float], None] | None = None,
+            cancel_event: threading.Event | None = None):
+        """Execute the culling process.
+
+        If *cancel_event* is provided, its flag is checked between frames;
+        once set, scoring stops early, side effects (XMP writes / metadata
+        sync) are skipped, and the partial scores collected so far are
+        returned. The CLI passes no cancel_event and is unaffected.
+        """
         self.scan(progress_callback)
         self.load_models(progress_callback)
         
@@ -139,8 +147,10 @@ class CullingEngine:
         with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
             def _wrap_process(g_info):
                 idx, group = g_info
+                if cancel_event and cancel_event.is_set():
+                    return []
                 log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
-                res = self._process_group_internal(group)
+                res = self._process_group_internal(group, cancel_event)
                 for s in res:
                     s.burst_group = idx
                 return res
@@ -152,6 +162,12 @@ class CullingEngine:
             self.all_scores.extend(res)
 
         elapsed = time.perf_counter() - t_start
+
+        if cancel_event and cancel_event.is_set():
+            log.info("Cancelled after scoring %d/%d frames", len(self.all_scores), len(self.image_paths))
+            if progress_callback:
+                progress_callback("Cancelled", 0.0)
+            return self.all_scores, elapsed
         
         if progress_callback:
             progress_callback("Saving metadata...", 0.95)
@@ -175,7 +191,8 @@ class CullingEngine:
             
         return self.all_scores, elapsed
 
-    def _process_group_internal(self, group: BurstGroup) -> list[ImageScore]:
+    def _process_group_internal(self, group: BurstGroup,
+                                cancel_event: threading.Event | None = None) -> list[ImageScore]:
         """Core logic for processing a single burst group."""
         scores: list[ImageScore] = []
         prev_detections = None
@@ -189,6 +206,10 @@ class CullingEngine:
             check_p4 = any(k in dir_name for k in keywords) and "sprint_quali" not in dir_name
 
         for frame_idx, frame_path in enumerate(frames):
+            if cancel_event and cancel_event.is_set():
+                log.info("Cancel requested; stopping group %s after %d frames",
+                         group.group_id, frame_idx)
+                break
             # Check for existing culling status
             xmp_rating, xmp_pick = read_xmp_rating(frame_path)
             exif = self.exif_map.get(frame_path)

@@ -9,10 +9,17 @@ dependencies = [
     "pillow-heif>=0.18.0",
     "pillow-avif-plugin>=1.5.5",
     "opencv-python-headless>=4.10.0",
-    "onnxruntime==1.23.2",
+    # Windows ships the GPU build so CUDAExecutionProvider is available;
+    # nvidia-cudnn-cu12 provides the cuDNN 9 DLLs it needs (the onnxruntime-gpu
+    # wheel bundles cublas/cudart but NOT cuDNN). Other platforms use the
+    # standard package (CPU / CoreML / MLX).
+    "onnxruntime-gpu==1.23.2; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12>=9.0; sys_platform == 'win32'",
+    "onnxruntime==1.23.2; sys_platform != 'win32'",
     "onnx>=1.17.0",
     "numpy>=1.26.0",
     "pillow>=10.0.0",
+    "customtkinter>=5.2.2",
 ]
 
 [build-system]
@@ -24,3 +31,9 @@ packages = ["cull"]
 
 [tool.uv]
 package = true
+
+[tool.pytest.ini_options]
+# fd-level capture redirects stdout/stderr to files, which makes Tcl/Tk
+# initialization fail intermittently on Windows (tk.tcl cannot be sourced).
+# sys-level capture avoids the issue while keeping test output captured.
+addopts = "--capture=sys"

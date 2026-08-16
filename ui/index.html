@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto-Culling — F1 连拍选片</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">AC</div>
+      <div class="brand-text">
+        <h1>Auto-Culling</h1>
+        <span class="sub">F1 连拍智能选片</span>
+      </div>
+    </div>
+    <div class="dir-row">
+      <input id="dir" type="text" placeholder="选择照片目录…" spellcheck="false">
+      <button id="pickDir" class="btn">选择目录</button>
+    </div>
+    <div class="actions">
+      <button id="start" class="btn primary">开始选片</button>
+      <button id="stop" class="btn danger" disabled>停止</button>
+      <button id="export" class="btn" disabled>导出 CSV</button>
+    </div>
+  </header>
+
+  <section id="params" class="params hidden">
+    <div class="param-group">
+      <div class="param-title">基本参数</div>
+      <label class="check"><input type="checkbox" id="pRecursive"> 递归扫描子目录</label>
+      <label class="check"><input type="checkbox" id="pForce"> 强制重新分析（忽略已有评分）</label>
+      <label class="field">每连拍保留数 (Top-N)<input type="number" id="pTopN" value="11"></label>
+      <label class="field">P4 朝向策略
+        <select id="pP4">
+          <option value="always" selected>always</option>
+          <option value="never">never</option>
+          <option value="auto">auto</option>
+        </select>
+      </label>
+      <label class="field">解码宽度<input type="number" id="pScale" value="1280"></label>
+      <label class="field">并发线程<input type="number" id="pWorkers" value="4"></label>
+    </div>
+    <div class="param-group">
+      <div class="param-title">高级参数</div>
+      <label class="field">锐度阈值<input type="number" id="pSharp" step="0.01" value="0.05"></label>
+      <label class="field">锐度权重<input type="number" id="pWSharp" step="0.1" value="1.5"></label>
+      <label class="field">构图权重<input type="number" id="pWComp" step="0.1" value="2.5"></label>
+      <label class="field">最低总分<input type="number" id="pMinRaw" step="0.1" value="3.1"></label>
+      <label class="field">检测置信度<input type="number" id="pConf" step="0.01" value="0.25"></label>
+      <label class="check"><input type="checkbox" id="pAutocrop" checked> 自动裁剪</label>
+      <label class="check"><input type="checkbox" id="pRename"> 重命名文件</label>
+      <label class="check"><input type="checkbox" id="pDryRun"> 试运行（不写任何文件）</label>
+      <label class="field">Roboflow API Key<input type="password" id="pRfKey"></label>
+    </div>
+  </section>
+
+  <section class="progress">
+    <div class="progress-track"><div id="bar" class="progress-fill"></div></div>
+    <div class="progress-meta">
+      <span id="stage">就绪</span>
+      <span id="frameStat"></span>
+    </div>
+  </section>
+
+  <main class="workspace">
+    <section class="table-pane">
+      <div class="table-toolbar">
+        <label class="dim">筛选</label>
+        <select id="filter">
+          <option value="all" selected>全部</option>
+          <option value="keep">仅保留</option>
+          <option value="discard">仅丢弃</option>
+        </select>
+        <span id="count" class="count"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="grid">
+          <thead>
+            <tr>
+              <th data-k="rating">星级</th>
+              <th data-k="name">文件</th>
+              <th data-k="raw">评分</th>
+              <th data-k="sharp">锐度</th>
+              <th data-k="comp">构图</th>
+              <th data-k="veto">否决原因</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="preview-pane" id="previewPane">
+      <img id="previewImg" alt="" draggable="false">
+      <div id="previewOverlay" class="preview-overlay">选中结果行查看预览</div>
+    </aside>
+  </main>
+
+  <section class="log-pane">
+    <div class="log-head">
+      <span class="dim">运行日志</span>
+      <button id="toggleLog" class="link">收起</button>
+    </div>
+    <pre id="log" class="hidden"></pre>
+  </section>
+
+  <footer class="statusbar" id="status">就绪</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -85,3 +85,17 @@ p4_model_checkpoints/*.onnx
 *.bin
 auto_cull
 external/
+
+# Tauri build artifacts
+src-tauri/target/
+
+# ZCode workspace metadata (plans etc.)
+.zcode/
+
+# Packaged CLI exe kept in the repo root for tests/test_package.py
+auto_cull_v0.1_win_x64.exe
+
+# Tauri build-generated schemas and bundled sidecar binaries
+src-tauri/gen/
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep

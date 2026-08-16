@@ -76,7 +76,10 @@ def test_packaged_executable_precision():
         ]
         
         print(f"\nRunning binary test: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # The binary may emit console-encoded (e.g. GBK) bytes on Windows;
+        # decode lossily so a stray byte never fails the reader thread.
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
         
         if result.returncode != 0:
             pytest.fail(f"Binary execution failed!\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")

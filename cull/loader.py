@@ -31,6 +31,21 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).parent.parent.resolve()
     return base_path / relative_path
 
+def subprocess_flags(stdin_devnull: bool = True) -> dict:
+    """Extra kwargs for subprocess calls used by the pipeline.
+
+    On Windows, child processes (exiftool/ffmpeg/ffprobe) otherwise flash a
+    console window while the culling runs; CREATE_NO_WINDOW suppresses it.
+    stdin defaults to DEVNULL: children spawned from the Tauri sidecar inherit
+    the GUI's stdin pipe (which never delivers data), and perl/exiftool block
+    forever reading from it instead of returning EOF. Pass ``stdin_devnull=False``
+    when the call feeds the child via ``input=``.
+    """
+    kwargs = {"stdin": subprocess.DEVNULL} if stdin_devnull else {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return kwargs
+
 def _find_exiftool_path() -> list[str]:
     """Return command list for exiftool (bundled or system-wide)."""
     # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
@@ -82,7 +97,7 @@ def probe_embedded_preview(path: Path, min_width: int = 800) -> Tuple[int, int, 
         proc = subprocess.run(
             [ffprobe_bin, "-v", "error", "-select_streams", "v", "-show_entries", 
              "stream=index,width,height,codec_name:stream_disposition=dependent", "-of", "json", str(path)],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10, **subprocess_flags()
         )
         if proc.returncode != 0: return None
         import json
@@ -105,7 +120,7 @@ def probe_full_dimensions(path: Path) -> Tuple[int, int] | None:
         proc = subprocess.run(
             [ffprobe_bin, "-v", "error", "-select_streams", "v:0", "-show_entries", 
              "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10, **subprocess_flags()
         )
         parts = proc.stdout.strip().split("\n")[0].split("x")
         if len(parts) == 2: return int(parts[0]), int(parts[1])
@@ -134,7 +149,7 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                 "-i", str(path), "-map", f"0:{idx}", 
                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-y", "pipe:1"
             ]
-            proc = subprocess.run(cmd, capture_output=True, timeout=30)
+            proc = subprocess.run(cmd, capture_output=True, timeout=30, **subprocess_flags())
             if proc.returncode == 0 and len(proc.stdout) == w * h * 3:
                 img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(h, w, 3)
                 if scale_width > 0 and w > scale_width * 1.2:
@@ -182,7 +197,7 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
             try:
                 exiftool_cmd = _find_exiftool_path()
                 cmd = [*exiftool_cmd, "-b", tag, str(path)]
-                proc = subprocess.run(cmd, capture_output=True, timeout=10)
+                proc = subprocess.run(cmd, capture_output=True, timeout=10, **subprocess_flags())
                 if proc.returncode == 0 and len(proc.stdout) > 0:
                     import io
                     pil_img = Image.open(io.BytesIO(proc.stdout)).convert("RGB")
@@ -206,7 +221,7 @@ def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float,
                     "-XMP-crs:CropAngle=0", "-XMP-crs:CropConstrainToWarp=0", "-XMP-crs:CropConstrainToUnitSquare=1"])
     cmd.append(str(img_path))
     try:
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(cmd, check=True, capture_output=True, **subprocess_flags())
         return True, img_path.name
     except subprocess.CalledProcessError as e:
         return False, f"Error updating {img_path.name}: {e.stderr.decode().strip()}"

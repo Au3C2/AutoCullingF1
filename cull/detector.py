@@ -76,14 +76,57 @@ def nms_numpy(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> li
         order = order[inds + 1]
     return keep
 
+def preferred_providers() -> list[str]:
+    """ONNX Runtime provider priority per platform.
+
+    Windows defaults to CUDA (onnxruntime-gpu package); macOS prefers MLX
+    (Apple Silicon) then CoreML; everything else falls back to CPU. The
+    list is filtered against ``get_available_providers()`` at session
+    creation, so unavailable providers degrade gracefully.
+    """
+    if sys.platform == "darwin":
+        return ["MLXExecutionProvider", "CoreMLExecutionProvider", "CPUExecutionProvider"]
+    if sys.platform == "win32":
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+_NVIDIA_BIN_DIRS = ("cudnn", "cublas", "cuda_nvrtc")
+
+
+def ensure_nvidia_runtime_on_path() -> None:
+    """Prepend NVIDIA pip-wheel runtime DLL dirs (cuDNN/cuBLAS/nvrtc) to PATH.
+
+    onnxruntime-gpu loads its CUDA provider through standard DLL search.
+    The nvidia-* wheels install their DLLs under ``site-packages/nvidia/*/bin``,
+    which is not on PATH by default — without this, CUDAExecutionProvider fails
+    to activate on Windows even when the wheels are installed. No-op when the
+    dirs are absent (e.g. inside the packaged exe, where CUDA is stripped).
+    """
+    if sys.platform != "win32":
+        return
+    import os
+    import site
+
+    extra = []
+    for base in site.getsitepackages():
+        for name in _NVIDIA_BIN_DIRS:
+            dll_dir = Path(base) / "nvidia" / name / "bin"
+            if dll_dir.is_dir():
+                extra.append(str(dll_dir))
+    if not extra:
+        return
+    existing = os.environ.get("PATH", "")
+    os.environ["PATH"] = os.pathsep.join(extra + ([existing] if existing else []))
+
+
 class LiteYOLO:
     def __init__(self, model_path: Path):
         self.model_path = model_path
         try:
             import onnxruntime as ort
+            ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
-            providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
-            providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
+            providers = [p for p in preferred_providers() if p in available] or ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(model_path), providers=providers)
             log.info(f"YOLO LITE active providers: {self.session.get_providers()}")
             self.input_name = self.session.get_inputs()[0].name
