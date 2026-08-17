@@ -10,6 +10,7 @@ import logging
 import sys
 import platform
 import subprocess
+import tempfile
 from pathlib import Path
 
 from cull.engine import CullingEngine, EngineConfig
@@ -66,8 +67,10 @@ def select_folder(default_dir: Path) -> Path | None:
             return None
     return None
 
-def setup_logging(base_dir: Path, console: bool = True) -> Path | None:
-    log_dir = base_dir / "logs"
+def setup_logging(base_dir: Path | None, console: bool = True) -> Path | None:
+    # Resident sidecar mode starts with no base dir (the job dir comes per-run);
+    # fall back to the system temp dir so logs are still captured.
+    log_dir = (base_dir or Path(tempfile.gettempdir())) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"cull_{timestamp}.log"
@@ -144,6 +147,9 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
     setup_logging(input_dir, console=False)
     cancel_event = threading.Event()
     cmd_queue: "queue.Queue[dict]" = queue.Queue()
+    # Scores of the most recent run, keyed by path — previews render with the
+    # full score so detection/crop overlays survive in the GUI.
+    last_scores: dict[Path, ImageScore] = {}
 
     def stdin_reader() -> None:
         try:
@@ -163,6 +169,12 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
                 log.info("sidecar command: %s", cmd.get("cmd"))
                 if cmd.get("cmd") == "cancel":
                     cancel_event.set()
+                    continue
+                if cmd.get("cmd") == "preview":
+                    # Handle previews on the reader thread: the main command
+                    # loop is blocked inside do_run for the whole run, so a
+                    # queued preview would only render after the run ends.
+                    do_preview(cmd)
                     continue
                 cmd_queue.put(cmd)
                 if cmd.get("cmd") == "quit":
@@ -218,9 +230,15 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
             root.setLevel(previous_level)
 
         if cancel_event.is_set():
+            last_scores.clear()
+            for s in scores:
+                last_scores[s.path] = s
             emit({"type": "cancelled", "count": len(scores)})
             return
 
+        last_scores.clear()
+        for s in scores:
+            last_scores[s.path] = s
         total = len(scores)
         keep = sum(1 for s in scores if s.rating > 0)
         stars: dict[int, int] = {}
@@ -232,11 +250,12 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
 
     def do_preview(cmd: dict) -> None:
         try:
-            pil = render_pil(
-                ImageScore(path=Path(cmd["path"]), s_sharp=0.0, s_comp=0.0,
-                           raw_score=0.0, rating=0),
-                max_size=int(cmd.get("size", 520)),
-            )
+            # Prefer the full score of the most recent run so the thumbnail
+            # carries the detection/crop overlays; fall back to a bare score.
+            score = last_scores.get(Path(cmd["path"])) or ImageScore(
+                path=Path(cmd["path"]), s_sharp=0.0, s_comp=0.0,
+                raw_score=0.0, rating=0)
+            pil = render_pil(score, max_size=int(cmd.get("size", 520)))
         except Exception:
             pil = None
         if pil is None:
@@ -345,7 +364,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    
+
+    # The resident sidecar starts with --json-lines and NO --input-dir; the
+    # directory comes per-run via the `run` command, so JSON mode must bypass
+    # both the interactive folder picker and the input-dir check.
+    if args.json_lines:
+        return run_json_lines(args, Path(args.input_dir) if args.input_dir else None)
+
     # GUI Fallback: if no input-dir provided and we are in a TTY or double-clicked
     if args.input_dir is None:
         # Determine current app/script directory for default location

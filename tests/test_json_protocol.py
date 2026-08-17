@@ -6,20 +6,18 @@ the command loop: ``scan`` lists shots, ``run`` streams stage/frame/done
 events, ``cancel`` aborts, ``preview`` answers a PNG, and the process stays
 alive for repeated scans / reruns until ``quit``.
 
-The sidecar's stdout is read as RAW BYTES with os.read + select. A blocking
-``readline()`` on a text pipe proved unreliable here: the sidecar writes
-from several threads (engine executor + command loop), and the reader can
-miss the wakeup with events already sitting in the pipe (observed on macOS).
-Reading raw chunks and splitting lines ourselves sidesteps TextIOWrapper
-buffering entirely.
+stdout is read by a background thread feeding a queue (os.set_blocking +
+select are POSIX-only; a blocking readline on the main thread can also miss
+wakeups when the sidecar writes from several threads).
 """
 
 import json
 import os
-import select
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -32,39 +30,31 @@ SCRIPT = Path("cull_photos.py")
 
 
 class SidecarChannel:
-    """Raw stdout reader for a sidecar subprocess (binary, line-split)."""
+    """Cross-platform stdout reader: a background thread feeds a queue."""
 
     def __init__(self, proc: subprocess.Popen):
         self.proc = proc
-        self.fd = proc.stdout.fileno()
-        os.set_blocking(self.fd, False)
-        self._buf = b""
+        self._q: "queue.Queue[bytes | None]" = queue.Queue()
+        self._thread = threading.Thread(target=self._reader, daemon=True)
+        self._thread.start()
+
+    def _reader(self) -> None:
+        try:
+            for line in self.proc.stdout:
+                self._q.put(line)
+        except Exception:
+            pass
+        self._q.put(None)  # EOF marker
 
     def read_line(self, timeout: float) -> str | None:
-        """Return the next complete line, or None on timeout/EOF."""
-        deadline = time.monotonic() + timeout
-        while True:
-            nl = self._buf.find(b"\n")
-            if nl >= 0:
-                line = self._buf[:nl].decode("utf-8", errors="replace")
-                self._buf = self._buf[nl + 1:]
-                return line
-            ready, _, _ = select.select([self.fd], [], [], 0.2)
-            if ready:
-                try:
-                    chunk = os.read(self.fd, 65536)
-                except BlockingIOError:
-                    continue
-                if not chunk:
-                    # EOF: drain what's left, then signal closure.
-                    if self._buf:
-                        line = self._buf.decode("utf-8", errors="replace")
-                        self._buf = b""
-                        return line
-                    return ""
-                self._buf += chunk
-            if time.monotonic() > deadline:
-                return None
+        """Return the next complete line; "" on EOF; None on timeout."""
+        try:
+            raw = self._q.get(timeout=timeout)
+        except queue.Empty:
+            return None
+        if raw is None:
+            return ""
+        return raw.decode("utf-8", errors="replace")
 
     def read_event(self, timeout: float) -> dict | None:
         """Next JSON event, skipping blanks; {} on EOF; None on timeout."""

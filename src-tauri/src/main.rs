@@ -5,9 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -81,7 +79,7 @@ struct AppState {
     sidecar: Mutex<Option<Sidecar>>,
     scores: Mutex<Vec<ScoreRow>>,
     /// Pending preview requests keyed by path (sidecar responds asynchronously).
-    preview_waiters: Mutex<Vec<(String, Sender<Option<String>>)>>,
+    preview_waiters: Mutex<Vec<(String, tokio::sync::oneshot::Sender<Option<String>>)>>,
     next_gen: std::sync::atomic::AtomicU64,
 }
 
@@ -115,17 +113,40 @@ fn repo_root() -> std::path::PathBuf {
 }
 
 /// Command string for the sidecar. In packaged builds this is the bundled
-/// `cull-sidecar` external binary; in debug builds (tauri dev) the external
-/// binary is usually not present, so fall back to the repo venv's Python
-/// running cull_photos.py directly.
+/// `cull-sidecar` external binary; in debug builds (tauri dev) prefer the repo
+/// venv's Python running cull_photos.py directly (the external binary is a
+/// placeholder at best, and the venv script iterates without repackaging).
 fn sidecar_command(app: &AppHandle) -> Result<Command, String> {
+    #[cfg(debug_assertions)]
+    {
+        let root = repo_root();
+        let script = root.join("cull_photos.py");
+        // The venv layout differs by platform: .venv/Scripts/python.exe on
+        // Windows, .venv/bin/python on macOS/Linux.
+        let py = if cfg!(windows) {
+            root.join(".venv/Scripts/python.exe")
+        } else {
+            root.join(".venv/bin/python")
+        };
+        if script.exists() && py.exists() {
+            log_line("dev mode: using venv python sidecar");
+            return Ok(app
+                .shell()
+                .command(py.to_string_lossy().as_ref())
+                .args([script.to_string_lossy().as_ref(), "--json-lines"]));
+        }
+    }
     match app.shell().sidecar("cull-sidecar") {
         Ok(cmd) => Ok(cmd),
         Err(err) => {
             log_line(&format!("bundled sidecar unavailable ({err}); trying venv python"));
             let root = repo_root();
             let script = root.join("cull_photos.py");
-            let py = root.join(".venv/bin/python");
+            let py = if cfg!(windows) {
+                root.join(".venv/Scripts/python.exe")
+            } else {
+                root.join(".venv/bin/python")
+            };
             if script.exists() && py.exists() {
                 Ok(app
                     .shell()
@@ -337,9 +358,11 @@ fn scan_directory(
 }
 
 /// Request a thumbnail from the persistent sidecar and wait for the reply.
+// NOTE: async command — a sync command blocks the main thread while awaiting
+// the reply, freezing the whole window (observed as "未响应" during a run).
 #[tauri::command]
-fn preview(state: State<'_, AppState>, path: String, size: u32) -> Result<Option<String>, String> {
-    let (tx, rx) = channel::<Option<String>>();
+async fn preview(state: State<'_, AppState>, path: String, size: u32) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
     {
         // Release the lock immediately: the read_loop thread needs it to
         // deliver the sidecar's reply while this command awaits recv.
@@ -357,8 +380,7 @@ fn preview(state: State<'_, AppState>, path: String, size: u32) -> Result<Option
         return Err(err);
     }
 
-    let reply = rx.recv_timeout(Duration::from_secs(60));
-    reply.map_err(|_| "preview timed out".to_string())
+    rx.await.map_err(|_| "preview failed".to_string())
 }
 
 #[tauri::command]

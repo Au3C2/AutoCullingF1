@@ -12,8 +12,12 @@ fn main() {
         .map(|t| t.to_string())
         .unwrap_or_default();
     if !triple.is_empty() {
-        let placeholder =
-            std::path::Path::new("binaries").join(format!("cull-sidecar-{triple}"));
+        // tauri resolves externalBin as `<program>-<triple><EXE_SUFFIX>`, so the
+        // placeholder must carry the platform executable suffix or tauri_build
+        // still hard-fails on the missing file.
+        let suffix = if cfg!(windows) { ".exe" } else { "" };
+        let placeholder = std::path::Path::new("binaries")
+            .join(format!("cull-sidecar-{triple}{suffix}"));
         if !placeholder.exists() {
             let _ = std::fs::create_dir_all("binaries");
             let _ = std::fs::write(&placeholder, b"");
