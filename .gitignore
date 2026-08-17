@@ -99,3 +99,4 @@ auto_cull_v0.1_win_x64.exe
 src-tauri/gen/
 src-tauri/binaries/*
 !src-tauri/binaries/.gitkeep
+!src-tauri/icons/icon.png
