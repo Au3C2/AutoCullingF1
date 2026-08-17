@@ -12,9 +12,10 @@ const listen = T.event.listen;
 
 const state = {
   running: false,
+  scannedDir: null,
   paths: {},                 // name -> abs path
-  rows: [],                  // {name, rating, sharp, comp, raw, veto, group?}
-  streamed: 0,
+  rows: [],                  // {name, rating, sharp, comp, raw, veto, status, el}
+  scored: 0,
   totalFrames: 0,
   keep: 0,
   reject: 0,
@@ -106,6 +107,26 @@ function setRunning(running) {
   if (running) $("export").disabled = true;
 }
 
+function toggleParams(force) {
+  const sec = $("params");
+  const show = force !== undefined ? force : sec.classList.contains("collapsed");
+  sec.classList.toggle("collapsed", !show);
+  $("toggleParamsBtn").textContent = show ? "⚙ 收起设置" : "⚙ 筛片设置";
+  $("toggleParams").textContent = show ? "收起设置 ⌃" : "展开设置 ⌄";
+}
+
+async function scanDir(dir) {
+  $("stage").textContent = "扫描目录…";
+  try {
+    await invoke("scan_directory", {
+      dir,
+      recursive: $("pRecursive").checked,
+    });
+  } catch (err) {
+    setStatus("扫描失败: " + err);
+  }
+}
+
 async function startRun() {
   const cfg = collectConfig();
   if (!cfg.inputDir) {
@@ -144,6 +165,7 @@ async function pickDir() {
     if (dir) {
       $("dir").value = dir;
       saveSettings();
+      await scanDir(dir);
     }
   } catch (err) {
     setStatus("选择目录失败: " + err);
@@ -153,17 +175,17 @@ async function pickDir() {
 /* ---------- reset / rows ---------- */
 
 function resetRun() {
-  state.paths = {};
-  state.rows = [];
-  state.streamed = 0;
-  state.totalFrames = 0;
+  for (const r of state.rows) {
+    r.rating = 0; r.sharp = 0; r.comp = 0; r.raw = 0;
+    r.veto = ""; r.status = "pending";
+  }
+  state.scored = 0;
   state.keep = 0;
   state.reject = 0;
   state.selectedPath = null;
   state.previewPending = null;
   clearPreview();
-  $("rows").innerHTML = "";
-  $("count").textContent = "";
+  rebuildRows();
   $("bar").style.width = "0%";
   $("frameStat").textContent = "";
   $("export").disabled = true;
@@ -176,13 +198,17 @@ function starsHtml(rating) {
 }
 
 function rowHtml(r, idx) {
-  const cls = r.rating > 0 ? "keep" : "reject";
-  return `<tr data-idx="${idx}">
-    <td>${starsHtml(r.rating)}</td>
+  const cls = r.status === "pending" ? "pending" : (r.rating > 0 ? "keep" : "reject");
+  const score = r.status === "pending" ? "—" : r.raw.toFixed(2);
+  const sharp = r.status === "pending" ? "—" : r.sharp.toFixed(3);
+  const comp = r.status === "pending" ? "—" : r.comp.toFixed(3);
+  const stars = r.status === "pending" ? `<span class="stars zero">…</span>` : starsHtml(r.rating);
+  return `<tr data-idx="${idx}" class="${r.status === "pending" ? "pending" : ""}${r.flash ? " flash" : ""}">
+    <td>${stars}</td>
     <td class="name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td>
-    <td class="num ${cls}">${r.raw.toFixed(2)}</td>
-    <td class="num">${r.sharp.toFixed(3)}</td>
-    <td class="num">${r.comp.toFixed(3)}</td>
+    <td class="num ${cls}">${score}</td>
+    <td class="num">${sharp}</td>
+    <td class="num">${comp}</td>
     <td class="veto">${escapeHtml(r.veto || "")}</td>
   </tr>`;
 }
@@ -195,11 +221,16 @@ function escapeHtml(s) {
 
 function visibleRows() {
   let list = state.rows;
-  if (state.filter === "keep") list = list.filter((r) => r.rating > 0);
-  if (state.filter === "discard") list = list.filter((r) => r.rating <= 0);
+  if (state.filter === "keep") list = list.filter((r) => r.status !== "pending" && r.rating > 0);
+  if (state.filter === "discard") list = list.filter((r) => r.status !== "pending" && r.rating <= 0);
+  if (state.filter === "pending") list = list.filter((r) => r.status === "pending");
   if (state.sortKey) {
     const k = state.sortKey;
+    // Pending rows always sort last so scored results stay visible.
     list = [...list].sort((a, b) => {
+      if ((a.status === "pending") !== (b.status === "pending")) {
+        return a.status === "pending" ? 1 : -1;
+      }
       const va = a[k], vb = b[k];
       let cmp;
       if (typeof va === "string") cmp = va.localeCompare(vb);
@@ -212,16 +243,43 @@ function visibleRows() {
 
 function rebuildRows() {
   const list = visibleRows();
-  $("rows").innerHTML = list.map(rowHtml).join("");
-  $("count").textContent = `${list.length} / ${state.rows.length} 张`;
+  $("rows").innerHTML = list.map((r) => rowHtml(r, state.rows.indexOf(r))).join("");
+  const scored = state.rows.filter((r) => r.status !== "pending").length;
+  $("count").textContent = state.rows.length
+    ? `${scored} / ${state.rows.length} 张`
+    : "";
 }
 
-function streamRow(r) {
-  // Streaming phase: only safe to append when not filtered/sorted.
-  if (state.filter !== "all" || state.sortKey) return;
-  const idx = state.rows.length - 1;
-  $("rows").insertAdjacentHTML("beforeend", rowHtml(r, idx));
-  $("count").textContent = `${state.rows.length} / ${state.totalFrames || "?"} 张`;
+function fillRow(r) {
+  // Update the row's DOM in place (works with any filter/sort because the
+  // element identity comes from the row object itself).
+  if (!r.el || !r.el.isConnected) {
+    rebuildRows();
+    return;
+  }
+  const tmp = document.createElement("tbody");
+  tmp.innerHTML = rowHtml(r, 0);
+  const fresh = tmp.firstElementChild;
+  r.el.replaceWith(fresh);
+  r.el = fresh;
+  fresh.classList.add("flash");
+  fresh.addEventListener("animationend", () => fresh.classList.remove("flash"), { once: true });
+  const scored = state.rows.filter((x) => x.status !== "pending").length;
+  $("count").textContent = `${scored} / ${state.rows.length} 张`;
+}
+
+function applyFrame(e) {
+  const r = state.rows.find((x) => x.name === e.name);
+  if (!r) return;
+  r.rating = e.rating;
+  r.sharp = e.sharp;
+  r.comp = e.comp;
+  r.raw = e.raw;
+  r.veto = e.veto || "";
+  r.status = e.status || "scored";
+  if (r.rating > 0) state.keep++; else state.reject++;
+  state.scored++;
+  fillRow(r);
 }
 
 function sortBy(key) {
@@ -241,9 +299,9 @@ function setProgress(frac) {
 function updateFrameStat() {
   const t = state.totalFrames || state.rows.length || 0;
   $("frameStat").textContent =
-    `已打分 ${state.rows.length}/${t} · 保留 ${state.keep} · 丢弃 ${state.reject}`;
-  if (state.totalFrames > 0) {
-    const frac = Math.min(1, state.rows.length / state.totalFrames);
+    `已打分 ${state.scored}/${t} · 保留 ${state.keep} · 丢弃 ${state.reject}`;
+  if (t > 0) {
+    const frac = Math.min(1, state.scored / t);
     setProgress(SCORE_START + (SCORE_END - SCORE_START) * frac);
   }
 }
@@ -265,11 +323,9 @@ async function requestPreview(path) {
   state.previewBusy = true;
   const pane = $("previewPane");
   const size = Math.max(256, Math.min(pane.clientWidth, pane.clientHeight) - 16);
-  console.log("preview request:", path, "size:", size);
   try {
     // The Rust command returns the base64 PNG as a bare string.
     const res = await invoke("preview", { path, size });
-    console.log("preview invoke resolved:", res ? "png:" + res.length : "null");
     if (path !== state.selectedPath) return; // selection changed meanwhile
     if (res) {
       $("previewImg").src = "data:image/png;base64," + res;
@@ -281,7 +337,6 @@ async function requestPreview(path) {
       ov.style.display = "flex";
     }
   } catch (err) {
-    console.log("preview invoke FAILED:", err);
     if (path === state.selectedPath) {
       $("previewOverlay").textContent = "无法预览: " + path.split(/[\\/]/).pop();
       $("previewOverlay").style.display = "flex";
@@ -304,8 +359,8 @@ function selectRow(name) {
   if (!abs) return;
   state.selectedPath = abs;
   document.querySelectorAll("#rows tr.selected").forEach((tr) => tr.classList.remove("selected"));
-  const tr = document.querySelector(`#rows tr[data-idx="${state.rows.findIndex((r) => r.name === name)}"]`);
-  if (tr) tr.classList.add("selected");
+  const row = state.rows.find((r) => r.name === name);
+  if (row && row.el) row.el.classList.add("selected");
   const ov = $("previewOverlay");
   ov.textContent = "加载中: " + name + " …";
   ov.style.display = "flex";
@@ -319,26 +374,41 @@ function selectRow(name) {
 async function onEvent(evt) {
   const e = evt.payload;
   switch (e.kind) {
+    case "scanned": {
+      state.scannedDir = e.dir;
+      state.paths = e.paths || {};
+      state.rows = Object.keys(state.paths).map((name) => ({
+        name, rating: 0, sharp: 0, comp: 0, raw: 0, veto: "",
+        status: "pending", el: null,
+      }));
+      state.totalFrames = state.rows.length;
+      state.scored = 0;
+      state.keep = 0;
+      state.reject = 0;
+      state.selectedPath = null;
+      clearPreview();
+      rebuildRows();
+      $("stage").textContent = `已扫描 ${state.totalFrames} 张待筛`;
+      $("frameStat").textContent = "";
+      setStatus(`目录就绪：${state.totalFrames} 张待筛 — 可调整参数后开始选片`);
+      break;
+    }
+    case "scan_error": {
+      $("stage").textContent = "扫描失败";
+      setStatus("扫描失败: " + e.message);
+      break;
+    }
     case "stage": {
       $("stage").textContent = e.msg;
       setProgress(STAGE_SCALE[e.msg] ?? 0);
       break;
     }
-    case "total": {
-      state.totalFrames = e.frames;
+    case "group": {
       updateFrameStat();
       break;
     }
-    case "paths": {
-      state.paths = e.paths || {};
-      break;
-    }
     case "frame": {
-      console.log("frame:", e.name, "rating:", e.rating);
-      state.rows.push({ name: e.name, rating: e.rating, sharp: e.sharp,
-                        comp: e.comp, raw: e.raw, veto: e.veto || "" });
-      if (e.rating > 0) state.keep++; else state.reject++;
-      streamRow(state.rows[state.rows.length - 1]);
+      applyFrame(e);
       updateFrameStat();
       break;
     }
@@ -347,7 +417,6 @@ async function onEvent(evt) {
       $("stage").textContent = "100%  完成";
       setRunning(false);
       $("export").disabled = false;
-      rebuildRows();
       const stars = e.stars || {};
       const dist = Object.keys(stars).sort()
         .map((n) => `${n}★×${stars[n]}`).join("  ");
@@ -358,7 +427,6 @@ async function onEvent(evt) {
     case "cancelled": {
       $("stage").textContent = "已取消";
       setRunning(false);
-      rebuildRows();
       setStatus(`已取消 — 保留已打分 ${e.count} 张的结果（未写入任何文件）`);
       break;
     }
@@ -400,6 +468,8 @@ function wire() {
   $("start").addEventListener("click", startRun);
   $("stop").addEventListener("click", stopRun);
   $("export").addEventListener("click", exportCsv);
+  $("toggleParamsBtn").addEventListener("click", () => toggleParams());
+  $("toggleParams").addEventListener("click", () => toggleParams());
   $("filter").addEventListener("change", (ev) => {
     state.filter = ev.target.value;
     rebuildRows();
@@ -417,13 +487,22 @@ function wire() {
     el.classList.toggle("hidden");
     $("toggleLog").textContent = el.classList.contains("hidden") ? "展开" : "收起";
   });
-  $("dir").addEventListener("change", saveSettings);
+  $("dir").addEventListener("change", (ev) => {
+    saveSettings();
+    const dir = ev.target.value.trim();
+    if (dir) scanDir(dir);
+  });
+  $("pRecursive").addEventListener("change", () => {
+    saveSettings();
+    if (state.scannedDir) scanDir(state.scannedDir);
+  });
   window.addEventListener("beforeunload", saveSettings);
 }
 
 (async function main() {
   wire();
   loadSettings();
+  toggleParams(false);
   await listen("evt", onEvent);
   await listen("run-status", (ev) => setRunning(ev.payload.running));
 })();

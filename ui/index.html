@@ -20,13 +20,14 @@
       <button id="pickDir" class="btn">选择目录</button>
     </div>
     <div class="actions">
+      <button id="toggleParamsBtn" class="btn" type="button">⚙ 筛片设置</button>
       <button id="start" class="btn primary">开始选片</button>
       <button id="stop" class="btn danger" disabled>停止</button>
       <button id="export" class="btn" disabled>导出 CSV</button>
     </div>
   </header>
 
-  <section id="params" class="params hidden">
+  <section id="params" class="params collapsed">
     <div class="param-group">
       <div class="param-title">基本参数</div>
       <label class="check"><input type="checkbox" id="pRecursive"> 递归扫描子目录</label>
@@ -54,6 +55,7 @@
       <label class="check"><input type="checkbox" id="pDryRun"> 试运行（不写任何文件）</label>
       <label class="field">Roboflow API Key<input type="password" id="pRfKey"></label>
     </div>
+    <button id="toggleParams" class="link params-toggle" type="button">收起设置 ⌃</button>
   </section>
 
   <section class="progress">
@@ -72,6 +74,7 @@
           <option value="all" selected>全部</option>
           <option value="keep">仅保留</option>
           <option value="discard">仅丢弃</option>
+          <option value="pending">未打分</option>
         </select>
         <span id="count" class="count"></span>
       </div>

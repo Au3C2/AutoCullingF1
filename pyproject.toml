@@ -19,7 +19,6 @@ dependencies = [
     "onnx>=1.17.0",
     "numpy>=1.26.0",
     "pillow>=10.0.0",
-    "customtkinter>=5.2.2",
 ]
 
 [build-system]

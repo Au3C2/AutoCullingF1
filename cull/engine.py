@@ -27,6 +27,36 @@ from cull.renamer import rename_images
 
 log = logging.getLogger(__name__)
 
+# Frame log line shared by every scoring outcome (scored, manual metadata,
+# decode failure) so protocol consumers see exactly one event per image.
+FRAME_LOG_FMT = "  [%s]  sharp=%.3f  comp=%.3f  raw=%.2f  Rating=%+d%s"
+
+
+def dedupe_raw_cooked(image_paths: list[Path]) -> tuple[list[Path], set[Path]]:
+    """Collapse RAW/cooked pairs (same stem) onto the cooked file.
+
+    Returns the deduplicated, sorted shot list plus the subset of cooked
+    files that have no RAW sibling (metadata sync target).
+    """
+    stems: dict[str, Path] = {}
+    has_raw: dict[str, bool] = {}
+    for p in image_paths:
+        stem = p.stem.lower()
+        ext = p.suffix.lower()
+        if ext in RAW_EXTS:
+            has_raw[stem] = True
+        if stem not in stems:
+            stems[stem] = p
+        else:
+            prev = stems[stem]
+            if ext in COOKED_EXTS and prev.suffix.lower() in RAW_EXTS:
+                stems[stem] = p
+
+    unique = sorted(stems.values())
+    standalone = {p for stem, p in stems.items()
+                  if p.suffix.lower() in COOKED_EXTS and not has_raw.get(stem)}
+    return unique, standalone
+
 @dataclass
 class EngineConfig:
     """Configuration for the CullingEngine."""
@@ -66,40 +96,35 @@ class CullingEngine:
         self.cloud_f1 = None
         self.standalone_cooked: set[Path] = set()
 
+    @staticmethod
+    def collect_shots(input_dir: Path, recursive: bool = False) -> tuple[list[Path], set[Path]]:
+        """Collect supported images and deduplicate RAW/cooked pairs.
+
+        Shared by the engine scan and the sidecar ``scan`` command so the
+        pending list shown before a run matches what the run will process.
+        """
+        found = CullingEngine._collect_images(input_dir, recursive)
+        return dedupe_raw_cooked(found)
+
+
     def scan(self, progress_callback: Callable[[str, float], None] | None = None):
         """Scan input directory and group bursts."""
         if progress_callback:
             progress_callback("Collecting images...", 0.1)
-        
+
         # 1. Collect images
         self.image_paths = self._collect_images(self.config.input_dir, self.config.recursive)
         log.info("Found %d raw image files", len(self.image_paths))
-        
+
         if self.config.rename:
             if progress_callback:
                 progress_callback("Renaming images...", 0.2)
             new_map = rename_images(self.image_paths, dry_run=self.config.dry_run)
             self.image_paths = sorted(list(new_map.values()))
 
-        # 2. Prioritize JPG/HIF over RAW
-        stems: dict[str, Path] = {}
-        has_raw: dict[str, bool] = {}
-        for p in self.image_paths:
-            stem = p.stem.lower()
-            ext = p.suffix.lower()
-            if ext in RAW_EXTS:
-                has_raw[stem] = True
-            if stem not in stems:
-                stems[stem] = p
-            else:
-                prev = stems[stem]
-                if ext in COOKED_EXTS and prev.suffix.lower() in RAW_EXTS:
-                    stems[stem] = p
-        
-        self.image_paths = sorted(stems.values())
-        self.standalone_cooked = {p for stem, p in stems.items() 
-                                  if p.suffix.lower() in COOKED_EXTS and not has_raw.get(stem)}
-        
+        # 2. Prioritize JPG/HIF over RAW (same stems survive renaming)
+        self.image_paths, self.standalone_cooked = dedupe_raw_cooked(self.image_paths)
+
         log.info("Processing %d unique shots", len(self.image_paths))
 
         # 3. Read EXIF & Grouping
@@ -222,17 +247,23 @@ class CullingEngine:
             if not self.config.force and (is_rating_set or is_pick_set):
                 if not is_rating_set:
                     final_rating = 1 if final_pick == 1 else (-1 if final_pick == -1 else 0)
-                scores.append(ImageScore(
-                    path=frame_path, s_sharp=1.0, s_comp=1.0, 
+                manual_score = ImageScore(
+                    path=frame_path, s_sharp=1.0, s_comp=1.0,
                     raw_score=10.0 if final_rating > 0 else 0.0,
-                    rating=final_rating, vetoed=(final_rating == -1), 
+                    rating=final_rating, vetoed=(final_rating == -1),
                     veto_reason="manual_metadata", is_manual=True
-                ))
+                )
+                scores.append(manual_score)
+                log.info(FRAME_LOG_FMT, frame_path.name, manual_score.s_sharp,
+                         manual_score.s_comp, manual_score.raw_score, manual_score.rating,
+                         "  (manual_metadata)")
                 continue
 
             # Load image
             img_rgb = load_image_rgb(frame_path, scale_width=self.config.scale_width)
             if img_rgb is None:
+                log.info(FRAME_LOG_FMT, frame_path.name, 0.0, 0.0, 0.0, 0,
+                         "  (decode_failed)")
                 continue
 
 
@@ -259,8 +290,7 @@ class CullingEngine:
             scores.append(img_score)
             
             log.info(
-                "  [%s]  sharp=%.3f  comp=%.3f  raw=%.2f  Rating=%+d%s",
-                frame_path.name, s_sharp, s_comp, img_score.raw_score,
+                FRAME_LOG_FMT, frame_path.name, s_sharp, s_comp, img_score.raw_score,
                 img_score.rating, f"  ({img_score.veto_reason})" if img_score.vetoed else ""
             )
 
@@ -277,7 +307,8 @@ class CullingEngine:
                         s.crop = calculate_crop(d.x1/s.img_w, d.y1/s.img_h, d.x2/s.img_w, d.y2/s.img_h, img_ar=s.img_w/s.img_h)
         return scores
 
-    def _collect_images(self, input_dir: Path, recursive: bool) -> list[Path]:
+    @staticmethod
+    def _collect_images(input_dir: Path, recursive: bool) -> list[Path]:
         """Scan *input_dir* for supported image files, sorted by name."""
         import os
         found: list[Path] = []

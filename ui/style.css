@@ -97,12 +97,19 @@ input, select { user-select: text; }
 /* ---------- params ---------- */
 
 .params {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: 8px 24px;
+  padding: 12px 16px 40px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+}
+.params.collapsed { display: none; }
+.params-toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
 }
 .param-group { display: flex; flex-direction: column; gap: 8px; }
 .param-title { font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
@@ -213,6 +220,13 @@ input, select { user-select: text; }
 #grid tbody tr { cursor: pointer; }
 #grid tbody tr:hover { background: rgba(225, 6, 0, .06); }
 #grid tbody tr.selected { background: rgba(225, 6, 0, .14); }
+#grid tbody tr.pending td { color: var(--dim); }
+#grid tbody tr.pending .stars { color: var(--dim); }
+#grid tbody tr.flash { animation: rowflash 1.2s ease-out; }
+@keyframes rowflash {
+  from { background: rgba(46, 204, 113, .22); }
+  to { background: transparent; }
+}
 #grid td.num { font-family: var(--mono); text-align: right; }
 #grid td.reject { color: #ff6b5e; }
 #grid td.keep { color: var(--ok); }

@@ -130,10 +130,14 @@ def probe_full_dimensions(path: Path) -> Tuple[int, int] | None:
 _preview_stream_cache: dict[Path, Tuple[int, int, int] | None] = {}
 
 def get_preview_stream(path: Path) -> Tuple[int, int, int] | None:
-    cache_key = path.parent
-    if cache_key not in _preview_stream_cache:
-        _preview_stream_cache[cache_key] = probe_embedded_preview(path)
-    return _preview_stream_cache[cache_key]
+    # Cache per FILE, not per directory: files in one folder can mix gain HDR
+    # and SDR HEVC streams (e.g. an f1.2 burst), and probing the first file's
+    # stream index for its siblings then selects the wrong stream for some of
+    # them — the visible symptom is thumbnails that are randomly too dark or
+    # too bright.
+    if path not in _preview_stream_cache:
+        _preview_stream_cache[path] = probe_embedded_preview(path)
+    return _preview_stream_cache[path]
 
 def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     preview = get_preview_stream(path)
@@ -141,12 +145,13 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         idx, w, h = preview
         try:
             ffmpeg_bin = _find_ffmpeg_path()
-            # Use hardware acceleration if available (cuda for NVIDIA, d3d11va for generic Windows)
-            hw_accel = "cuda" if sys.platform == "win32" else "auto"
+            # Hardware decode is disabled: it is a throughput optimization
+            # only, and some HW paths return washed-out/too-dark output for
+            # HDR-gain HEVC stills (10-bit → 8-bit conversion differs from
+            # the software path). Correctness of brightness beats speed here.
             cmd = [
-                ffmpeg_bin, "-hide_banner", "-v", "error", 
-                "-hwaccel", hw_accel, 
-                "-i", str(path), "-map", f"0:{idx}", 
+                ffmpeg_bin, "-hide_banner", "-v", "error",
+                "-i", str(path), "-map", f"0:{idx}",
                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-y", "pipe:1"
             ]
             proc = subprocess.run(cmd, capture_output=True, timeout=30, **subprocess_flags())

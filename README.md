@@ -119,11 +119,12 @@ The output will be available in `dist/cull_photos/`.
 
 ## 🖥️ Desktop GUI
 
-The primary desktop app is a **Tauri 2** shell (`ui/` static frontend + Rust in `src-tauri/`): a modern dark UI rendered by the OS webview (WebView2 on Windows, WKWebView on macOS), with an installer-sized shell of ~10MB. The culling engine runs as a bundled Python sidecar (`cull_photos.py --json-lines`) that streams events over stdio — the GUI spawns the engine once per job and keeps it alive afterwards to decode previews, so there is no per-click process startup.
+The primary desktop app is a **Tauri 2** shell (`ui/` static frontend + Rust in `src-tauri/`): a modern dark UI rendered by the OS webview (WebView2 on Windows, WKWebView on macOS), with an installer-sized shell of ~10MB. The culling engine runs as a bundled Python sidecar (`cull_photos.py --json-lines`) that stays RESIDENT for the whole session and answers `scan` / `run` / `cancel` / `preview` commands over stdio — the GUI scans a directory into the pending list the moment it is picked, streams results in per frame while scoring runs, and reruns with adjusted parameters without respawning the engine.
 
-- **Streaming results**: rows appear in the table the moment each frame is scored — no need to wait for the whole job.
+- **Pending list first**: picking a directory scans it (RAW/cooked pairs deduplicated) and fills the table immediately; per-frame results fill in as scoring progresses.
+- **Streaming results**: rows update the moment each frame is scored — no need to wait for the whole job.
 - **Live progress**: remapped phase bar (the scoring phase spans most of the bar) plus per-frame counters ("scored X/Y, keep A / discard B").
-- **Full control**: every CLI option in the parameter panel (basic + advanced); settings persist in the browser's localStorage between sessions.
+- **Full control**: the parameter panel (basic + advanced) toggles open/closed from the toolbar; every CLI option is editable between runs; settings persist in the browser's localStorage between sessions.
 - **Result review**: sortable/filterable table of ratings, scores and veto reasons; click a row to preview the photo in a **fixed-size preview pane** that never reflows the layout.
 - **Cancellation**: stop a running job at any time — already-scored frames stay visible and nothing is written to disk.
 - **Logs & export**: live log panel, summary statistics (throughput, keep/discard, star distribution) and one-click CSV export via the native save dialog.
@@ -132,8 +133,9 @@ The primary desktop app is a **Tauri 2** shell (`ui/` static frontend + Rust in 
 
 Run from source (dev mode):
 ```bash
-python cull_gui.py                    # lightweight CustomTkinter fallback GUI
 cd src-tauri && cargo tauri dev       # Tauri UI (requires Rust toolchain)
+# dev builds fall back to .venv/bin/python cull_photos.py --json-lines
+# when the packaged sidecar binary is absent
 ```
 
 Launch the packaged Tauri app without stealing focus (e.g. from a fullscreen game):
@@ -151,7 +153,7 @@ tauri build --no-bundle                            # 2. shell + sidecar
 # macOS:   src-tauri/target/release/auto-culling
 ```
 
-The legacy CustomTkinter GUI can still be built with `pyinstaller cull_gui.spec --noconfirm` (output `dist/auto_cull_gui_v0.1_win_x64.exe`). Packaged binaries launch subprocesses with `CREATE_NO_WINDOW`, so no command-line windows flash while a job is starting.
+Packaged binaries launch subprocesses with `CREATE_NO_WINDOW` on Windows, so no command-line windows flash while a job is starting. The CustomTkinter fallback GUI was removed; the Tauri shell is the only GUI on both Windows and macOS.
 
 ## 📂 Project Structure
 

@@ -119,11 +119,12 @@ pyinstaller cull_photos.spec --noconfirm
 
 ## 🖥️ 桌面图形界面
 
-主桌面应用为 **Tauri 2** 壳（`ui/` 静态前端 + `src-tauri/` Rust 应用）：深色现代 UI 由系统 WebView 渲染（Windows 用 WebView2，macOS 用 WKWebView），外壳本体约 10MB。筛选引擎以打包的 Python sidecar（`cull_photos.py --json-lines`）形式运行，通过 stdio 流式推送事件——GUI 每次任务只启动一次引擎，任务结束后进程驻留用于解码预览，点击预览无需重新启动进程。
+主桌面应用为 **Tauri 2** 壳（`ui/` 静态前端 + `src-tauri/` Rust 应用）：深色现代 UI 由系统 WebView 渲染（Windows 用 WebView2，macOS 用 WKWebView），外壳本体约 10MB。筛选引擎以打包的 Python sidecar（`cull_photos.py --json-lines`）形式运行，进程在整个会话期间**常驻**，通过 stdio 响应 `scan` / `run` / `cancel` / `preview` 命令——选定目录即刻扫描（RAW/成品去重）填充待筛列表，打分结果逐帧回填，调整参数后可重新运行而无需重启引擎。
 
-- **流式结果**：每帧打分完成后立即插入结果列表，无需等待全部筛选结束即可开始点选预览。
+- **先看片单**：选定目录立即扫描（RAW/JPG 同名去重）填充表格；筛选结果随打分进度逐帧填入。
+- **流式结果**：每帧打分完成后立即更新对应行，无需等待全部筛选结束即可开始点选预览。
 - **实时进度**：权重重映射的阶段进度条（打分阶段占据大部分进度）+ 逐帧计数（"已打分 X/Y，保留 A / 丢弃 B"）。
-- **功能齐全**：参数面板覆盖全部 CLI 选项（基本 + 高级）；设置保存在浏览器 localStorage 中，跨会话持久。
+- **功能齐全**：参数面板（基本 + 高级）从工具栏开关展开；两次运行之间可修改任意 CLI 选项；设置保存在浏览器 localStorage 中，跨会话持久。
 - **结果查看**：可排序/筛选的评分表格（星级、评分、否决原因）；点击行即可在**固定尺寸预览窗格**中查看照片，窗格大小永不随内容变化。
 - **随时取消**：运行中可停止任务——已打分的结果保留展示，且不会写入任何文件。
 - **日志与导出**：实时日志面板、汇总统计（吞吐、保留/丢弃、星级分布）、原生保存对话框一键导出 CSV。
@@ -132,8 +133,8 @@ pyinstaller cull_photos.spec --noconfirm
 
 源码方式运行：
 ```bash
-python cull_gui.py                    # 轻量 CustomTkinter 备用 GUI
 cd src-tauri && cargo tauri dev       # Tauri UI（需要 Rust 工具链）
+# dev 构建在缺少打包 sidecar 时自动回退到 .venv/bin/python cull_photos.py --json-lines
 ```
 
 以不抢焦点方式启动打包后的 Tauri 应用（例如不打断全屏游戏）：
@@ -151,7 +152,7 @@ tauri build --no-bundle                            # 2. 构建外壳 + sidecar
 # macOS:   src-tauri/target/release/auto-culling
 ```
 
-旧版 CustomTkinter GUI 仍可用 `pyinstaller cull_gui.spec --noconfirm` 构建（产物 `dist/auto_cull_gui_v0.1_win_x64.exe`）。打包后的程序以 `CREATE_NO_WINDOW` 方式启动子进程，任务开始阶段不会再闪现命令行窗口。
+打包后的程序以 `CREATE_NO_WINDOW` 方式启动子进程，任务开始阶段不会再闪现命令行窗口。CustomTkinter 备用 GUI 已移除，Windows 与 macOS 统一使用 Tauri 壳。
 
 ## 📂 项目结构
 

@@ -121,25 +121,29 @@ def _build_config(args: argparse.Namespace, input_dir: Path) -> EngineConfig:
 
 
 def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
-    """JSON Lines sidecar mode for the Tauri GUI.
+    """Resident JSON Lines sidecar for the Tauri GUI.
 
-    Streams structured events (stage/group/frame/done/cancelled/error) as one
-    JSON object per line on stdout, and reads commands from stdin: the bare
-    line ``cancel`` aborts a running job; after completion the process stays
-    alive and answers preview requests (``{"cmd": "preview", ...}``) so the
-    GUI can decode thumbnails without respawning the engine.
+    Reads one JSON command per line from stdin and answers on stdout (one
+    JSON object per line): ``scan`` lists the shots of a directory (filled
+    into the GUI pending list before any run), ``run`` executes a culling
+    job (stage/group/frame/log/done/cancelled/error events), ``cancel``
+    aborts a running job, ``preview`` renders a thumbnail PNG, ``quit``
+    exits. The process stays resident between commands so the GUI can
+    rescan directories, rerun with different parameters, and preview
+    without respawning the engine.
     """
     import base64
     import io
     import json
+    import queue
     import threading
-    from cull.gui.preview import render_pil  # reuse overlay thumbnail renderer
+    from cull.engine import CullingEngine
+    from cull.gui.preview import render_pil
     from cull.scorer import ImageScore
 
     setup_logging(input_dir, console=False)
-    config = _build_config(args, input_dir)
     cancel_event = threading.Event()
-    log.info("json-lines mode: stdin=%r isatty=%s", sys.stdin, getattr(sys.stdin, "isatty", lambda: None)())
+    cmd_queue: "queue.Queue[dict]" = queue.Queue()
 
     def stdin_reader() -> None:
         try:
@@ -154,78 +158,106 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
                     cmd = json.loads(line)
                 except Exception:
                     continue
-                if cmd.get("cmd") == "preview":
-                    log.info("preview: rendering %s size=%s", cmd["path"], cmd.get("size"))
-                    try:
-                        pil = render_pil(
-                            ImageScore(path=Path(cmd["path"]), s_sharp=0.0, s_comp=0.0,
-                                       raw_score=0.0, rating=0),
-                            max_size=int(cmd.get("size", 520)))
-                    except Exception as exc:
-                        log.info("preview: render raised: %r", exc)
-                        pil = None
-                    log.info("preview: rendered=%s", pil is not None)
-                    if pil is None:
-                        emit({"type": "preview", "path": cmd["path"], "png": None})
-                        log.info("preview: emitted null")
-                    else:
-                        buf = io.BytesIO()
-                        pil.save(buf, format="PNG")
-                        emit({"type": "preview", "path": cmd["path"],
-                              "png": base64.b64encode(buf.getvalue()).decode("ascii")})
-                        log.info("preview: emitted png %d bytes", buf.tell())
-                elif cmd.get("cmd") == "quit":
+                if not isinstance(cmd, dict):
+                    continue
+                log.info("sidecar command: %s", cmd.get("cmd"))
+                if cmd.get("cmd") == "cancel":
+                    cancel_event.set()
+                    continue
+                cmd_queue.put(cmd)
+                if cmd.get("cmd") == "quit":
                     return
         except Exception:
             pass
 
-    # Attach the JSON handler to the root logger; engine INFO records (which
-    # include the per-group/per-frame lines) become structured events.
-    root = logging.getLogger()
-    previous_level = root.level
-    if previous_level > logging.INFO:
-        root.setLevel(logging.INFO)
-    handler = JsonLinesHandler(sys.stdout)
-    root.addHandler(handler)
-    stdin_thread = threading.Thread(target=stdin_reader, daemon=True)
-    stdin_thread.start()
+    threading.Thread(target=stdin_reader, daemon=True).start()
 
-    engine = CullingEngine(config)
-    try:
-        pre_paths = engine._collect_images(config.input_dir, config.recursive)
-        emit({"type": "total", "frames": len(pre_paths)})
-        emit({"type": "paths", "paths": {p.name: str(p) for p in pre_paths}})
-    except Exception:
-        pass
+    def do_scan(cmd: dict) -> None:
+        directory = Path(cmd.get("dir") or input_dir)
+        recursive = bool(cmd.get("recursive", args.recursive))
+        try:
+            shots, _standalone = CullingEngine.collect_shots(directory, recursive)
+            emit({"type": "scanned", "dir": str(directory),
+                  "total": len(shots),
+                  "paths": {p.name: str(p) for p in shots}})
+        except Exception as exc:
+            emit({"type": "scan_error", "message": str(exc)})
 
-    def progress(msg: str, p: float) -> None:
-        emit({"type": "stage", "msg": msg, "pct": p})
+    def do_run(cmd: dict) -> None:
+        merged = argparse.Namespace(**vars(args))
+        for key, value in cmd.get("config", {}).items():
+            if hasattr(merged, key):
+                setattr(merged, key, value)
+        run_input = Path(cmd.get("dir") or merged.input_dir)
+        if not run_input.is_dir():
+            emit({"type": "error", "message": f"input directory not found: {run_input}"})
+            return
 
-    try:
-        scores, elapsed = engine.run(progress_callback=progress, cancel_event=cancel_event)
-    except Exception as exc:
-        emit({"type": "error", "message": str(exc)})
-        return 1
-    finally:
-        root.removeHandler(handler)
-        root.setLevel(previous_level)
+        config = _build_config(merged, run_input)
+        cancel_event.clear()
+        engine = CullingEngine(config)
 
-    if cancel_event.is_set():
-        emit({"type": "cancelled", "count": len(scores)})
-        return 0
+        root = logging.getLogger()
+        previous_level = root.level
+        if previous_level > logging.INFO:
+            root.setLevel(logging.INFO)
+        handler = JsonLinesHandler(sys.stdout)
+        root.addHandler(handler)
 
-    total = len(scores)
-    keep = sum(1 for s in scores if s.rating > 0)
-    stars: dict[int, int] = {}
-    for s in scores:
-        if s.rating > 0:
-            stars[s.rating] = stars.get(s.rating, 0) + 1
-    emit({"type": "done", "elapsed": elapsed, "total": total, "keep": keep,
-          "reject": total - keep, "stars": stars})
+        def progress(msg: str, p: float) -> None:
+            emit({"type": "stage", "msg": msg, "pct": p})
 
-    # Stay alive for preview requests until the GUI sends "quit".
-    stdin_thread.join(timeout=None)
-    return 0
+        try:
+            scores, elapsed = engine.run(progress_callback=progress,
+                                         cancel_event=cancel_event)
+        except Exception as exc:
+            emit({"type": "error", "message": str(exc)})
+            return
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(previous_level)
+
+        if cancel_event.is_set():
+            emit({"type": "cancelled", "count": len(scores)})
+            return
+
+        total = len(scores)
+        keep = sum(1 for s in scores if s.rating > 0)
+        stars: dict[int, int] = {}
+        for s in scores:
+            if s.rating > 0:
+                stars[s.rating] = stars.get(s.rating, 0) + 1
+        emit({"type": "done", "elapsed": elapsed, "total": total, "keep": keep,
+              "reject": total - keep, "stars": stars})
+
+    def do_preview(cmd: dict) -> None:
+        try:
+            pil = render_pil(
+                ImageScore(path=Path(cmd["path"]), s_sharp=0.0, s_comp=0.0,
+                           raw_score=0.0, rating=0),
+                max_size=int(cmd.get("size", 520)),
+            )
+        except Exception:
+            pil = None
+        if pil is None:
+            emit({"type": "preview", "path": cmd["path"], "png": None})
+        else:
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            emit({"type": "preview", "path": cmd["path"],
+                  "png": base64.b64encode(buf.getvalue()).decode("ascii")})
+
+    while True:
+        cmd = cmd_queue.get()
+        kind = cmd.get("cmd")
+        if kind == "quit":
+            return 0
+        if kind == "scan":
+            do_scan(cmd)
+        elif kind == "run":
+            do_run(cmd)
+        elif kind == "preview":
+            do_preview(cmd)
 
 
 def run(args: argparse.Namespace) -> int:

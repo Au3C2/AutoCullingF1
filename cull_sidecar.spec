@@ -49,7 +49,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=['torch', 'torchvision', 'ultralytics', 'opencv-python', 'cv2', 'scipy',
               'matplotlib', 'pandas', 'polars', 'tkinter', 'PySide6', 'PyQt5',
-              'IPython', 'customtkinter', 'darkdetect', 'packaging',
+              'IPython', 'packaging',
               'PIL._imagingtk', 'PIL._tkinter_finder'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
