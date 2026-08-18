@@ -94,13 +94,13 @@ input, select { user-select: text; }
 .link { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; }
 .link:hover { color: var(--text); }
 
-/* ---------- params (compact layout) ---------- */
+/* ---------- params (compact layout & tooltips) ---------- */
 
 .params {
   position: relative;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-  padding: 8px 16px 8px;
+  padding: 8px 16px 10px;
   animation: slideDown .15s ease-out;
 }
 @keyframes slideDown {
@@ -111,8 +111,8 @@ input, select { user-select: text; }
 
 .params-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1.6fr 1fr;
-  gap: 12px 20px;
+  grid-template-columns: 1.15fr 1.55fr 1fr;
+  gap: 8px 24px;
 }
 
 .params-toggle {
@@ -139,16 +139,13 @@ input, select { user-select: text; }
 .param-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-.param-row > .field, .param-row > .check {
-  flex: 1;
+  gap: 14px;
 }
 
 .check {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -158,25 +155,116 @@ input, select { user-select: text; }
 .field {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
   white-space: nowrap;
 }
+.field .lbl {
+  color: var(--text);
+  min-width: 52px;
+  display: inline-block;
+}
+
 .field input, .field select {
-  width: 76px;
+  width: 68px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 4px;
   color: var(--text);
-  padding: 3px 6px;
+  padding: 2px 6px;
   font-size: 12px;
+  height: 24px;
   outline: none;
 }
 .field input[type="password"] {
-  width: 90px;
+  width: 82px;
 }
-.field input:focus { border-color: var(--accent); }
+.field input:focus, .field select:focus {
+  border-color: var(--accent);
+}
+
+/* Tooltip info icon and bubble */
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--mono);
+  cursor: help;
+  user-select: none;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.info-icon:hover {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.tip-content {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1e2430;
+  border: 1px solid #364154;
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 220px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: normal;
+  box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity .15s ease, transform .15s ease, visibility .15s;
+}
+.tip-content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #1e2430 transparent transparent transparent;
+}
+.tip-wrap:hover .tip-content {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.tip-title {
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 3px;
+}
+.tip-def {
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+.tip-def span {
+  color: var(--accent-hover);
+  font-family: var(--mono);
+}
+.tip-desc {
+  color: #cfd4de;
+}
 
 /* Selects: strip the native macOS appearance (a system-drawn highlight/
    gradient otherwise overrides the dark theme) and draw a custom arrow. */

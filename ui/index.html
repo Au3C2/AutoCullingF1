@@ -32,47 +32,207 @@
       <div class="param-group">
         <div class="param-title">基本参数</div>
         <div class="param-row">
-          <label class="check"><input type="checkbox" id="pRecursive"> 递归扫描</label>
-          <label class="check"><input type="checkbox" id="pForce"> 强制重评</label>
+          <label class="check">
+            <input type="checkbox" id="pRecursive"> 递归扫描
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">递归扫描子目录</div>
+                <div class="tip-def">默认: <span>关闭</span></div>
+                <div class="tip-desc">开启后将递归遍历所选目录下的所有层级子文件夹；关闭则仅扫描当前根目录。</div>
+              </span>
+            </span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="pForce"> 强制重评
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">强制重新分析</div>
+                <div class="tip-def">默认: <span>关闭</span></div>
+                <div class="tip-desc">开启后强制全量重新运行 AI 打分并覆盖已有结果；关闭时自动跳过已有人工/XMP评级照片。</div>
+              </span>
+            </span>
+          </label>
         </div>
         <div class="param-row">
-          <label class="field">Top-N <input type="number" id="pTopN" value="11"></label>
-          <label class="field">朝向
+          <label class="field">
+            <span class="lbl">Top-N</span>
+            <input type="number" id="pTopN" value="11">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">每连拍保留数</div>
+                <div class="tip-def">默认: <span>11</span></div>
+                <div class="tip-desc">每组连拍序列中允许评星保留的最大张数。调小筛选更苛刻只留极品，调大保留更多连拍角度。</div>
+              </span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lbl">朝向策略</span>
             <select id="pP4">
               <option value="always" selected>always</option>
               <option value="never">never</option>
               <option value="auto">auto</option>
             </select>
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">P4 车辆朝向一票否决</div>
+                <div class="tip-def">默认: <span>always</span></div>
+                <div class="tip-desc">always: 始终自动否决正后方尾部视角；never: 不否决朝向；auto: 仅对 F1 比赛关键词目录启用。</div>
+              </span>
+            </span>
           </label>
         </div>
         <div class="param-row">
-          <label class="field">解码宽 <input type="number" id="pScale" value="1280"></label>
-          <label class="field">并发数 <input type="number" id="pWorkers" value="4"></label>
+          <label class="field">
+            <span class="lbl">解码宽度</span>
+            <input type="number" id="pScale" value="1280">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">图像解码缩放宽度 (px)</div>
+                <div class="tip-def">默认: <span>1280</span></div>
+                <div class="tip-desc">推理前图像缩放长边。调小 (如 800) 加快处理速度；调大 (如 1920) 提升远景小目标精度但耗时上升。</div>
+              </span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lbl">并发线程</span>
+            <input type="number" id="pWorkers" value="4">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">并行处理 Worker 数</div>
+                <div class="tip-def">默认: <span>4</span></div>
+                <div class="tip-desc">多进程/线程解码并发度。增加可提高多核 CPU 吞吐量，内存紧张时可适当调小。</div>
+              </span>
+            </span>
+          </label>
         </div>
       </div>
+
       <div class="param-group">
         <div class="param-title">评分权重与阈值</div>
         <div class="param-row">
-          <label class="field">锐度阈值 <input type="number" id="pSharp" step="0.01" value="0.05"></label>
-          <label class="field">锐度权重 <input type="number" id="pWSharp" step="0.1" value="1.5"></label>
+          <label class="field">
+            <span class="lbl">锐度阈值</span>
+            <input type="number" id="pSharp" step="0.01" value="0.05">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">P0 锐度否决阈值</div>
+                <div class="tip-def">默认: <span>0.05</span></div>
+                <div class="tip-desc">高频细节比率下限。低于此值直接判定模糊失焦并丢弃。调高严格防虚焦，调低更包容运动拉丝。</div>
+              </span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lbl">锐度权重</span>
+            <input type="number" id="pWSharp" step="0.1" value="1.5">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">锐度加权系数</div>
+                <div class="tip-def">默认: <span>1.5</span></div>
+                <div class="tip-desc">计算公式: 1.5 × S_锐度。增大该权重会让清晰锐利的照片得分更突出。</div>
+              </span>
+            </span>
+          </label>
         </div>
         <div class="param-row">
-          <label class="field">构图权重 <input type="number" id="pWComp" step="0.1" value="2.5"></label>
-          <label class="field">最低总分 <input type="number" id="pMinRaw" step="0.1" value="3.1"></label>
+          <label class="field">
+            <span class="lbl">构图权重</span>
+            <input type="number" id="pWComp" step="0.1" value="2.5">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">构图加权系数</div>
+                <div class="tip-def">默认: <span>2.5</span></div>
+                <div class="tip-desc">计算公式: 2.5 × S_构图。增大该权重会让主体大小适中且居中的照片得分大幅上升。</div>
+              </span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lbl">最低总分</span>
+            <input type="number" id="pMinRaw" step="0.1" value="3.1">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">合格保留最低分</div>
+                <div class="tip-def">默认: <span>3.1</span></div>
+                <div class="tip-desc">总分低于此值的照片直接丢弃淘汰。调高 (如 3.5) 精挑细选，调低 (如 2.8) 提高保留率。</div>
+              </span>
+            </span>
+          </label>
         </div>
         <div class="param-row">
-          <label class="field">置信度 <input type="number" id="pConf" step="0.01" value="0.25"></label>
-          <label class="field">API Key <input type="password" id="pRfKey" placeholder="Roboflow"></label>
+          <label class="field">
+            <span class="lbl">置信度</span>
+            <input type="number" id="pConf" step="0.01" value="0.25">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">YOLO 检测置信度阈值</div>
+                <div class="tip-def">默认: <span>0.25</span></div>
+                <div class="tip-desc">目标检测最低置信度。调低捕捉远景微小主体但可能误检；调高保证主体确凿。</div>
+              </span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lbl">API Key</span>
+            <input type="password" id="pRfKey" placeholder="Roboflow">
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">Roboflow 云端 API Key</div>
+                <div class="tip-def">默认: <span>留空 (本地模型)</span></div>
+                <div class="tip-desc">可选。若配置则使用 Roboflow 线上赛车模型；留空则使用本地 ONNX 模型推理。</div>
+              </span>
+            </span>
+          </label>
         </div>
       </div>
+
       <div class="param-group">
         <div class="param-title">输出控制</div>
         <div class="param-row">
-          <label class="check"><input type="checkbox" id="pAutocrop" checked> 自动裁剪</label>
-          <label class="check"><input type="checkbox" id="pRename"> 重命名</label>
+          <label class="check">
+            <input type="checkbox" id="pAutocrop" checked> 自动裁剪
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">XMP 自动裁剪元数据</div>
+                <div class="tip-def">默认: <span>开启</span></div>
+                <div class="tip-desc">开启后自动在 XMP 中写入最佳 3:2/2:3 构图框，Lightroom 导入将直接应用裁剪。</div>
+              </span>
+            </span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="pRename"> 重命名
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">连拍组批量重命名</div>
+                <div class="tip-def">默认: <span>关闭</span></div>
+                <div class="tip-desc">开启后将按连拍组序号直接重命名磁盘文件；关闭保持原始文件名不变。</div>
+              </span>
+            </span>
+          </label>
         </div>
         <div class="param-row">
-          <label class="check"><input type="checkbox" id="pDryRun"> 试运行 (不写文件)</label>
+          <label class="check">
+            <input type="checkbox" id="pDryRun"> 试运行 (不写文件)
+            <span class="tip-wrap">
+              <span class="info-icon">i</span>
+              <span class="tip-content">
+                <div class="tip-title">试运行模式 (Dry-Run)</div>
+                <div class="tip-def">默认: <span>关闭</span></div>
+                <div class="tip-desc">开启后仅在 GUI 界面展示分析打分与统计，不生成 XMP，不修改任何磁盘文件。</div>
+              </span>
+            </span>
+          </label>
         </div>
       </div>
     </div>
