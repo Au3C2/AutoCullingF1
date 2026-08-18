@@ -461,9 +461,79 @@ function setStatus(msg) {
   $("status").textContent = msg;
 }
 
+/* ---------- resizable workspace splitter ---------- */
+
+function initSplitter() {
+  const resizer = $("resizer");
+  const workspace = document.querySelector(".workspace");
+  const tablePane = document.querySelector(".table-pane");
+  if (!resizer || !workspace || !tablePane) return;
+
+  // Restore saved ratio or default to 38%
+  const savedRatio = localStorage.getItem("ac-table-ratio");
+  if (savedRatio) {
+    const r = parseFloat(savedRatio);
+    if (!isNaN(r) && r >= 0.15 && r <= 0.85) {
+      tablePane.style.setProperty("--table-width", (r * 100).toFixed(1) + "%");
+    }
+  }
+
+  let dragging = false;
+  let previewTimer = null;
+
+  resizer.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = workspace.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const totalW = rect.width;
+    // Enforce min widths (260px table, 260px preview)
+    const minTableW = 260;
+    const minPreviewW = 260;
+    const clampedX = Math.max(minTableW, Math.min(totalW - minPreviewW, offsetX));
+    const ratio = clampedX / totalW;
+    tablePane.style.setProperty("--table-width", (ratio * 100).toFixed(1) + "%");
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+
+    // Save ratio
+    const rect = workspace.getBoundingClientRect();
+    const tableRect = tablePane.getBoundingClientRect();
+    if (rect.width > 0) {
+      const ratio = tableRect.width / rect.width;
+      try { localStorage.setItem("ac-table-ratio", ratio.toFixed(4)); } catch (_) {}
+    }
+
+    // Refresh preview if we currently have an active selected photo
+    if (state.selectedPath) {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        if (state.selectedPath) {
+          state.previewBusy = false;
+          requestPreview(state.selectedPath);
+        }
+      }, 150);
+    }
+  });
+}
+
 /* ---------- wiring ---------- */
 
 function wire() {
+  initSplitter();
   $("pickDir").addEventListener("click", pickDir);
   $("start").addEventListener("click", startRun);
   $("stop").addEventListener("click", stopRun);

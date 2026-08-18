@@ -28,32 +28,53 @@
   </header>
 
   <section id="params" class="params collapsed">
-    <div class="param-group">
-      <div class="param-title">基本参数</div>
-      <label class="check"><input type="checkbox" id="pRecursive"> 递归扫描子目录</label>
-      <label class="check"><input type="checkbox" id="pForce"> 强制重新分析（忽略已有评分）</label>
-      <label class="field">每连拍保留数 (Top-N)<input type="number" id="pTopN" value="11"></label>
-      <label class="field">P4 朝向策略
-        <select id="pP4">
-          <option value="always" selected>always</option>
-          <option value="never">never</option>
-          <option value="auto">auto</option>
-        </select>
-      </label>
-      <label class="field">解码宽度<input type="number" id="pScale" value="1280"></label>
-      <label class="field">并发线程<input type="number" id="pWorkers" value="4"></label>
-    </div>
-    <div class="param-group">
-      <div class="param-title">高级参数</div>
-      <label class="field">锐度阈值<input type="number" id="pSharp" step="0.01" value="0.05"></label>
-      <label class="field">锐度权重<input type="number" id="pWSharp" step="0.1" value="1.5"></label>
-      <label class="field">构图权重<input type="number" id="pWComp" step="0.1" value="2.5"></label>
-      <label class="field">最低总分<input type="number" id="pMinRaw" step="0.1" value="3.1"></label>
-      <label class="field">检测置信度<input type="number" id="pConf" step="0.01" value="0.25"></label>
-      <label class="check"><input type="checkbox" id="pAutocrop" checked> 自动裁剪</label>
-      <label class="check"><input type="checkbox" id="pRename"> 重命名文件</label>
-      <label class="check"><input type="checkbox" id="pDryRun"> 试运行（不写任何文件）</label>
-      <label class="field">Roboflow API Key<input type="password" id="pRfKey"></label>
+    <div class="params-grid">
+      <div class="param-group">
+        <div class="param-title">基本参数</div>
+        <div class="param-row">
+          <label class="check"><input type="checkbox" id="pRecursive"> 递归扫描</label>
+          <label class="check"><input type="checkbox" id="pForce"> 强制重评</label>
+        </div>
+        <div class="param-row">
+          <label class="field">Top-N <input type="number" id="pTopN" value="11"></label>
+          <label class="field">朝向
+            <select id="pP4">
+              <option value="always" selected>always</option>
+              <option value="never">never</option>
+              <option value="auto">auto</option>
+            </select>
+          </label>
+        </div>
+        <div class="param-row">
+          <label class="field">解码宽 <input type="number" id="pScale" value="1280"></label>
+          <label class="field">并发数 <input type="number" id="pWorkers" value="4"></label>
+        </div>
+      </div>
+      <div class="param-group">
+        <div class="param-title">评分权重与阈值</div>
+        <div class="param-row">
+          <label class="field">锐度阈值 <input type="number" id="pSharp" step="0.01" value="0.05"></label>
+          <label class="field">锐度权重 <input type="number" id="pWSharp" step="0.1" value="1.5"></label>
+        </div>
+        <div class="param-row">
+          <label class="field">构图权重 <input type="number" id="pWComp" step="0.1" value="2.5"></label>
+          <label class="field">最低总分 <input type="number" id="pMinRaw" step="0.1" value="3.1"></label>
+        </div>
+        <div class="param-row">
+          <label class="field">置信度 <input type="number" id="pConf" step="0.01" value="0.25"></label>
+          <label class="field">API Key <input type="password" id="pRfKey" placeholder="Roboflow"></label>
+        </div>
+      </div>
+      <div class="param-group">
+        <div class="param-title">输出控制</div>
+        <div class="param-row">
+          <label class="check"><input type="checkbox" id="pAutocrop" checked> 自动裁剪</label>
+          <label class="check"><input type="checkbox" id="pRename"> 重命名</label>
+        </div>
+        <div class="param-row">
+          <label class="check"><input type="checkbox" id="pDryRun"> 试运行 (不写文件)</label>
+        </div>
+      </div>
     </div>
     <button id="toggleParams" class="link params-toggle" type="button">收起设置 ⌃</button>
   </section>
@@ -94,6 +115,7 @@
         </table>
       </div>
     </section>
+    <div class="resizer" id="resizer" title="拖动调节左右比例"></div>
     <aside class="preview-pane" id="previewPane">
       <img id="previewImg" alt="" draggable="false">
       <div id="previewOverlay" class="preview-overlay">选中结果行查看预览</div>

@@ -94,37 +94,87 @@ input, select { user-select: text; }
 .link { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; }
 .link:hover { color: var(--text); }
 
-/* ---------- params ---------- */
+/* ---------- params (compact layout) ---------- */
 
 .params {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 24px;
-  padding: 12px 16px 40px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  padding: 8px 16px 8px;
+  animation: slideDown .15s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .params.collapsed { display: none; }
+
+.params-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1.6fr 1fr;
+  gap: 12px 20px;
+}
+
 .params-toggle {
   position: absolute;
   right: 16px;
-  bottom: 10px;
+  bottom: 8px;
+  font-size: 11px;
 }
-.param-group { display: flex; flex-direction: column; gap: 8px; }
-.param-title { font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
-.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
-.check input { accent-color: var(--accent); }
-.field { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+
+.param-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.param-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 2px;
+}
+
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.param-row > .field, .param-row > .check {
+  flex: 1;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.check input { accent-color: var(--accent); cursor: pointer; }
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
 .field input, .field select {
-  width: 110px;
+  width: 76px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--text);
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 3px 6px;
+  font-size: 12px;
   outline: none;
+}
+.field input[type="password"] {
+  width: 90px;
 }
 .field input:focus { border-color: var(--accent); }
 
@@ -137,11 +187,11 @@ select {
     linear-gradient(45deg, transparent 50%, var(--dim) 50%),
     linear-gradient(135deg, var(--dim) 50%, transparent 50%);
   background-position:
-    calc(100% - 14px) calc(50% - 2px),
-    calc(100% - 10px) calc(50% - 2px);
+    calc(100% - 12px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
   background-size: 4px 4px, 4px 4px;
   background-repeat: no-repeat;
-  padding-right: 24px;
+  padding-right: 20px;
   cursor: pointer;
 }
 select:focus {
@@ -174,21 +224,23 @@ select option { background: var(--panel-2); color: var(--text); }
   color: var(--dim);
 }
 
-/* ---------- workspace ---------- */
+/* ---------- workspace & resizable layout ---------- */
 
 .workspace {
   flex: 1;
   display: flex;
   min-height: 0;
-  padding: 12px 16px;
-  gap: 12px;
+  padding: 8px 12px;
+  gap: 0;
+  position: relative;
 }
 
 .table-pane {
-  flex: 1;
+  flex: 0 0 var(--table-width, 38%);
+  min-width: 260px;
+  max-width: calc(100% - 260px);
   display: flex;
   flex-direction: column;
-  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -198,31 +250,31 @@ select option { background: var(--panel-2); color: var(--text); }
 .table-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 12px;
 }
 .table-toolbar select {
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--text);
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 2px 6px;
+  font-size: 12px;
 }
-.count { margin-left: auto; color: var(--dim); font-size: 12px; }
+.count { margin-left: auto; color: var(--dim); font-size: 11px; }
 
 .table-wrap { flex: 1; overflow: auto; }
 
-#grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+#grid { width: 100%; border-collapse: collapse; font-size: 12px; }
 #grid th {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--panel-2);
   text-align: left;
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-weight: 600;
   color: var(--dim);
   border-bottom: 1px solid var(--border);
@@ -232,12 +284,12 @@ select option { background: var(--panel-2); color: var(--text); }
 #grid th:hover { color: var(--text); }
 #grid th.sorted { color: var(--accent); }
 #grid td {
-  padding: 7px 12px;
+  padding: 5px 10px;
   border-bottom: 1px solid rgba(38, 45, 58, .5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 320px;
+  max-width: 280px;
 }
 #grid tbody tr { cursor: pointer; }
 #grid tbody tr:hover { background: rgba(225, 6, 0, .06); }
@@ -253,16 +305,41 @@ select option { background: var(--panel-2); color: var(--text); }
 #grid td.reject { color: #ff6b5e; }
 #grid td.keep { color: var(--ok); }
 #grid td.name { color: var(--text); }
-#grid td.veto { color: var(--warn); font-size: 12px; }
+#grid td.veto { color: var(--warn); font-size: 11px; }
 
 .stars { color: #f5c518; letter-spacing: 1px; }
 .stars.zero { color: var(--dim); }
 
-/* ---------- preview pane (fixed size, never reflows) ---------- */
+/* Vertical splitter between table and preview */
+.resizer {
+  flex: 0 0 10px;
+  margin: 0 2px;
+  position: relative;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  user-select: none;
+}
+.resizer::after {
+  content: "";
+  width: 2px;
+  height: 36px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background .15s, height .15s;
+}
+.resizer:hover::after,
+.resizer.dragging::after {
+  background: var(--accent);
+  height: 60px;
+  box-shadow: 0 0 6px rgba(225, 6, 0, .4);
+}
 
 .preview-pane {
-  flex: none;
-  width: 520px;
+  flex: 1 1 0;
+  min-width: 260px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
