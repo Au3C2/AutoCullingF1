@@ -94,14 +94,16 @@ input, select { user-select: text; }
 .link { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; }
 .link:hover { color: var(--text); }
 
-/* ---------- params (compact layout & tooltips) ---------- */
+/* ---------- params (compact layout, centered 3-columns & smart tooltips) ---------- */
 
 .params {
   position: relative;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-  padding: 8px 16px 10px;
+  padding: 8px 20px 10px;
   animation: slideDown .15s ease-out;
+  overflow: visible;
+  z-index: 50;
 }
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-4px); }
@@ -109,10 +111,14 @@ input, select { user-select: text; }
 }
 .params.collapsed { display: none; }
 
+/* 3 columns: left column aligns right, center column is centered in the window, right column aligns left */
 .params-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 1.55fr 1fr;
-  gap: 8px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 32px;
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
 .params-toggle {
@@ -126,6 +132,7 @@ input, select { user-select: text; }
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 0 0 auto;
 }
 .param-title {
   font-size: 11px;
@@ -139,7 +146,7 @@ input, select { user-select: text; }
 .param-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .check {
@@ -166,7 +173,7 @@ input, select { user-select: text; }
 }
 
 .field input, .field select {
-  width: 68px;
+  width: 66px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -177,13 +184,13 @@ input, select { user-select: text; }
   outline: none;
 }
 .field input[type="password"] {
-  width: 82px;
+  width: 80px;
 }
 .field input:focus, .field select:focus {
   border-color: var(--accent);
 }
 
-/* Tooltip info icon and bubble */
+/* Tooltip info icon and bubble — downward popup to prevent top clipping */
 .tip-wrap {
   position: relative;
   display: inline-flex;
@@ -217,10 +224,10 @@ input, select { user-select: text; }
   visibility: hidden;
   opacity: 0;
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 7px);
   left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: #1e2430;
+  transform: translateX(-50%) translateY(-4px);
+  background: #1c222e;
   border: 1px solid #364154;
   border-radius: 6px;
   padding: 8px 10px;
@@ -229,26 +236,62 @@ input, select { user-select: text; }
   line-height: 1.45;
   color: var(--text);
   white-space: normal;
-  box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  box-shadow: 0 8px 24px rgba(0,0,0,.6);
   pointer-events: none;
-  z-index: 100;
+  z-index: 200;
   transition: opacity .15s ease, transform .15s ease, visibility .15s;
 }
 .tip-content::after {
   content: "";
   position: absolute;
-  top: 100%;
+  bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
   border-width: 5px;
   border-style: solid;
-  border-color: #1e2430 transparent transparent transparent;
+  border-color: transparent transparent #1c222e transparent;
 }
-.tip-wrap:hover .tip-content {
+
+/* Left column tips align left so they don't clip against window left edge */
+.param-group:first-child .tip-content {
+  left: -8px;
+  transform: translateY(-4px);
+}
+.param-group:first-child .tip-content::after {
+  left: 14px;
+  transform: none;
+}
+.param-group:first-child .tip-wrap:hover .tip-content {
+  transform: translateY(0);
+}
+
+/* Right column tips align right so they don't clip against window right edge */
+.param-group:last-child .tip-content {
+  left: auto;
+  right: -8px;
+  transform: translateY(-4px);
+}
+.param-group:last-child .tip-content::after {
+  left: auto;
+  right: 14px;
+  transform: none;
+}
+.param-group:last-child .tip-wrap:hover .tip-content {
+  transform: translateY(0);
+}
+
+/* Center column tips stay centered */
+.param-group:nth-child(2) .tip-wrap:hover .tip-content {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+.tip-wrap:hover .tip-content {
+  visibility: visible;
+  opacity: 1;
+}
+
 .tip-title {
   font-weight: 700;
   color: #fff;
