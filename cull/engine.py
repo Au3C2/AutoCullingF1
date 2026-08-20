@@ -193,12 +193,11 @@ class CullingEngine:
 
         t_start = time.perf_counter()
 
-        # DirectML is not stable under multi-threaded Python workers; force 1
-        # worker (GPU still runs single-image inference fast) in that case.
+        # DirectML's D3D12 device context is not thread-safe under concurrent
+        # ThreadPoolExecutor execution on Windows; cap workers to 1 to ensure
+        # 100% stability without access violations.
         from cull.detector import use_directml
         workers = 1 if use_directml() else self.config.workers
-        if workers != self.config.workers:
-            log.info("DirectML active: capping parallel workers to 1")
 
         # Parallel group processing
         with ThreadPoolExecutor(max_workers=workers) as executor:
