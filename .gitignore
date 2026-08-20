@@ -100,3 +100,7 @@ src-tauri/gen/
 src-tauri/binaries/*
 !src-tauri/binaries/.gitkeep
 !src-tauri/icons/icon.png
+
+# Tauri resource cache (copied during build)
+src-tauri/resources/*
+!src-tauri/resources/.gitkeep

@@ -9,12 +9,9 @@ dependencies = [
     "pillow-heif>=0.18.0",
     "pillow-avif-plugin>=1.5.5",
     "opencv-python-headless>=4.10.0",
-    # Windows ships the GPU build so CUDAExecutionProvider is available;
-    # nvidia-cudnn-cu12 provides the cuDNN 9 DLLs it needs (the onnxruntime-gpu
-    # wheel bundles cublas/cudart but NOT cuDNN). Other platforms use the
-    # standard package (CPU / CoreML / MLX).
-    "onnxruntime-gpu==1.23.2; sys_platform == 'win32'",
-    "nvidia-cudnn-cu12>=9.0; sys_platform == 'win32'",
+    # Windows uses DirectML for universal GPU acceleration (NVIDIA/AMD/Intel)
+    # without heavy CUDA/cuDNN external dependencies.
+    "onnxruntime-directml>=1.18.0; sys_platform == 'win32'",
     "onnxruntime==1.23.2; sys_platform != 'win32'",
     "onnx>=1.17.0",
     "numpy>=1.26.0",

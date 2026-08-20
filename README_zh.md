@@ -129,27 +129,31 @@ pyinstaller cull_photos.spec --noconfirm
 - **随时取消**：运行中可停止任务——已打分的结果保留展示，且不会写入任何文件。
 - **日志与导出**：实时日志面板、汇总统计（吞吐、保留/丢弃、星级分布）、原生保存对话框一键导出 CSV。
 
-**硬件后端（按平台自动选择）**：Windows 默认优先 CUDA（`onnxruntime-gpu` + `nvidia-cudnn-cu12`），macOS 优先 MLX 再 CoreML，其余平台使用 CPU；不可用的后端自动降级到 CPU。Windows 上源码方式运行会自动启用 CUDA；打包后的可执行文件为纯 CPU 版（CUDA 运行时无法随包分发，否则体积增加约 1GB）。
+**硬件后端（按平台自动选择）**：
+- **Windows**：默认优先使用 **DirectML（GPU 加速）**（基于 `onnxruntime-directml`），全面兼容 NVIDIA、AMD 和 Intel 独立/核芯显卡，无需安装几百兆的复杂 CUDA 环境；自动序列化多线程推理保障高稳定性。
+- **macOS**：优先使用 **MLX（Apple Silicon GPU 加速）** 再使用 **CoreML（Apple Neural Engine / ANE）**，其余情况自动回退到 CPU。
+- 无法激活的后端会自动平滑降级到 CPU。
 
 源码方式运行：
 ```bash
 cd src-tauri && cargo tauri dev       # Tauri UI（需要 Rust 工具链）
-# dev 构建在缺少打包 sidecar 时自动回退到 .venv/bin/python cull_photos.py --json-lines
+# dev 构建在缺少打包 sidecar 时自动回退到虚拟环境的 python cull_photos.py --json-lines
 ```
 
-以不抢焦点方式启动打包后的 Tauri 应用（例如不打断全屏游戏）：
-```powershell
-Start-Process -FilePath "...\auto-culling-gui.exe" -WindowStyle Minimized
-```
-Rust 侧诊断日志写入可执行文件旁的 `gui.log`。
-
-构建 Tauri 应用：
+构建独立发布产物：
 ```bash
-pyinstaller cull_sidecar.spec --noconfirm          # 1. 构建 windowed sidecar
+# Windows:
+pyinstaller cull_photos.spec --noconfirm           # 1. CLI 独立单文件 (dist/auto_cull_v0.1_win_x64.exe)
+pyinstaller cull_sidecar.spec --noconfirm          # 2. Windowed 侧边栏
 cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-gnu.exe
-tauri build --no-bundle                            # 2. 构建外壳 + sidecar
-# Windows: src-tauri/target/release/auto-culling.exe（旁边带 cull-sidecar.exe）
-# macOS:   src-tauri/target/release/auto-culling
+cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-msvc.exe
+cd src-tauri && tauri build                        # 3. GUI 安装包与便携版单文件
+
+# macOS:
+pyinstaller cull_photos.spec --noconfirm           # 1. CLI 独立单文件 (dist/auto_cull_v0.1_macos_arm64)
+pyinstaller cull_sidecar.spec --noconfirm          # 2. 侧边栏
+cp dist/cull_sidecar src-tauri/binaries/cull-sidecar-aarch64-apple-darwin
+cd src-tauri && tauri build                        # 3. macOS App 应用程序包与 DMG 安装镜像
 ```
 
 打包后的程序以 `CREATE_NO_WINDOW` 方式启动子进程，任务开始阶段不会再闪现命令行窗口。CustomTkinter 备用 GUI 已移除，Windows 与 macOS 统一使用 Tauri 壳。

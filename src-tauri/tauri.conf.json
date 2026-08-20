@@ -26,6 +26,9 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "resources/WebView2Loader.dll": "WebView2Loader.dll"
+    },
     "externalBin": ["binaries/cull-sidecar"]
   }
 }

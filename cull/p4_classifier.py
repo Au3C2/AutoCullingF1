@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from cull.detector import ensure_nvidia_runtime_on_path, preferred_providers
+# Share the DirectML inference lock from detector so YOLO and P4 runs serialize.
+from cull.detector import _INFER_LOCK, ensure_nvidia_runtime_on_path, preferred_providers
 
 log = logging.getLogger(__name__)
 
@@ -34,10 +35,13 @@ class P4Classifier:
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             providers = [p for p in preferred_providers() if p in available] or ['CPUExecutionProvider']
-            self.session = ort.InferenceSession(str(self.model_path), providers=providers)
+            opts = ort.SessionOptions()
+            opts.log_severity_level = 3  # Suppress non-fatal fallback warnings
+            self.session = ort.InferenceSession(str(self.model_path), sess_options=opts, providers=providers)
             
             dummy = np.zeros((1, 3, 224, 224), dtype=np.float32)
-            self.session.run(None, {'input': dummy})
+            with _INFER_LOCK:
+                self.session.run(None, {'input': dummy})
             log.info(f"P4Classifier loaded from {model_path}")
         except Exception as e:
             log.warning(f"Failed to load P4 model {model_path}: {e}")
@@ -70,7 +74,8 @@ class P4Classifier:
         roi = np.transpose(roi, (2, 0, 1))
         roi = np.expand_dims(roi, axis=0)
         
-        orient_logits, integ_logits = self.session.run(None, {'input': roi})
+        with _INFER_LOCK:
+            orient_logits, integ_logits = self.session.run(None, {'input': roi})
         
         # Integ
         integ_prob = 1.0 / (1.0 + np.exp(-integ_logits[0]))

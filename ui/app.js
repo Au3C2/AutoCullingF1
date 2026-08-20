@@ -575,4 +575,8 @@ function wire() {
   toggleParams(false);
   await listen("evt", onEvent);
   await listen("run-status", (ev) => setRunning(ev.payload.running));
+  const initDir = $("dir").value.trim();
+  if (initDir) {
+    scanDir(initDir);
+  }
 })();

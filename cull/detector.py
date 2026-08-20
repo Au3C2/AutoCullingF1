@@ -9,12 +9,28 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 import ast
+import threading
 
 import numpy as np
 from PIL import Image
 import sys
 
 log = logging.getLogger(__name__)
+
+# DirectML (DmlExecutionProvider) is not safe for concurrent InferenceSession.run()
+# calls from multiple threads (access violation observed with the ThreadPoolExecutor
+# running several burst groups in parallel). Serialize inference through this lock;
+# GPU inference is fast enough that the overhead is negligible.
+_INFER_LOCK = threading.Lock()
+
+# Whether any ONNX session is backed by DirectML. DirectML is not stable under
+# multi-threaded Python workers, so the engine forces workers=1 in that case.
+_USING_DML = False
+
+
+def use_directml() -> bool:
+    """True when inference runs on the DirectML provider (GPU)."""
+    return _USING_DML
 
 def get_resource_path(relative_path: str) -> Path:
     """Get absolute path to resource, works for dev and for PyInstaller."""
@@ -79,15 +95,17 @@ def nms_numpy(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> li
 def preferred_providers() -> list[str]:
     """ONNX Runtime provider priority per platform.
 
-    Windows defaults to CUDA (onnxruntime-gpu package); macOS prefers MLX
-    (Apple Silicon) then CoreML; everything else falls back to CPU. The
-    list is filtered against ``get_available_providers()`` at session
+    Windows defaults to DirectML (DmlExecutionProvider) for broad GPU hardware
+    acceleration (NVIDIA, AMD, Intel) without heavy CUDA/cuDNN dependencies;
+    falls back to CUDA if configured, then CPU.
+    macOS prefers MLX (Apple Silicon) then CoreML; everything else falls back to CPU.
+    The list is filtered against ``get_available_providers()`` at session
     creation, so unavailable providers degrade gracefully.
     """
     if sys.platform == "darwin":
         return ["MLXExecutionProvider", "CoreMLExecutionProvider", "CPUExecutionProvider"]
     if sys.platform == "win32":
-        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        return ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 
 _NVIDIA_BIN_DIRS = ("cudnn", "cublas", "cuda_nvrtc")
@@ -127,8 +145,13 @@ class LiteYOLO:
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             providers = [p for p in preferred_providers() if p in available] or ['CPUExecutionProvider']
-            self.session = ort.InferenceSession(str(model_path), providers=providers)
+            opts = ort.SessionOptions()
+            opts.log_severity_level = 3  # Suppress non-fatal fallback warnings (e.g. CUDA -> CPU)
+            self.session = ort.InferenceSession(str(model_path), sess_options=opts, providers=providers)
             log.info(f"YOLO LITE active providers: {self.session.get_providers()}")
+            global _USING_DML
+            if self.session.get_providers() and self.session.get_providers()[0] == "DmlExecutionProvider":
+                _USING_DML = True
             self.input_name = self.session.get_inputs()[0].name
             meta = self.session.get_modelmeta().custom_metadata_map
             self.imgsz = (640, 640)
@@ -165,7 +188,8 @@ class LiteYOLO:
         input_tensor = img_canvas.astype(np.float32) / 255.0
         input_tensor = np.transpose(input_tensor, (2, 0, 1))
         input_tensor = np.expand_dims(input_tensor, axis=0)
-        outputs = self.session.run(None, {self.input_name: input_tensor})
+        with _INFER_LOCK:
+            outputs = self.session.run(None, {self.input_name: input_tensor})
         output = outputs[0][0].transpose()
         boxes, scores_list, class_ids = [], [], []
         for row in output:

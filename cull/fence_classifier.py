@@ -12,6 +12,9 @@ from typing import Union
 import numpy as np
 from PIL import Image
 
+# Share the DirectML inference lock so fence/YOLO/P4 runs serialize.
+from cull.detector import _INFER_LOCK
+
 log = logging.getLogger(__name__)
 
 class FenceClassifier:
@@ -66,7 +69,8 @@ class FenceClassifier:
         roi = np.transpose(roi, (2, 0, 1))
         roi = np.expand_dims(roi, axis=0)
         
-        outputs = self.session.run(None, {self.session.get_inputs()[0].name: roi})
+        with _INFER_LOCK:
+            outputs = self.session.run(None, {self.session.get_inputs()[0].name: roi})
         logit = outputs[0][0][0]
         prob = 1.0 / (1.0 + np.exp(-logit))
         pred = 1 if prob > 0.5 else 0

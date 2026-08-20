@@ -145,6 +145,9 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
     from cull.scorer import ImageScore
 
     setup_logging(input_dir, console=False)
+    import sys as _dbg
+    _dbg.stderr.write("DBG run_json_lines entered; stdout=%r\n" % (sys.stdout,))
+    _dbg.stderr.flush()
     cancel_event = threading.Event()
     cmd_queue: "queue.Queue[dict]" = queue.Queue()
     # Scores of the most recent run, keyed by path — previews render with the
@@ -154,6 +157,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
     def stdin_reader() -> None:
         try:
             for line in sys.stdin:
+                _dbg.stderr.write("DBG stdin line=%r\n" % (line,))
+                _dbg.stderr.flush()
                 line = line.strip()
                 if not line:
                     continue
@@ -176,6 +181,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
                     # queued preview would only render after the run ends.
                     do_preview(cmd)
                     continue
+                _dbg.stderr.write("DBG putting cmd=%s into queue\n" % (cmd.get("cmd"),))
+                _dbg.stderr.flush()
                 cmd_queue.put(cmd)
                 if cmd.get("cmd") == "quit":
                     return
@@ -268,6 +275,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path) -> int:
 
     while True:
         cmd = cmd_queue.get()
+        _dbg.stderr.write("DBG main got cmd=%s\n" % (cmd.get("cmd"),))
+        _dbg.stderr.flush()
         kind = cmd.get("cmd")
         if kind == "quit":
             return 0
@@ -317,7 +326,7 @@ def run(args: argparse.Namespace) -> int:
     for s in all_scores:
         rating_dist[s.rating] = rating_dist.get(s.rating, 0) + 1
     for r in sorted(rating_dist):
-        label = "Rejected" if r == -1 else f"{r}★"
+        label = "Rejected" if r == -1 else f"{r}*"  # ASCII only, avoids GBK full-width artifacts
         log.info("  %8s : %d", label, rating_dist[r])
 
     if config.dump_scores:
@@ -371,21 +380,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_lines:
         return run_json_lines(args, Path(args.input_dir) if args.input_dir else None)
 
-    # GUI Fallback: if no input-dir provided and we are in a TTY or double-clicked
+    # CLI mode without --input-dir: show help rather than launching a GUI dialog
     if args.input_dir is None:
-        # Determine current app/script directory for default location
-        if getattr(sys, 'frozen', False):
-            # If running as bundled executable, use the dir containing the exe
-            default_dir = Path(sys.executable).parent
-        else:
-            default_dir = Path(__file__).parent.resolve()
-            
-        selected = select_folder(default_dir)
-        if selected:
-            args.input_dir = selected
-        else:
-            print("No directory selected. Exiting.")
-            return 0
+        parse_args(["--help"])
+        return 0
 
     if not args.json_lines:
         logging.basicConfig(

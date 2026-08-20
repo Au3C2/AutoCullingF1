@@ -137,7 +137,7 @@ fn sidecar_command(app: &AppHandle) -> Result<Command, String> {
         }
     }
     match app.shell().sidecar("cull-sidecar") {
-        Ok(cmd) => Ok(cmd),
+        Ok(cmd) => Ok(cmd.args(["--json-lines"])),
         Err(err) => {
             log_line(&format!("bundled sidecar unavailable ({err}); trying venv python"));
             let root = repo_root();

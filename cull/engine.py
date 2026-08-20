@@ -107,7 +107,8 @@ class CullingEngine:
         return dedupe_raw_cooked(found)
 
 
-    def scan(self, progress_callback: Callable[[str, float], None] | None = None):
+    def scan(self, progress_callback: Callable[[str, float], None] | None = None,
+             cancel_event: threading.Event | None = None):
         """Scan input directory and group bursts."""
         if progress_callback:
             progress_callback("Collecting images...", 0.1)
@@ -116,33 +117,48 @@ class CullingEngine:
         self.image_paths = self._collect_images(self.config.input_dir, self.config.recursive)
         log.info("Found %d raw image files", len(self.image_paths))
 
+        if cancel_event and cancel_event.is_set():
+            return
+
         if self.config.rename:
             if progress_callback:
                 progress_callback("Renaming images...", 0.2)
             new_map = rename_images(self.image_paths, dry_run=self.config.dry_run)
             self.image_paths = sorted(list(new_map.values()))
 
+        if cancel_event and cancel_event.is_set():
+            return
+
         # 2. Prioritize JPG/HIF over RAW (same stems survive renaming)
         self.image_paths, self.standalone_cooked = dedupe_raw_cooked(self.image_paths)
 
         log.info("Processing %d unique shots", len(self.image_paths))
+
+        if cancel_event and cancel_event.is_set():
+            return
 
         # 3. Read EXIF & Grouping
         if progress_callback:
             progress_callback("Reading EXIF metadata...", 0.4)
         exif_list = read_exif(self.image_paths)
         self.exif_map = {e.path: e for e in exif_list}
-        
+
+        if cancel_event and cancel_event.is_set():
+            return
+
         if progress_callback:
             progress_callback("Grouping burst sequences...", 0.6)
         self.groups = group_bursts(exif_list)
         log.info("Grouped into %d burst groups", len(self.groups))
 
-    def load_models(self, progress_callback: Callable[[str, float], None] | None = None):
+    def load_models(self, progress_callback: Callable[[str, float], None] | None = None,
+                    cancel_event: threading.Event | None = None):
         """Load detection models."""
+        if cancel_event and cancel_event.is_set():
+            return
         if progress_callback:
             progress_callback("Loading models...", 0.8)
-            
+
         self.coco_model = load_coco_model()
         if self.config.rf_api_key:
             self.cloud_f1 = CloudF1Detector(self.config.rf_api_key)
@@ -160,16 +176,32 @@ class CullingEngine:
         sync) are skipped, and the partial scores collected so far are
         returned. The CLI passes no cancel_event and is unaffected.
         """
-        self.scan(progress_callback)
-        self.load_models(progress_callback)
+        self.scan(progress_callback, cancel_event=cancel_event)
+        if cancel_event and cancel_event.is_set():
+            if progress_callback:
+                progress_callback("Cancelled", 0.0)
+            return [], 0.0
+
+        self.load_models(progress_callback, cancel_event=cancel_event)
+        if cancel_event and cancel_event.is_set():
+            if progress_callback:
+                progress_callback("Cancelled", 0.0)
+            return [], 0.0
         
         if progress_callback:
             progress_callback("Analyzing images...", 0.9)
 
         t_start = time.perf_counter()
-        
+
+        # DirectML is not stable under multi-threaded Python workers; force 1
+        # worker (GPU still runs single-image inference fast) in that case.
+        from cull.detector import use_directml
+        workers = 1 if use_directml() else self.config.workers
+        if workers != self.config.workers:
+            log.info("DirectML active: capping parallel workers to 1")
+
         # Parallel group processing
-        with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             def _wrap_process(g_info):
                 idx, group = g_info
                 if cancel_event and cancel_event.is_set():

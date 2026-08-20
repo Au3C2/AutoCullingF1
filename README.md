@@ -129,24 +129,33 @@ The primary desktop app is a **Tauri 2** shell (`ui/` static frontend + Rust in 
 - **Cancellation**: stop a running job at any time — already-scored frames stay visible and nothing is written to disk.
 - **Logs & export**: live log panel, summary statistics (throughput, keep/discard, star distribution) and one-click CSV export via the native save dialog.
 
-**Hardware backend (auto-selected per platform):** Windows prefers CUDA (`onnxruntime-gpu` + `nvidia-cudnn-cu12`), macOS prefers MLX then CoreML, everything else uses CPU. Unavailable providers degrade gracefully to CPU. Running from source on Windows uses CUDA automatically; the packaged binaries ship CPU-only (the CUDA runtime cannot be bundled without adding ~1GB) and fall back to CPU.
+**Hardware backend (auto-selected per platform):**
+- **Windows**: Defaults to **DirectML (GPU)** via `onnxruntime-directml` for universal hardware acceleration across NVIDIA, AMD, and Intel GPUs without heavy CUDA dependencies; automatically serializes multi-threaded inference to guarantee stability.
+- **macOS**: Prefers **MLX (Apple Silicon GPU)** then **CoreML (Neural Engine / ANE)**, falling back to CPU.
+- Unavailable providers degrade gracefully to CPU.
 
 Run from source (dev mode):
 ```bash
 cd src-tauri && cargo tauri dev       # Tauri UI (requires Rust toolchain)
-# dev builds fall back to .venv/bin/python cull_photos.py --json-lines
+# dev builds fall back to the repo venv's python cull_photos.py --json-lines
 # when the packaged sidecar binary is absent
 ```
 
-Launch the packaged Tauri app without stealing focus (e.g. from a fullscreen game):
-```powershell
-Start-Process -FilePath "...\auto-culling-gui.exe" -WindowStyle Minimized
-```
-Rust-side diagnostics are written to `gui.log` next to the executable.
-
-Build the Tauri app:
+Build the release binaries:
 ```bash
-pyinstaller cull_sidecar.spec --noconfirm          # 1. windowed sidecar
+# Windows:
+pyinstaller cull_photos.spec --noconfirm           # 1. Standalone CLI exe (dist/auto_cull_v0.1_win_x64.exe)
+pyinstaller cull_sidecar.spec --noconfirm          # 2. Windowed sidecar
+cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-gnu.exe
+cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-msvc.exe
+cd src-tauri && tauri build                        # 3. GUI Installer & Portable exe
+
+# macOS:
+pyinstaller cull_photos.spec --noconfirm           # 1. Standalone CLI (dist/auto_cull_v0.1_macos_arm64)
+pyinstaller cull_sidecar.spec --noconfirm          # 2. Sidecar
+cp dist/cull_sidecar src-tauri/binaries/cull-sidecar-aarch64-apple-darwin
+cd src-tauri && tauri build                        # 3. macOS App / DMG installer
+```
 cp dist/cull_sidecar.exe src-tauri/binaries/cull-sidecar-x86_64-pc-windows-gnu.exe
 tauri build --no-bundle                            # 2. shell + sidecar
 # Windows: src-tauri/target/release/auto-culling.exe (+ cull-sidecar.exe beside it)
