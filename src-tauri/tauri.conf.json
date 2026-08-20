@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Auto-Culling — F1 连拍选片",
+        "title": "Auto-Culling — F1 连拍智能筛片",
         "width": 1420,
         "height": 900,
         "minWidth": 1100,
