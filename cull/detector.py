@@ -105,7 +105,9 @@ def preferred_providers() -> list[str]:
     if sys.platform == "darwin":
         return ["MLXExecutionProvider", "CoreMLExecutionProvider", "CPUExecutionProvider"]
     if sys.platform == "win32":
-        return ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+        # Prefer CUDA (onnxruntime-gpu) for NVIDIA GPUs; fall back to DirectML
+        # (broad GPU support) and finally CPU when CUDA is unavailable.
+        return ["CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 
 _NVIDIA_BIN_DIRS = ("cudnn", "cublas", "cuda_nvrtc")
