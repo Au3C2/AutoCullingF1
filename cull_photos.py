@@ -387,4 +387,10 @@ def main(argv: list[str] | None = None) -> int:
     return run(args)
 
 if __name__ == "__main__":
+    # Required on Windows so spawned decoder processes bootstrap correctly
+    # instead of re-running main(). In the PyInstaller frozen build this
+    # hands off to multiprocessing's own spawn main; in source it is a no-op
+    # (source spawn workers already self-identify via "__mp_main__").
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

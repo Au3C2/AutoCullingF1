@@ -6,9 +6,11 @@ Handles file scanning, model loading, and the culling pipeline.
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any
@@ -95,6 +97,16 @@ class CullingEngine:
         self.coco_model = None
         self.cloud_f1 = None
         self.standalone_cooked: set[Path] = set()
+        self._decode_pool: ProcessPoolExecutor | None = None
+        # Process-based parallel decoding is only enabled in the frozen
+        # (PyInstaller) build, where multiprocessing.freeze_support() hands
+        # worker bootstrapping to spawn_main. In source mode Python re-runs the
+        # entry script for a spawn worker, which would recurse into main();
+        # so cap to a cacheless inline decode there (no worker pool).
+        self._use_mp_decode = bool(getattr(sys, "frozen", False))
+        # Decoding (CPU-bound, GIL-limited) runs in a separate process pool so
+        # it is not serialized by the GIL; inference stays on the main process.
+        self._decoder_workers = max(2, min(os.cpu_count() or 2, 8))
 
     @staticmethod
     def collect_shots(input_dir: Path, recursive: bool = False) -> tuple[list[Path], set[Path]]:
@@ -199,19 +211,33 @@ class CullingEngine:
         from cull.detector import use_directml
         workers = 1 if use_directml() else self.config.workers
 
-        # Parallel group processing
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            def _wrap_process(g_info):
-                idx, group = g_info
-                if cancel_event and cancel_event.is_set():
-                    return []
-                log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
-                res = self._process_group_internal(group, cancel_event)
-                for s in res:
-                    s.burst_group = idx
-                return res
+        # Image decoding (the CPU/GIL bottleneck) runs in a process pool so it
+        # parallelizes across cores regardless of the inference worker cap.
+        # Only in the frozen build: source-mode spawn workers can't bootstrap
+        # from a script-run __main__ on Windows (see _use_mp_decode).
+        self._decode_pool = (
+            ProcessPoolExecutor(max_workers=self._decoder_workers)
+            if self._use_mp_decode else None
+        )
 
-            group_results = list(executor.map(_wrap_process, enumerate(self.groups, start=1)))
+        try:
+            # Parallel group processing
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                def _wrap_process(g_info):
+                    idx, group = g_info
+                    if cancel_event and cancel_event.is_set():
+                        return []
+                    log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
+                    res = self._process_group_internal(group, cancel_event)
+                    for s in res:
+                        s.burst_group = idx
+                    return res
+
+                group_results = list(executor.map(_wrap_process, enumerate(self.groups, start=1)))
+        finally:
+            if self._decode_pool is not None:
+                self._decode_pool.shutdown(cancel_futures=True)
+                self._decode_pool = None
         
         self.all_scores = []
         for res in group_results:
@@ -261,6 +287,17 @@ class CullingEngine:
             keywords = ["f1", "gp", "grand prix", "race", "quali", "practice"]
             check_p4 = any(k in dir_name for k in keywords) and "sprint_quali" not in dir_name
 
+        # Submit all frame decodes to the process pool up front so the CPU-bound
+        # decoding runs in parallel across cores; results are consumed in order
+        # below. Manual-metadata frames (see loop) consume no result — their
+        # decode is wasted, but such frames are rare unless force is set.
+        pending_decode = None
+        if self._decode_pool is not None:
+            pending_decode = [
+                self._decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                for fp in frames
+            ]
+
         for frame_idx, frame_path in enumerate(frames):
             if cancel_event and cancel_event.is_set():
                 log.info("Cancel requested; stopping group %s after %d frames",
@@ -290,8 +327,12 @@ class CullingEngine:
                          "  (manual_metadata)")
                 continue
 
-            # Load image
-            img_rgb = load_image_rgb(frame_path, scale_width=self.config.scale_width)
+            # Load image (decoded in the process pool; fall back to inline when
+            # no pool is available, e.g. in unit tests that build the engine bare)
+            if pending_decode is not None:
+                img_rgb = pending_decode[frame_idx].result()
+            else:
+                img_rgb = load_image_rgb(frame_path, scale_width=self.config.scale_width)
             if img_rgb is None:
                 log.info(FRAME_LOG_FMT, frame_path.name, 0.0, 0.0, 0.0, 0,
                          "  (decode_failed)")
