@@ -6,12 +6,18 @@ Python 3.10, AMD Zen3 CPU). All end-to-end numbers below are `--workers 4 --dry-
 
 ## End-to-end throughput
 
-| Dataset | Count | Throughput | Engine time | Decode path |
+**After optimization #3 (decode process pool + single-consumer inference, 2026-08-22):**
+
+| Dataset | Count | Old (pre-#3) | New | Decode path |
 |---|---|---|---|---|
-| JPG (24MP → 1280px, Pillow) | 60 | 5.9 img/s | 10.2 s | Pillow full-decode + resize |
-| HEIF (1664x1088 preview stream) | 100 | 6.4 img/s | 15.5 s | ffmpeg spawn + Pillow resize |
-| ARW (exiftool embed) | 100 | 4.4 img/s | 22.5 s | exiftool `-JpgFromRaw` per file |
-| NEF (exiftool embed) | 100 | 3.3 img/s | 29.6 s | exiftool `-PreviewImage` per file |
+| JPG (24MP → 1280px, Pillow) | 60 | 5.9 img/s | **6.7** img/s (engine 9.3) | Pillow full-decode + resize |
+| HEIF (1664x1088 preview stream) | 100 | 6.4 img/s | **11.5** img/s (+80%) | ffmpeg spawn, parallelized |
+| ARW (exiftool embed) | 100 | 4.4 img/s | **4.7** img/s | exiftool `-JpgFromRaw` per file |
+| NEF (exiftool embed) | 100 | 3.3 img/s | **4.6** img/s (+35%) | exiftool `-PreviewImage` per file |
+
+The single-consumer inference also FIXED the CUDA concurrency non-determinism
+(see open-task note below): all precision gates green for 3 consecutive runs
+at `--workers 4` (previously ~2/3 of runs flipped scores at workers=4).
 
 Real (non-dry-run) runs additionally pay ~399 ms per file in metadata sync
 (exiftool spawn per file) — not visible in dry-run benchmarks.
@@ -73,6 +79,7 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 |---|---|---|---|
 | 1 | ffmpeg `-vf scale=1280:-1` instead of Pillow resize (sws_scale in-process) | PRECISION FAIL: HEIF `DSC00827.heif` raw_score 1.137→1.361 (+20%); sws↔Pillow-BILINEAR kernel differences alter pixels. Throughput gain only −13% (281→245 ms/img), far below the −45% hoped | **REVERTED** (2026-08-22). Pixel-identity is a hard requirement; do not retry unless a pixel-exact downscaler is available. |
 | 2 | Vectorize YOLO postprocess (numpy mask+argmax replace 8400-row python loop in `LiteYOLO.detect`) | Precision 6/6 green; per-image detections bit-identical to old loop (24/24, checked to 9 decimals); detect 33.1→20.3 ms/img single-thread (−39%). E2E throughput gates unchanged (JPG 5.09 vs 5.26) — decode still dominates and hides it | **KEPT** (2026-08-22). Equal-op optimization, prerequisite for #3's single-consumer path; E2E benefit expected after #3 |
+| 3 | Decode process pool + single-consumer inference (`engine.run` drains `ProcessPoolExecutor` decodes in burst order on one thread with one CUDA session) | Precision 6/6 × 3 consecutive runs at workers=4 (fixes the concurrency non-determinism). Throughput gates: JPG 6.84 (+35%), HEIF 3.73, ARW 2.98 (+14%), NEF 3.15 (+48%) — all above old baselines. Full-100 runs: HEIF 6.4→11.5 (+80%), NEF 3.3→4.6 (+35%), JPG 5.9→6.7, ARW 4.4→4.7 | **KEPT** (2026-08-22). Confidence gates unlocked back to workers=4 |
 
 ## Optimization notes
 
@@ -92,21 +99,11 @@ the GATE sample sizes: JPG 60/HEIF 24/ARW 20/NEF 20 → 5.26/3.76/2.86/2.39 img/
 measured, thresholds 4.2/3.0/2.3/1.9; the 100-image baselines above run ~1.3–2×
 faster because per-job overhead amortizes better).
 
-### Known issue: CUDA concurrency is non-deterministic (pre-optimization)
+### ~~Known issue~~ FIXED: CUDA concurrency was non-deterministic
 
-With the master engine (ThreadPoolExecutor over burst groups, one shared CUDA
-session, NO lock) the pipeline intermittently drops detections under
-concurrent workers: measured rating flips and raw_score drift (e.g.
-DSC00827.ARW raw 2.436 → 0.394; IMG_20260314_151744_020 rating 3 → -1) in
-~2/3 of repeated runs. Single-threaded (workers=1) runs are fully
-deterministic (3/3 clean across all gates). Precision gates therefore pin
-workers=1.
-
-**Fix responsibility:** this is an OPEN TASK tied to optimization item #3
-(decode process pool + single-consumer inference). Acceptance criterion for
-the fix: `tests/test_cull.py` + `test_precision_heif.py` + `test_precision_raw.py`
-must be fully green for 3 consecutive runs at `--workers 4`. Do not fix by
-loosening gates; if the root cause turns out to be session-level (ORT provider
-thread-safety), evaluate per-thread sessions or a batching consumer instead of
-a global lock (a lock serializes inference and costs ~2x throughput, as seen
-on the gui branch).
+RESOLVED by optimization #3 (2026-08-22): the old shared-session threaded
+engine dropped detections under concurrent workers (~2/3 of runs at workers=4,
+e.g. DSC00827.ARW raw 2.436→0.394). The engine now decodes in a process pool
+and runs inference on a single consumer thread with one session; `--workers`
+now controls the decode-pool size. Verified: all precision gates green for 3
+consecutive runs at workers=4.

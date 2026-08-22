@@ -18,17 +18,17 @@ import csv
 sys.path.append(os.getcwd())
 
 
-def run_cull_on_copies(src_files: list[Path], workers: int = 1) -> dict[str, tuple[int, float]]:
+def run_cull_on_copies(src_files: list[Path], workers: int = 4) -> dict[str, tuple[int, float]]:
     """Copy *src_files* to a temp dir, run the CLI, return filename -> (rating, raw_score).
 
     The CLI runs with ``--force --dry-run --dump-scores``; raw_score is
     rounded to 3 decimals to match the locked baselines.
 
-    ``workers`` defaults to 1 for determinism: the CUDA backend with a shared
-    session under concurrent ThreadPoolExecutor workers intermittently drops
-    detections (observed rating flips and raw_score drift ~2/3 of runs).
-    Precision gates must lock the decode/scoring logic deterministically;
-    concurrency determinism is tracked separately (engine known issue).
+    ``workers`` defaults to 4: since the engine moved to a decode process pool
+    with single-consumer inference (optimization #3), concurrent workers no
+    longer share a CUDA session and runs are deterministic. The previous
+    shared-session concurrency intermittently dropped detections; that is why
+    gates originally pinned workers=1 (see performance_baseline.md).
     """
     tmp = tempfile.mkdtemp(prefix="score_gate_")
     try:
