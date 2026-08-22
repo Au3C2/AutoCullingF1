@@ -96,6 +96,27 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 | 10 | `cv2.setNumThreads(1)` in loader (eliminate decode-worker OpenCV threadpool) | A/B 60-JPG: 6.57–6.97 vs baseline 6.99–7.00 wall img/s — no gain, within noise. OpenCV resize on this machine does not expand threads internally; contention ≠ cv2 threadpool | **REVERTED** (2026-08-22). Contention is decode workers × ~190 ms full-core CPU + main-thread compute sharing 8 physical cores; remaining levers are worker-count matching (6 for JPG), process priority, or moving letterbox (+6 ms) into workers |
 | 11 | Demote decode workers to BELOW_NORMAL priority (worker process name != MainProcess) | 4-run A/B 60-JPG: 7.10/7.02/7.20/7.04 (mean ~7.09) vs 6.99/7.00 baseline (+1.4% wall; engine 9.9 vs 9.75). Gates green (perf JPG 7.15). | **KEPT** (2026-08-22, `d0c3016`) |
 | 12 | Move letterbox (640 canvas) into decode workers via `letterbox_image` shared fn + `precomputed` detect arg | A/B 60-JPG: 6.95/7.06 (mean 7.005) vs 7.09 with priority-only — no gain. Worker-side CPU +1.2 MB canvas IPC roundtrip offsets the ~6.6 ms main-thread saving | **REVERTED** (2026-08-22) |
+| 13 | JPG decode via libjpeg DCT scaling (Pillow `draft` 1/4 + 1/2) | Draft decode cuts worker CPU ~2-3x (180->~60 ms), but flips the P4 integrity decision on 2/6 real JPGs (raw 3.69->3.09 via cut penalty → min_raw veto → **keep→reject**, the anti-INTER_AREA direction). Identical flips at 1/2 and 1/4 — P4's ROI boundary is knife-edge wrt ~1-LSB pixel changes | **REVERTED** (2026-08-22). Pixel changes are off-limits for the decode path |
+| 14 | HEIF `-vf scale` in-process resize | NOT RE-TRIED after #13: decode is no longer the binding constraint (decode_wait 12-18 ms vs ~84 ms consumer serial) and its pixel changes carry the same P4 flip risk | SKIPPED |
+| 15 | RAW embedded-preview extraction via persistent per-process exiftool `-stay_open` session (`-b -w tmp/%f.jpg`, one file per -execute) | Extraction bytes identical to per-file spawn (6 samples verified); 33 ms/file vs ~460 ms (14x). Gates: precision 6/6 green; perf ARW 3.39 vs 2.98 (+14%), NEF 3.84 vs 3.17 (+21%) | **KEPT** (2026-08-22). RAW was the only supply-bound format |
+| 16 | Decode worker count A/B (2/3/4/6) | Interleaved 3x each on 60-JPG: 7.52/7.44/7.48/7.45 img/s — all within noise. Consumer serial path is the cap, not decode supply | NO CHANGE (workers from CLI) |
+| 17 | `np.asarray` instead of `np.array` after `convert("RGB")` | Pixel-identical (verified np.array_equal); saves ~10 ms of the 72 MB copy per 24MP frame (Pillow 12 does not expose a true zero-copy view) | **KEPT** |
+| 18 | Consumer de-GIL: letterbox PIL→cv2 (`letterbox_numpy`) + P4 ROI PIL→cv2 INTER_LINEAR | Precision 6/6 → 4 FAILED: DSC00827 (HEIF+ARW) raw +0.6 and NEF/ARW ±0.013 — the cv2 kernel shift flips P4 integrity 0→1 (penalty removed) and moves detection boxes. Same knife-edge as #13, both directions | **REVERTED** (2026-08-22). PIL BILINEAR preprocessing is frozen |
+| 19 | CPU-affinity partitioning (consumer→2 physical cores, workers→rest) | Zero wall gain on 60-JPG (7.55 s both pinned/unpinned); consumer stages stay inflated (detect 38.9 ms). The inflation is memory-bandwidth contention, not CPU-core slots | **REVERTED** (2026-08-22) |
+| 20 | (see #16) | — | — |
+| 21 | P4 classifier warm-up in `load_models()` (moves the lazy ORT session + warmup run out of the timed window) | No score change (identical lazy-load semantics, just earlier); removes a ~1 s first-frame stall from every run | **KEPT** (2026-08-22) |
+| 22 | P4 skip for already-sharpness-vetoed frames (output-identical reorder) | Rejected-frame `raw_score` loses the ±0.6 cut penalty → ARW/NEF precision gates FAIL on the recorded raw of vetoed frames (ratings were unchanged) | **REVERTED** (2026-08-22). Gate compares raw of vetoed frames too |
+
+## Stage-profile findings (2026-08-22, 60-JPG protocol, workers=4)
+
+Per-stage consumer/serial times measured via `benchmarks/profile_pipeline.py`:
+decode_wait 12-19 ms (supply ahead), detect 39-44 ms (letterbox PIL 5.3 ms
++ f1 session.run ~25-34 ms under load + postprocess ~2 ms), score_image 22-25
+ms (P4 ROI 9.8-11 ms inside), sharpness 11-13 ms, xmp_read 0.5 ms → consumer
+serial ≈ 84 ms/frame ≈ 12 fps steady state. All stages inflate ~2x from
+decode-worker memory-bandwidth contention (isolated runs: detect 16-17 ms,
+P4 5 ms, sharpness 5 ms). ~25-30% of gate wall is fixed tax (3 CUDA model
+loads + pool spawn + EXIF), which amortizes on real runs.
 | 9 | Decode-path resize backend matrix (all 6 PIL + all 7 cv2 interpolations, 24MP→1280) | Speed: cv2 1.3–13.9 ms vs PIL 36–192 ms (up to 75×). Drift vs PIL-BILINEAR: EVERY alternative ≥0.176 max |Δraw| (BOX/HAMMING lowest at 0.18/0.21) with 3–4/6 rating flips — none within even 0.005, let alone 0.001. Only PIL-BILINEAR itself satisfies 0.001 | **SUPERSEDED by #A** (2026-08-22): user accepted cv2.INTER_AREA (area-average ~8× faster, ≤8–22% upward-only flips at boundaries); gates re-locked to the new pipeline |
 
 ## Optimization notes

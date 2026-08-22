@@ -125,6 +125,13 @@ class CullingEngine:
         else:
             log.warning("No F1 model available.")
 
+        # Warm the P4 classifier here instead of lazily on the first scored
+        # frame (score_image). Its ORT session + warmup run take ~1 s; doing
+        # it before the timed processing window removes a first-frame stall
+        # and keeps score_image's per-frame cost flat.
+        from cull.scorer import _get_p4_classifier
+        _get_p4_classifier()
+
     def run(self, progress_callback: Callable[[str, float], None] | None = None):
         """Execute the culling process."""
         self.scan(progress_callback)

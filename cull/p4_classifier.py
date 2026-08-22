@@ -54,13 +54,17 @@ class P4Classifier:
         
         x1, y1 = max(0, int(x1)), max(0, int(y1))
         x2, y2 = min(w, int(x2)), min(h, int(y2))
-        
+
         if x2 <= x1 or y2 <= y1: return "unknown", 0.0, 1, 1.0
-            
+
         roi_arr = img_rgb[y1:y2, x1:x2]
         if roi_arr.size == 0: return "unknown", 0.0, 1, 1.0
-            
-        # Pillow resize
+
+        # Pillow resize (PIL BILINEAR). cv2 INTER_LINEAR was A/B'd (#18) and
+        # REVERTED: the ~1-LSB pixel difference flips the integrity decision on
+        # real photos (±0.6 raw via the cut penalty), breaking the precision
+        # gates. P4's decision boundary is knife-edge wrt ROI pixels — keep
+        # this preprocessing frozen.
         roi_pil = Image.fromarray(roi_arr).resize((224, 224), Image.BILINEAR)
         roi = np.array(roi_pil).astype(np.float32) / 255.0
         
