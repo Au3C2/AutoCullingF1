@@ -111,15 +111,19 @@ Established facts:
   is GIL-amplified at workers=4 (detect 49.6 vs 33 ms single-thread).
 - CUDA support needs `ensure_nvidia_runtime_on_path()` (detector.py) for nvidia wheel DLLs.
 
-Optimization order (difficulty ↑ / benefit ↓): 4 RAW batch exiftool `-stay_open`
-(462→~150 ms), 5 sharpness into decode workers, 6 batch metadata sync
-(399→30 ms/file). Target after #4–#6: 25–35 img/s JPG/HEIF.
-**#1 (ffmpeg `-vf scale`) is REJECTED** (2026-08-22): sws↔Pillow-BILINEAR pixel
-differences flunked the HEIF precision gate (DSC00827 raw 1.137→1.361) at only
-−13% speed. Decode MUST remain pixel-identical; extract speed only via
-parallelism/pipelining (see results/performance_baseline.md "Attempted log").
-Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
-pytest suite.
+Optimization status (2026-08-22, all gates green at workers=4):
+- #2 vectorized postprocess — KEPT (detect −39%, equal-op)
+- #3 decode process pool + single-consumer inference — KEPT (HEIF 6.4→11.5,
+  +80%; JPG 6.7 / ARW 4.7 / NEF 4.6 img/s; fixed CUDA non-determinism)
+- #6 batch metadata write (exiftool stay_open) — KEPT (60 vs 458 ms/file, 7.6×)
+- #1 ffmpeg -vf scale — REJECTED (sws pixel drift flunks HEIF gate)
+- #4 exiftool batch RAW extract — DROPPED (no pixel-safe batch path; -b has no
+  framing, -w renders text wrapper). #5 sharpness-in-worker — DROPPED (ROI
+  coupling changes algorithm). Details: results/performance_baseline.md
+  "Attempted optimizations log".
+Remaining: real-run throughput already equals dry-run (metadata no longer
+serial). Decode MUST stay pixel-identical (gates lock raw_score to 3 decimals);
+speed only via parallelism/pipelining.
 
 **DONE — CUDA concurrency non-determinism FIXED via optimization #3** (2026-08-22):
 engine now decodes via `ProcessPoolExecutor` and runs inference on a single
