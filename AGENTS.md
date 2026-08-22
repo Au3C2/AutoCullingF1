@@ -91,3 +91,29 @@ Logs saved to `checkpoints/<run>/tb_logs/`.
 | resnet18 | 0.7554 | 165 |
 | resnet50 | 0.7555 | 57 |
 | mobilenetv3 | 0.7279 | 218 (fastest) |
+
+## Runtime Performance Baseline (master/develop @ CUDA, 2026-08-22)
+
+Authoritative detail in `results/performance_baseline.md`. Benchmarks: `--workers 4 --dry-run`,
+`onnxruntime-gpu 1.23.2`, CUDAExecutionProvider, RTX 4070 Ti. Keep this baseline.
+
+End-to-end: JPG 5.9 / HEIF 6.4 / ARW 4.4 / NEF 3.3 img/s. Serial budget ≈300 ms/frame:
+decode 186–218 ms (JPG-Pillow / HEIF-ffmpeg+resize) is the dominant bottleneck (62%+);
+RAW 462/484 ms via per-file exiftool spawn. Inference is NOT the bottleneck: CUDA
+session.run 8.2 ms, CPU 28 ms. Real runs also pay 399 ms/file exiftool metadata sync
+(dry-run hides it).
+
+Established facts:
+- yolo batch inference is a LOSS (batch=8 = 0.5×; model too small, H2D bound) — do not batch YOLO.
+- All 3 ONNX (f1/yolov8n 640px + p4 224px, opset 17) have dynamic batch dims.
+- README's 35/52 img/s is UNVERIFIED legacy (no artifacts; unreproducible at any commit; max 7.8 img/s).
+- Engine: ThreadPoolExecutor over burst groups; Python postprocess (8400-row argmax, 12.4 ms)
+  is GIL-amplified at workers=4 (detect 49.6 vs 33 ms single-thread).
+- CUDA support needs `ensure_nvidia_runtime_on_path()` (detector.py) for nvidia wheel DLLs.
+
+Optimization order (difficulty ↑ / benefit ↓): 1 ffmpeg `-vf scale` (HEIF −45%),
+2 vectorize postprocess (33→13 ms), 3 decode process pool (JPG/HEIF ~2–4×),
+4 RAW batch exiftool `-stay_open` (462→~150 ms), 5 sharpness into decode workers,
+6 batch metadata sync (399→30 ms/file). Target after #1–#6: 25–35 img/s JPG/HEIF.
+Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
+pytest suite.
