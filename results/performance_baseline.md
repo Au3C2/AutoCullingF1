@@ -85,6 +85,13 @@ concurrent workers: measured rating flips and raw_score drift (e.g.
 DSC00827.ARW raw 2.436 → 0.394; IMG_20260314_151744_020 rating 3 → -1) in
 ~2/3 of repeated runs. Single-threaded (workers=1) runs are fully
 deterministic (3/3 clean across all gates). Precision gates therefore pin
-workers=1; restoring deterministic concurrency (decode process pool +
-single-consumer inference, roadmap item #3) is required before workers>1 can
-be trusted again. Track this in the optimization gate, not by loosening tests.
+workers=1.
+
+**Fix responsibility:** this is an OPEN TASK tied to optimization item #3
+(decode process pool + single-consumer inference). Acceptance criterion for
+the fix: `tests/test_cull.py` + `test_precision_heif.py` + `test_precision_raw.py`
+must be fully green for 3 consecutive runs at `--workers 4`. Do not fix by
+loosening gates; if the root cause turns out to be session-level (ORT provider
+thread-safety), evaluate per-thread sessions or a batching consumer instead of
+a global lock (a lock serializes inference and costs ~2x throughput, as seen
+on the gui branch).
