@@ -72,6 +72,7 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 | # | Change | Gate result | Decision |
 |---|---|---|---|
 | 1 | ffmpeg `-vf scale=1280:-1` instead of Pillow resize (sws_scale in-process) | PRECISION FAIL: HEIF `DSC00827.heif` raw_score 1.137→1.361 (+20%); sws↔Pillow-BILINEAR kernel differences alter pixels. Throughput gain only −13% (281→245 ms/img), far below the −45% hoped | **REVERTED** (2026-08-22). Pixel-identity is a hard requirement; do not retry unless a pixel-exact downscaler is available. |
+| 2 | Vectorize YOLO postprocess (numpy mask+argmax replace 8400-row python loop in `LiteYOLO.detect`) | Precision 6/6 green; per-image detections bit-identical to old loop (24/24, checked to 9 decimals); detect 33.1→20.3 ms/img single-thread (−39%). E2E throughput gates unchanged (JPG 5.09 vs 5.26) — decode still dominates and hides it | **KEPT** (2026-08-22). Equal-op optimization, prerequisite for #3's single-consumer path; E2E benefit expected after #3 |
 
 ## Optimization notes
 
