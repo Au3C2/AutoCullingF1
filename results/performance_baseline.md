@@ -67,6 +67,20 @@ Serial budget ≈ 300 ms/frame, decode dominates everywhere.
 Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG/HEIF,
 15–25 img/s RAW.
 
+## Attempted optimizations log (each run through gates; reverted if no effect or drift)
+
+| # | Change | Gate result | Decision |
+|---|---|---|---|
+| 1 | ffmpeg `-vf scale=1280:-1` instead of Pillow resize (sws_scale in-process) | PRECISION FAIL: HEIF `DSC00827.heif` raw_score 1.137→1.361 (+20%); sws↔Pillow-BILINEAR kernel differences alter pixels. Throughput gain only −13% (281→245 ms/img), far below the −45% hoped | **REVERTED** (2026-08-22). Pixel-identity is a hard requirement; do not retry unless a pixel-exact downscaler is available. |
+
+## Optimization notes
+
+- Decode downscaling must stay pixel-identical to Pillow BILINEAR (the score
+  gates lock raw_score at 3 decimals — any decoder-kernel change flips them).
+  ffmpeg `-vf scale` (sws bilinear), `draft()` (DCT), and cv2 INTER_AREA all
+  fail this bar (see 461a6c6 and the revert above). Speed must come from
+  parallelism/pipelining over pixel-for-pixel decode, not from faster kernels.
+
 ## Regression gate
 
 Precision gates (`tests/test_cull.py`, `tests/test_precision_heif.py`,
