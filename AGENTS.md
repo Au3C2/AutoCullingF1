@@ -111,10 +111,14 @@ Established facts:
   is GIL-amplified at workers=4 (detect 49.6 vs 33 ms single-thread).
 - CUDA support needs `ensure_nvidia_runtime_on_path()` (detector.py) for nvidia wheel DLLs.
 
-Optimization order (difficulty ↑ / benefit ↓): 1 ffmpeg `-vf scale` (HEIF −45%),
-2 vectorize postprocess (33→13 ms), 3 decode process pool (JPG/HEIF ~2–4×),
-4 RAW batch exiftool `-stay_open` (462→~150 ms), 5 sharpness into decode workers,
-6 batch metadata sync (399→30 ms/file). Target after #1–#6: 25–35 img/s JPG/HEIF.
+Optimization order (difficulty ↑ / benefit ↓): 2 vectorize postprocess (33→13 ms),
+3 decode process pool (JPG/HEIF ~2–4×), 4 RAW batch exiftool `-stay_open`
+(462→~150 ms), 5 sharpness into decode workers, 6 batch metadata sync
+(399→30 ms/file). Target after #2–#6: 25–35 img/s JPG/HEIF.
+**#1 (ffmpeg `-vf scale`) is REJECTED** (2026-08-22): sws↔Pillow-BILINEAR pixel
+differences flunked the HEIF precision gate (DSC00827 raw 1.137→1.361) at only
+−13% speed. Decode MUST remain pixel-identical; extract speed only via
+parallelism/pipelining (see results/performance_baseline.md "Attempted log").
 Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
 pytest suite.
 
