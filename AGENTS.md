@@ -118,13 +118,17 @@ Optimization order (difficulty ↑ / benefit ↓): 1 ffmpeg `-vf scale` (HEIF �
 Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
 pytest suite.
 
+**OPEN TASK — fix CUDA concurrency non-determinism (do not forget):** the engine
+(ThreadPoolExecutor over groups, one shared CUDA session, no lock) intermittently
+drops detections at workers>1 — observed ~2/3 of runs, e.g. DSC00827.ARW raw
+2.436→0.394, IMG_20260314_151744_020 3→-1; deterministic at workers=1. Fix
+together with optimization item #3 (decode process pool + single-consumer
+inference). Acceptance: precision gates (test_cull/heif/raw) fully green for
+3 consecutive runs at `--workers 4`. Until then all precision gates stay pinned
+to workers=1 by design.
+
 Gates (built 2026-08-22): precision = `tests/test_cull.py` +
 `tests/test_precision_heif.py` (24 HEIF) + `tests/test_precision_raw.py`
 (20 ARW + 20 NEF), ALL pinned to `--workers 1`; performance =
 `benchmarks/run_benchmarks.py` (gate thresholds for its small samples: JPG
-5.26 / HEIF 3.76 / ARW 2.86 / NEF 2.39 img/s). KNOWN ISSUE: the CUDA +
-shared-session + concurrent-workers engine is NON-DETERMINISTIC (intermittent
-detection drops → rating flips / raw-score drift, ~2/3 of runs at workers=4);
-workers=1 is deterministic and is why gates pin it. Item #3 (single-consumer
-inference + decode process pool) is required to make workers>1 trustworthy;
-do not fix by loosening gates.
+5.26 / HEIF 3.76 / ARW 2.86 / NEF 2.39 img/s).
