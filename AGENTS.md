@@ -128,8 +128,28 @@ Details: results/performance_baseline.md "Attempted optimizations log".
 Current perf-gate protocol numbers (authoritative): JPG 7.21 / HEIF 4.49 /
 ARW 3.15 / NEF 3.42 img/s. Consumer bottleneck (after #B) is now detect
 (~24 ms, mostly GPU run) + half the sharpness; decode supply still balances at
-workers=4. Next lever: consumer-side detect already optimized; consider
-workers=8 for RAW-heavy dirs (measured +13–24% for ARW/NEF, −10% JPG).
+workers=4.
+
+2026-08-22 second round (machine-state drift ±40% between sessions; use
+interleaved A/Bs):
+- #15 RAW persistent exiftool stay_open session (`-b -w` file framing) — KEPT
+  (extraction byte-identical, 33 vs 460 ms/file; ARW +14%, NEF +21% on gates).
+- #17 np.asarray after convert("RGB") — KEPT (pixel-identical, −10 ms/decode).
+- #21 P4 warm-up moved into load_models() — KEPT (no output change; removes
+  ~1 s first-frame stall from the timed window).
+- #13 JPG draft DCT decode — REVERTED (flips P4 integrity on 2/6 JPGs:
+  keep→reject). #18 cv2 letterbox + P4-ROI — REVERTED (4 gates fail, P4 knife-
+  edge, both directions). #19 CPU affinity partitioning — REVERTED (no gain;
+  inflation is memory-bandwidth). #22 P4-skip for sharpness-vetoed frames —
+  REVERTED (raw of vetoed frames loses penalty → raw gates fail). #16 worker
+  count 2/3/4/6 — no effect. P4's ROI decision boundary is knife-edge wrt any
+  ~1-LSB pixel change: the decode/letterbox/P4-ROI preprocessing is FROZEN.
+STEADY-STATE FINDING: consumer serial ≈ 84 ms/frame (~12 fps) is the cap for
+ALL formats; decode supply has 2× slack (decode_wait 12-19 ms). 20 fps needs
+consumer ≤ 50 ms, which requires machine fast-state (detect 16 ms idle) +
+lower bandwidth contention — not reachable with pixel-identical ops alone on
+this 8-core box. Verified after round 2: JPG 7.27 / HEIF 4.40 / ARW 3.39 /
+NEF 3.84 img/s (gate protocol); precision 6/6 green.
 
 **DONE — CUDA concurrency non-determinism FIXED via optimization #3** (2026-08-22):
 engine now decodes via `ProcessPoolExecutor` and runs inference on a single

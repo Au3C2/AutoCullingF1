@@ -7,6 +7,7 @@ Supports HIF (via FFmpeg), RAW (via ExifTool), and standard formats.
 from __future__ import annotations
 
 import logging
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -175,10 +176,16 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
         except Exception as e:
             log.warning(f"pillow-heif failed for {path.name}: {e}")
 
-    # JPEG / PNG / TIFF via Pillow + cv2.INTER_AREA
+    # JPEG / PNG / TIFF via Pillow + cv2.INTER_AREA.
+    # NOTE: libjpeg DCT draft decode was A/B'd (#13) and REVERTED: draft
+    # pixels flip the P4 integrity classifier on 2/6 real JPGs (raw drops
+    # 0.5 via cut penalty -> min_raw veto -> keep->reject). Pixel changes
+    # are therefore off-limits; speed comes from zero-copy + parallelism.
     try:
         pil_img = Image.open(path).convert("RGB")
-        img_arr = np.array(pil_img)
+        # Zero-copy view of the contiguous RGB buffer (np.array would copy
+        # ~72 MB per 24MP frame; asarray is pixel-identical).
+        img_arr = np.asarray(pil_img)
         if scale_width > 0:
             h, w = img_arr.shape[:2]
             new_h = int(round(h * scale_width / w))
@@ -187,24 +194,146 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     except Exception:
         pass
 
-    # RAW Fallback via ExifTool
+    # RAW Fallback via ExifTool (embedded preview, persistent session)
     if suffix in RAW_EXTS:
-        for tag in ["-JpgFromRaw", "-PreviewImage"]:
-            try:
-                exiftool_cmd = _find_exiftool_path()
-                cmd = [*exiftool_cmd, "-b", tag, str(path)]
-                proc = subprocess.run(cmd, capture_output=True, timeout=10)
-                if proc.returncode == 0 and len(proc.stdout) > 0:
-                    import io
-                    pil_img = Image.open(io.BytesIO(proc.stdout)).convert("RGB")
-                    img_arr = np.array(pil_img)
-                    if scale_width > 0:
-                        h, w = img_arr.shape[:2]
-                        new_h = int(round(h * scale_width / w))
-                        return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
-                    return img_arr
-            except Exception: continue
+        try:
+            data = _extract_embedded_raw(path, ["-JpgFromRaw", "-PreviewImage"])
+            if data:
+                pil_img = Image.open(io.BytesIO(data)).convert("RGB")
+                img_arr = np.array(pil_img)
+                if scale_width > 0:
+                    h, w = img_arr.shape[:2]
+                    new_h = int(round(h * scale_width / w))
+                    return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+                return img_arr
+        except Exception:
+            pass
     return None
+
+# ---------------------------------------------------------------------------
+# RAW embedded-preview extraction via a persistent per-process exiftool
+# session (-stay_open). A per-file exiftool spawn costs ~460 ms (Perl
+# interpreter startup); the persistent session amortizes it to ~60-100 ms.
+# The extraction bytes are identical to the per-file spawn (same
+# ``-b -JpgFromRaw``), so decoded pixels and downstream scores are unchanged.
+# Each -execute handles exactly ONE file, giving clean binary framing via the
+# stderr "{ready}" marker (a batch of N files per -execute would concatenate
+# payloads without separators — that path was A/B'd and dropped in #4).
+# ---------------------------------------------------------------------------
+
+class _PersistentExiftool:
+    """One persistent exiftool ``-stay_open`` session for RAW embedded-preview
+    extraction (``-b -w <tmp>/%f.jpg``).
+
+    A per-file ``exiftool -b <tag>`` spawn costs ~460 ms (Perl interpreter
+    startup); the persistent session amortizes that. Each -execute handles
+    exactly ONE file and exiftool writes the binary payload to a temp file
+    (``-w``), so framing is filesystem-based — the extraction bytes are
+    identical to the per-file spawn (verified — the precision gates lock the
+    decoded pixels). ``{ready}`` arrives as a text line on STDOUT for this
+    launcher, which the caller reads line-by-line. Order-preserving and
+    single-threaded per process."""
+
+    def __init__(self) -> None:
+        import tempfile
+        import threading
+        exiftool_cmd = _find_exiftool_path()
+        kwargs = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        self.proc = subprocess.Popen([*exiftool_cmd, "-stay_open", "True", "-@", "-"], **kwargs)
+        self._outdir = Path(tempfile.mkdtemp(prefix="raw_extract_"))
+        self._ready = threading.Event()
+        self._dead = False
+        threading.Thread(target=self._read_stdout, daemon=True).start()
+
+    def _read_stdout(self) -> None:
+        try:
+            while True:
+                line = self.proc.stdout.readline()
+                if not line:
+                    self._dead = True
+                    self._ready.set()
+                    return
+                if line.strip() == b"{ready}":
+                    self._ready.set()
+        except Exception:
+            self._dead = True
+            self._ready.set()
+
+    def extract(self, path: Path, tag: str) -> bytes | None:
+        if self._dead:
+            return None
+        out = self._outdir / f"{path.stem}.jpg__"
+        cmd = ["-b", "-w", f"{self._outdir.as_posix()}/%f.jpg__", tag, str(path)]
+        try:
+            self.proc.stdin.write(("\n".join(cmd) + "\n-execute\n").encode("utf-8", "replace"))
+            self.proc.stdin.flush()
+        except Exception:
+            self._dead = True
+            return None
+        self._ready.clear()
+        import time
+        self._ready.wait(timeout=60.0)
+        if self._dead:
+            return None
+        try:
+            return out.read_bytes() if out.exists() else None
+        finally:
+            try: out.unlink(missing_ok=True)
+            except Exception: pass
+
+    def close(self) -> None:
+        import shutil
+        if not self._dead:
+            try:
+                self.proc.stdin.write(b"-stay_open\nFalse\n-execute\n")
+                self.proc.stdin.flush()
+                self.proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                self.proc.wait(timeout=5)
+            except Exception:
+                try: self.proc.kill()
+                except Exception: pass
+        shutil.rmtree(self._outdir, ignore_errors=True)
+
+_raw_session: _PersistentExiftool | None = None
+
+def _get_raw_session() -> _PersistentExiftool | None:
+    global _raw_session
+    if _raw_session is None:
+        try:
+            _raw_session = _PersistentExiftool()
+            import atexit
+            atexit.register(_raw_session.close)
+        except Exception:
+            _raw_session = None  # fall back to per-file spawns
+    return _raw_session
+
+
+def _extract_embedded_raw(path: Path, tags: list[str]) -> bytes | None:
+    """Return embedded preview bytes (e.g. JpgFromRaw/PreviewImage), using the
+    persistent session when available, else the per-file spawn fallback."""
+    session = _get_raw_session()
+    if session is not None:
+        for tag in tags:
+            data = session.extract(path, tag)
+            if data:
+                return data
+        return None
+    exiftool_cmd = _find_exiftool_path()
+    for tag in tags:
+        try:
+            proc = subprocess.run([*exiftool_cmd, "-b", tag, str(path)],
+                                  capture_output=True, timeout=10)
+            if proc.returncode == 0 and proc.stdout:
+                return proc.stdout
+        except Exception:
+            continue
+    return None
+
 
 def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float, float, float] | None = None) -> tuple[bool, str]:
     et_rating, pick_flag = max(0, rating), (1 if rating > 0 else -1)
