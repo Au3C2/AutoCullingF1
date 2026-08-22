@@ -114,22 +114,22 @@ Established facts:
 Optimization status (2026-08-22, all gates green at workers=4):
 - #2 vectorized postprocess — KEPT (detect −39%, equal-op)
 - #3 decode process pool + single-consumer inference — KEPT (HEIF 6.4→11.5,
-  +80%; JPG 6.7 / ARW 4.7 / NEF 4.6 img/s; fixed CUDA non-determinism)
+  +80%; fixed CUDA non-determinism)
 - #6 batch metadata write (exiftool stay_open) — KEPT (60 vs 458 ms/file, 7.6×)
-- #1 ffmpeg -vf scale — REJECTED (sws pixel drift flunks HEIF gate)
-- #4 exiftool batch RAW extract — DROPPED (no pixel-safe batch path; -b has no
-  framing, -w renders text wrapper). #5 sharpness-in-worker — DROPPED (ROI
-  coupling changes algorithm).
-- #7 sharpness 2-worker pool (deferred finalize) — REVERTED: bit-identical but
-  zero E2E gain on all 4 datasets — decode supply (workers × 186 ms) is the
-  bottleneck, extra workers only add CPU contention.
-- #8 EXIF stay_open batch — REVERTED (unvalidated large-list drift; scan is
-  19 ms/file, not perceptible).
+- #A decode resize → cv2.INTER_AREA — KEPT (user-accepted upward-only score
+  drift at boundaries; ~8× faster resize; baselines re-locked)
+- #B sharpness → cv2.dft(float32) + unshifted mask — KEPT (20.8→~5.2 ms, 4×;
+  HF diff < 2e-9, scores unchanged)
+- #1 ffmpeg -vf scale — REJECTED (pixel drift). #4 RAW batch extract — DROPPED
+  (no pixel-safe path). #5 sharpness-in-worker — DROPPED (ROI coupling).
+  #7 sharpness pool — REVERTED (zero E2E gain; decode supply + consumer were
+  balanced). #8 EXIF stay_open — REVERTED (unvalidated, imperceptible).
 Details: results/performance_baseline.md "Attempted optimizations log".
-Remaining lever: decode parallelism (raise decode-pool workers / feed
-prefetch) — consumer-side serial path is no longer the limiter. Real-run
-throughput already equals dry-run. Decode MUST stay pixel-identical (gates
-lock raw_score to 3 decimals); speed only via parallelism/pipelining.
+Current perf-gate protocol numbers (authoritative): JPG 7.21 / HEIF 4.49 /
+ARW 3.15 / NEF 3.42 img/s. Consumer bottleneck (after #B) is now detect
+(~24 ms, mostly GPU run) + half the sharpness; decode supply still balances at
+workers=4. Next lever: consumer-side detect already optimized; consider
+workers=8 for RAW-heavy dirs (measured +13–24% for ARW/NEF, −10% JPG).
 
 **DONE — CUDA concurrency non-determinism FIXED via optimization #3** (2026-08-22):
 engine now decodes via `ProcessPoolExecutor` and runs inference on a single
