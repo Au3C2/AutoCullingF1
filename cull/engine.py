@@ -15,7 +15,7 @@ from typing import Callable, Any
 import numpy as np
 from cull.exif_reader import ExifData, BurstGroup, read_exif, group_bursts
 from cull.detector import CloudF1Detector, load_f1_model, load_coco_model, detect
-from cull.loader import load_image_rgb, update_image_metadata, RAW_EXTS, COOKED_EXTS, EXTENSIONS
+from cull.loader import load_image_rgb, update_image_metadata, update_image_metadata_batch, RAW_EXTS, COOKED_EXTS, EXTENSIONS
 from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
@@ -177,9 +177,8 @@ class CullingEngine:
             to_sync = [s for s in self.all_scores if s.path in self.standalone_cooked and not s.is_manual]
             if to_sync:
                 log.info("Syncing metadata to %d standalone JPG/HIF files...", len(to_sync))
-                with ThreadPoolExecutor(max_workers=min(8, self.config.workers)) as sync_executor:
-                    for s in to_sync:
-                        sync_executor.submit(update_image_metadata, s.path, s.rating, s.crop)
+                # One persistent exiftool session instead of N subprocess spawns.
+                update_image_metadata_batch([(s.path, s.rating, s.crop) for s in to_sync])
 
         if progress_callback:
             progress_callback("Done!", 1.0)
