@@ -69,7 +69,22 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 
 ## Regression gate
 
-Any change must keep `pytest tests/test_cull.py` (THE CSV-BASELINE version on
-this line; master's older XMP-based tests are stale and fail by design) plus the
-60-JPG / 100-HEIF / 100-ARW / 100-NEF benchmark protocol above. Test images:
-`tests/test_img` (JPG), `test_arw`, `test_nef`, `test_import` (HEIF, 1000 sets).
+Precision gates (`tests/test_cull.py`, `tests/test_precision_heif.py`,
+`tests/test_precision_raw.py`) must stay green after any change; they run the
+CLI at **workers=1 for determinism** — see below. The performance gate is
+`benchmarks/run_benchmarks.py` (4-dataset protocol; gate thresholds locked to
+the GATE sample sizes: JPG 60/HEIF 24/ARW 20/NEF 20 → 5.26/3.76/2.86/2.39 img/s
+measured, thresholds 4.2/3.0/2.3/1.9; the 100-image baselines above run ~1.3–2×
+faster because per-job overhead amortizes better).
+
+### Known issue: CUDA concurrency is non-deterministic (pre-optimization)
+
+With the master engine (ThreadPoolExecutor over burst groups, one shared CUDA
+session, NO lock) the pipeline intermittently drops detections under
+concurrent workers: measured rating flips and raw_score drift (e.g.
+DSC00827.ARW raw 2.436 → 0.394; IMG_20260314_151744_020 rating 3 → -1) in
+~2/3 of repeated runs. Single-threaded (workers=1) runs are fully
+deterministic (3/3 clean across all gates). Precision gates therefore pin
+workers=1; restoring deterministic concurrency (decode process pool +
+single-consumer inference, roadmap item #3) is required before workers>1 can
+be trusted again. Track this in the optimization gate, not by loosening tests.

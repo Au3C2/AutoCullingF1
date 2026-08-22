@@ -117,3 +117,14 @@ Optimization order (difficulty ↑ / benefit ↓): 1 ffmpeg `-vf scale` (HEIF �
 6 batch metadata sync (399→30 ms/file). Target after #1–#6: 25–35 img/s JPG/HEIF.
 Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
 pytest suite.
+
+Gates (built 2026-08-22): precision = `tests/test_cull.py` +
+`tests/test_precision_heif.py` (24 HEIF) + `tests/test_precision_raw.py`
+(20 ARW + 20 NEF), ALL pinned to `--workers 1`; performance =
+`benchmarks/run_benchmarks.py` (gate thresholds for its small samples: JPG
+5.26 / HEIF 3.76 / ARW 2.86 / NEF 2.39 img/s). KNOWN ISSUE: the CUDA +
+shared-session + concurrent-workers engine is NON-DETERMINISTIC (intermittent
+detection drops → rating flips / raw-score drift, ~2/3 of runs at workers=4);
+workers=1 is deterministic and is why gates pin it. Item #3 (single-consumer
+inference + decode process pool) is required to make workers>1 trustworthy;
+do not fix by loosening gates.
