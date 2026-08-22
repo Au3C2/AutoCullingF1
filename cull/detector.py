@@ -76,15 +76,46 @@ def nms_numpy(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> li
         order = order[inds + 1]
     return keep
 
+_NVIDIA_BIN_DIRS = ("cudnn", "cublas", "cuda_nvrtc")
+
+
+def ensure_nvidia_runtime_on_path() -> None:
+    """Prepend NVIDIA pip-wheel runtime DLL dirs (cuDNN/cuBLAS/nvrtc) to PATH.
+
+    onnxruntime-gpu loads its CUDA provider through standard DLL search.
+    The nvidia-* wheels install their DLLs under ``site-packages/nvidia/*/bin``,
+    which is not on PATH by default — without this, CUDAExecutionProvider fails
+    to activate and silently degrades to CPU. No-op when the dirs are absent.
+    """
+    if sys.platform != "win32":
+        return
+    import os
+    import site
+
+    extra = []
+    for base in site.getsitepackages():
+        for name in _NVIDIA_BIN_DIRS:
+            dll_dir = Path(base) / "nvidia" / name / "bin"
+            if dll_dir.is_dir():
+                extra.append(str(dll_dir))
+    if not extra:
+        return
+    existing = os.environ.get("PATH", "")
+    os.environ["PATH"] = os.pathsep.join(extra + ([existing] if existing else []))
+
+
 class LiteYOLO:
     def __init__(self, model_path: Path):
         self.model_path = model_path
         try:
             import onnxruntime as ort
+            ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
             providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
-            self.session = ort.InferenceSession(str(model_path), providers=providers)
+            opts = ort.SessionOptions()
+            opts.log_severity_level = 3  # Suppress non-fatal fallback warnings (e.g. CUDA -> CPU)
+            self.session = ort.InferenceSession(str(model_path), sess_options=opts, providers=providers)
             log.info(f"YOLO LITE active providers: {self.session.get_providers()}")
             self.input_name = self.session.get_inputs()[0].name
             meta = self.session.get_modelmeta().custom_metadata_map

@@ -4,6 +4,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from cull.detector import ensure_nvidia_runtime_on_path
+
 log = logging.getLogger(__name__)
 
 def get_resource_path(relative_path: str) -> Path:
@@ -29,6 +31,7 @@ class P4Classifier:
         self.model_path = Path(model_path)
         try:
             import onnxruntime as ort
+            ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             providers = []
             for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']:
