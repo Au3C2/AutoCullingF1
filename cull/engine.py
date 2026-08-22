@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any
@@ -134,18 +134,29 @@ class CullingEngine:
             progress_callback("Analyzing images...", 0.9)
 
         t_start = time.perf_counter()
-        
-        # Parallel group processing
-        with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
-            def _wrap_process(g_info):
-                idx, group = g_info
+
+        # Image decoding (the CPU/GIL bottleneck) runs in a ProcessPool so it
+        # parallelizes across cores; inference stays on this single consumer
+        # thread with ONE CUDA session, consumed in burst order. This fixes the
+        # non-determinism of the old threaded-groups design (shared session
+        # under concurrent workers intermittently dropped detections).
+        group_results = []
+        with ProcessPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
+            group_futures = [
+                [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                 for fp in group.frames]
+                for group in self.groups
+            ]
+            for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1):
                 log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
-                res = self._process_group_internal(group)
+
+                def _decode_loader(i: int) -> np.ndarray | None:
+                    return futs[i].result()
+
+                res = self._process_group_internal(group, decode_loader=_decode_loader)
                 for s in res:
                     s.burst_group = idx
-                return res
-
-            group_results = list(executor.map(_wrap_process, enumerate(self.groups, start=1)))
+                group_results.append(res)
         
         self.all_scores = []
         for res in group_results:
@@ -175,8 +186,14 @@ class CullingEngine:
             
         return self.all_scores, elapsed
 
-    def _process_group_internal(self, group: BurstGroup) -> list[ImageScore]:
-        """Core logic for processing a single burst group."""
+    def _process_group_internal(self, group: BurstGroup,
+                                decode_loader: Callable[[int], np.ndarray | None] | None = None) -> list[ImageScore]:
+        """Core logic for processing a single burst group.
+
+        *decode_loader* optionally provides pre-decoded frames by index from
+        the process pool (the pool is drained in burst order by the caller);
+        when None, frames are decoded inline on this thread.
+        """
         scores: list[ImageScore] = []
         prev_detections = None
         frames = group.frames
@@ -209,8 +226,9 @@ class CullingEngine:
                 ))
                 continue
 
-            # Load image
-            img_rgb = load_image_rgb(frame_path, scale_width=self.config.scale_width)
+            # Load image (from the process pool when available, else inline)
+            img_rgb = decode_loader(frame_idx) if decode_loader is not None else \
+                load_image_rgb(frame_path, scale_width=self.config.scale_width)
             if img_rgb is None:
                 continue
 

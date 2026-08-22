@@ -217,4 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     return run(args)
 
 if __name__ == "__main__":
+    # Windows spawn workers re-import this module; freeze_support keeps them
+    # from re-running main() (no-op in source mode, required in frozen builds).
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

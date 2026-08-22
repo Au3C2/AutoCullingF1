@@ -111,10 +111,9 @@ Established facts:
   is GIL-amplified at workers=4 (detect 49.6 vs 33 ms single-thread).
 - CUDA support needs `ensure_nvidia_runtime_on_path()` (detector.py) for nvidia wheel DLLs.
 
-Optimization order (difficulty ↑ / benefit ↓): 2 vectorize postprocess (33→13 ms),
-3 decode process pool (JPG/HEIF ~2–4×), 4 RAW batch exiftool `-stay_open`
+Optimization order (difficulty ↑ / benefit ↓): 4 RAW batch exiftool `-stay_open`
 (462→~150 ms), 5 sharpness into decode workers, 6 batch metadata sync
-(399→30 ms/file). Target after #2–#6: 25–35 img/s JPG/HEIF.
+(399→30 ms/file). Target after #4–#6: 25–35 img/s JPG/HEIF.
 **#1 (ffmpeg `-vf scale`) is REJECTED** (2026-08-22): sws↔Pillow-BILINEAR pixel
 differences flunked the HEIF precision gate (DSC00827 raw 1.137→1.361) at only
 −13% speed. Decode MUST remain pixel-identical; extract speed only via
@@ -122,17 +121,15 @@ parallelism/pipelining (see results/performance_baseline.md "Attempted log").
 Use the 4-dataset benchmark protocol as the regression gate alongside the CSV-baseline
 pytest suite.
 
-**OPEN TASK — fix CUDA concurrency non-determinism (do not forget):** the engine
-(ThreadPoolExecutor over groups, one shared CUDA session, no lock) intermittently
-drops detections at workers>1 — observed ~2/3 of runs, e.g. DSC00827.ARW raw
-2.436→0.394, IMG_20260314_151744_020 3→-1; deterministic at workers=1. Fix
-together with optimization item #3 (decode process pool + single-consumer
-inference). Acceptance: precision gates (test_cull/heif/raw) fully green for
-3 consecutive runs at `--workers 4`. Until then all precision gates stay pinned
-to workers=1 by design.
+**DONE — CUDA concurrency non-determinism FIXED via optimization #3** (2026-08-22):
+engine now decodes via `ProcessPoolExecutor` and runs inference on a single
+consumer thread with one session; gates green 3×3 consecutive at workers=4 and
+unlocked back to workers=4 (score rake defaults changed). Throughput after #3
+(workers=4, dry-run): JPG 6.7 / HEIF 11.5 / ARW 4.7 / NEF 4.6 img/s (HEIF
++80%). `--workers` now means decode-pool size, not thread groups.
 
-Gates (built 2026-08-22): precision = `tests/test_cull.py` +
+Gates (2026-08-22): precision = `tests/test_cull.py` +
 `tests/test_precision_heif.py` (24 HEIF) + `tests/test_precision_raw.py`
-(20 ARW + 20 NEF), ALL pinned to `--workers 1`; performance =
-`benchmarks/run_benchmarks.py` (gate thresholds for its small samples: JPG
-5.26 / HEIF 3.76 / ARW 2.86 / NEF 2.39 img/s).
+(20 ARW + 20 NEF), at `--workers 4`; performance =
+`benchmarks/run_benchmarks.py` (thresholds: JPG 4.2 / HEIF 3.0 / ARW 2.3 /
+NEF 1.9 img/s; measured after #3: 6.84/3.73/2.98/3.15).

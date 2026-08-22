@@ -47,7 +47,7 @@ def run_cull(input_dir: Path, backend: str, csv_path: Path | None = None):
     cmd = [
         sys.executable, "cull_photos.py",
         "--input-dir", str(input_dir),
-        "--workers", "1",  # determinism: see tests/score_gate.py docstring
+        "--workers", "4",
         "--force"
     ]
     if csv_path is not None:
