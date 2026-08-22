@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Tuple
 
 import numpy as np
+import cv2
 from PIL import Image
 
 log = logging.getLogger(__name__)
@@ -139,10 +140,7 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                 img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(h, w, 3)
                 if scale_width > 0 and w > scale_width * 1.2:
                     new_h = int(round(h * scale_width / w))
-                    # Use Pillow for resizing
-                    pil_img = Image.fromarray(img)
-                    pil_img = pil_img.resize((scale_width, new_h), Image.BILINEAR)
-                    return np.array(pil_img)
+                    return cv2.resize(img, (scale_width, new_h), interpolation=cv2.INTER_AREA)
                 return img
         except Exception: pass
     return None
@@ -157,22 +155,24 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
             import pillow_heif
             pillow_heif.register_heif_opener()
             pil_img = Image.open(path).convert("RGB")
+            img_arr = np.array(pil_img)
             if scale_width > 0:
-                w, h = pil_img.size
+                h, w = img_arr.shape[:2]
                 new_h = int(round(h * scale_width / w))
-                pil_img = pil_img.resize((scale_width, new_h), Image.BILINEAR)
-            return np.array(pil_img)
+                return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+            return img_arr
         except Exception as e:
             log.warning(f"pillow-heif failed for {path.name}: {e}")
 
-    # JPEG / PNG / TIFF via Pillow
+    # JPEG / PNG / TIFF via Pillow + cv2.INTER_AREA
     try:
         pil_img = Image.open(path).convert("RGB")
+        img_arr = np.array(pil_img)
         if scale_width > 0:
-            w, h = pil_img.size
+            h, w = img_arr.shape[:2]
             new_h = int(round(h * scale_width / w))
-            pil_img = pil_img.resize((scale_width, new_h), Image.BILINEAR)
-        return np.array(pil_img)
+            return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+        return img_arr
     except Exception:
         pass
 
@@ -186,11 +186,12 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
                 if proc.returncode == 0 and len(proc.stdout) > 0:
                     import io
                     pil_img = Image.open(io.BytesIO(proc.stdout)).convert("RGB")
+                    img_arr = np.array(pil_img)
                     if scale_width > 0:
-                        w, h = pil_img.size
+                        h, w = img_arr.shape[:2]
                         new_h = int(round(h * scale_width / w))
-                        pil_img = pil_img.resize((scale_width, new_h), Image.BILINEAR)
-                    return np.array(pil_img)
+                        return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+                    return img_arr
             except Exception: continue
     return None
 

@@ -202,7 +202,7 @@ def score_image(
         try:
             classifier = _get_fence_classifier()
             if classifier is not None:
-                if img_rgb is not None:
+                if (img_rgb is not None) and (img_rgb.size > 0 if isinstance(img_rgb, np.ndarray) else True):
                     # Pass the primary subject's ROI for more robust fence detection
                     primary = detections[0]
                     bbox = (primary.x1, primary.y1, primary.x2, primary.y2)
@@ -253,7 +253,11 @@ def score_image(
     p4_integ_prob = 1.0
     
     # --- P4 Evaluation (Orientation + Integrity) ---
-    if check_p4 and img_rgb is not None:
+    has_img = False
+    if img_rgb is not None:
+        has_img = (img_rgb.size > 0) if isinstance(img_rgb, np.ndarray) else True
+
+    if check_p4 and has_img:
         p4_c = _get_p4_classifier()
         if p4_c is not None:
             primary = detections[0]
