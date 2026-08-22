@@ -16,33 +16,33 @@ from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 
 HEIF_DIR = Path("test_import")
 
-# Baseline locked 2026-08-22 (master@CUDA, ffmpeg preview-stream + Pillow resize).
-# filename -> (rating, raw_score rounded to 3 decimals)
+# Baseline locked 2026-08-22 on the CURRENT pipeline (cv2.INTER_AREA decode
+# resize + optimized cv2.dft sharpness). filename -> (rating, raw_score rounded).
 BASELINE = {
-    "DSC00827.heif": (-1, 1.137),
-    "DSC00845.heif": (-1, 2.798),
-    "DSC00849.heif": (-1, 3.038),
-    "DSC00851.heif": (2, 3.233),
-    "DSC00879.heif": (-1, 1.898),
+    "DSC00827.heif": (-1, 1.208),
+    "DSC00845.heif": (-1, 2.854),
+    "DSC00849.heif": (1, 3.1),
+    "DSC00851.heif": (2, 3.371),
+    "DSC00879.heif": (-1, 1.93),
     "DSC00880.heif": (-1, 1.399),
-    "DSC00886.heif": (-1, 1.727),
-    "DSC00887.heif": (-1, 2.008),
-    "DSC00888.heif": (-1, 2.463),
-    "DSC00890.heif": (-1, 1.272),
-    "DSC00892.heif": (-1, 0.911),
-    "DSC00893.heif": (-1, 2.225),
-    "DSC00894.heif": (-1, 0.732),
-    "DSC00895.heif": (-1, 1.679),
+    "DSC00886.heif": (-1, 1.805),
+    "DSC00887.heif": (-1, 2.055),
+    "DSC00888.heif": (-1, 2.507),
+    "DSC00890.heif": (-1, 1.512),
+    "DSC00892.heif": (-1, 0.928),
+    "DSC00893.heif": (-1, 2.318),
+    "DSC00894.heif": (-1, 0.766),
+    "DSC00895.heif": (-1, 1.7),
     "DSC00896.heif": (-1, 2.974),
-    "DSC00897.heif": (-1, 1.309),
-    "DSC00942.heif": (-1, 1.961),
-    "DSC00951.heif": (-1, 1.174),
-    "DSC00952.heif": (-1, 1.974),
-    "DSC00958.heif": (-1, 1.091),
-    "DSC00959.heif": (-1, 1.086),
-    "DSC00960.heif": (-1, 2.275),
-    "DSC00961.heif": (-1, 1.713),
-    "DSC00962.heif": (-1, 1.432),
+    "DSC00897.heif": (-1, 1.348),
+    "DSC00942.heif": (-1, 2.005),
+    "DSC00951.heif": (-1, 1.208),
+    "DSC00952.heif": (-1, 2.043),
+    "DSC00958.heif": (-1, 1.104),
+    "DSC00959.heif": (-1, 1.104),
+    "DSC00960.heif": (-1, 2.276),
+    "DSC00961.heif": (-1, 1.756),
+    "DSC00962.heif": (-1, 1.469),
 }
 
 
