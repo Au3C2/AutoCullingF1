@@ -16,6 +16,17 @@ import numpy as np
 import cv2
 from PIL import Image
 
+# Decode workers (spawned by the engine's ProcessPoolExecutor) run CPU-heavy
+# JPEG/RAW decode; demote them below the main consumer thread so scoring
+# latency isn't starved on the shared 8 physical cores.
+try:
+    import multiprocessing as _mp
+    if _mp.current_process().name != "MainProcess":
+        import psutil
+        psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+except Exception:
+    pass
+
 log = logging.getLogger(__name__)
 
 EXTENSIONS = {".hif", ".heif", ".heic", ".nef", ".arw", ".cr2", ".cr3",
