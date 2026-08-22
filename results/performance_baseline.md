@@ -6,21 +6,29 @@ Python 3.10, AMD Zen3 CPU). All end-to-end numbers below are `--workers 4 --dry-
 
 ## End-to-end throughput
 
-**After optimization #3 (decode process pool + single-consumer inference, 2026-08-22):**
+**After optimization #3 (decode process pool + single-consumer inference, 2026-08-22) + #A (cv2.INTER_AREA resize) + #B (cv2.dft sharpness):**
 
-| Dataset | Count | Old (pre-#3) | New | Decode path |
-|---|---|---|---|---|
-| JPG (24MP → 1280px, Pillow) | 60 | 5.9 img/s | **6.7** img/s (engine 9.3) | Pillow full-decode + resize |
-| HEIF (1664x1088 preview stream) | 100 | 6.4 img/s | **11.5** img/s (+80%) | ffmpeg spawn, parallelized |
-| ARW (exiftool embed) | 100 | 4.4 img/s | **4.7** img/s | exiftool `-JpgFromRaw` per file |
-| NEF (exiftool embed) | 100 | 3.3 img/s | **4.6** img/s (+35%) | exiftool `-PreviewImage` per file |
+| Dataset | Count | Pre-#3 | #3 | **+ #A/#B** | Decode path |
+|---|---|---|---|---|---|
+| JPG (24MP → 1280px) | 60 | 5.9 | 6.7 | **7.2 img/s** | Pillow decode + cv2.INTER_AREA resize |
+| HEIF (1664x1088 preview) | 100 | 6.4 | 11.5 | **~12 img/s** | ffmpeg spawn + cv2.INTER_AREA |
+| ARW (exiftool embed) | 100 | 4.4 | 4.7 | **~5.0 img/s** | exiftool per file |
+| NEF (exiftool embed) | 100 | 3.3 | 4.6 | **~5.5 img/s** | exiftool per file |
 
-The single-consumer inference also FIXED the CUDA concurrency non-determinism
-(see open-task note below): all precision gates green for 3 consecutive runs
-at `--workers 4` (previously ~2/3 of runs flipped scores at workers=4).
+*Note: 60/100-image wall numbers on this line vary (machine load); the perf-gate
+protocol numbers (JPG 7.21 / HEIF 4.49 / ARW 3.15 / NEF 3.42) are the
+authoritative regression baseline since 2026-08-22.*
 
-Real (non-dry-run) runs additionally pay ~399 ms per file in metadata sync
-(exiftool spawn per file) — not visible in dry-run benchmarks.
+**#A — decode resize (KEPT):** Pillow BILINEAR → `cv2.INTER_AREA`. Scoring
+sensitivity at 30× downscale is fundamental (all 13 backends drift ≥0.18); the
+user accepted INTER_AREA's small systematic upward drift (~8% flips at score
+thresholds, all upward: 2★→3★, −1→+2/keep). Area-average is the only
+mathematically sound downsampler among cv2 methods. ~8× faster resize.
+
+**#B — sharpness FFT (KEPT):** numpy float64 `fft2+fftshift+mgrid` → `cv2.dft`
+(float32, C++/IPP) + unshifted radial-distance broadcasting (min(y,h−y)² +
+min(x,w−x)² mask, no quadrant copy, no sqrt). HF ratio diff < 2e-9 (verified
+24/24), single-image sharpness 20.8 → ~5.2 ms (4×), scores unchanged.
 
 ## Per-frame stage profile (single thread, warm)
 
@@ -85,7 +93,7 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 | 6 | Batch metadata write (persistent exiftool `-stay_open` session, text protocol, one process for all files) | `update_image_metadata_batch` measured 60 ms/file vs 458 ms/file per-spawn (7.6×); read-back verified 12/12 ratings correct; precision gates 6/6 green; real 60-JPG run no longer charged per-file spawn (engine 9.3 img/s = dry-run rate) | **KEPT** (2026-08-22) |
 | 7 | Sharpness offloaded to a 2-worker process pool (deferred-finalize pipeline: frame i sharpness computes while frame i+1 detects) | Deterministic (two runs bit-identical). BUT zero end-to-end gain on all four datasets (JPG 6.4 vs 6.7, HEIF 11.3 vs 11.5, ARW 4.7, NEF 4.7 — all within noise of #3 figures); decode supply (4 workers × 186 ms JPG) is the actual bottleneck and the extra 2 workers compete for CPU | **REVERTED** (2026-08-22). Serial path is no longer the limiter; raising decode parallelism is the lever, not more consumer-side overlap |
 | 8 | EXIF scan via persistent `-stay_open` session (large-list batch) | Implemented but never validated to release bar (batch-boundary drift concern); scan phase is only 19 ms/file and not user-perceptible | **REVERTED** (2026-08-22). Revisit only when scanning thousands of files per run |
-| 9 | Decode-path resize backend matrix (all 6 PIL + all 7 cv2 interpolations, 24MP→1280) | Speed: cv2 1.3–13.9 ms vs PIL 36–192 ms (up to 75×). Drift vs PIL-BILINEAR: EVERY alternative ≥0.176 max |Δraw| (BOX/HAMMING lowest at 0.18/0.21) with 3–4/6 rating flips — none within even 0.005, let alone 0.001. Only PIL-BILINEAR itself satisfies 0.001 | **NO viable alternative** (2026-08-22). Scoring is fundamentally sensitive to interpolation kernels at 30× downscale (sharpness FFT + detection conf change); decode resize stays Pillow-BILINEAR |
+| 9 | Decode-path resize backend matrix (all 6 PIL + all 7 cv2 interpolations, 24MP→1280) | Speed: cv2 1.3–13.9 ms vs PIL 36–192 ms (up to 75×). Drift vs PIL-BILINEAR: EVERY alternative ≥0.176 max |Δraw| (BOX/HAMMING lowest at 0.18/0.21) with 3–4/6 rating flips — none within even 0.005, let alone 0.001. Only PIL-BILINEAR itself satisfies 0.001 | **SUPERSEDED by #A** (2026-08-22): user accepted cv2.INTER_AREA (area-average ~8× faster, ≤8–22% upward-only flips at boundaries); gates re-locked to the new pipeline |
 
 ## Optimization notes
 
