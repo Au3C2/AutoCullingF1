@@ -133,9 +133,59 @@ def get_preview_stream(path: Path) -> Tuple[int, int, int] | None:
         _preview_stream_cache[cache_key] = probe_embedded_preview(path)
     return _preview_stream_cache[cache_key]
 
+def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+    """Decode the primary preview stream via in-process libav (pyav).
+
+    Spawning ffmpeg per file costs ~80-110 ms (process startup) on top of the
+    HEVC decode; pyav keeps libav resident in the worker. Software decode
+    only — cameras embed HEVC Rext 4:2:2 10-bit previews which consumer NVDEC
+    cannot decode (see perf docs). The primary stream is the largest
+    non-dependent HEVC stream (same rule as probe_embedded_preview).
+
+    Returns None when pyav is unavailable or the file cannot be opened, so the
+    caller falls back to the ffmpeg spawn path (identical outcomes)."""
+    try:
+        import av
+    except Exception:
+        return None
+    try:
+        container = av.open(str(path))
+        try:
+            best = None  # (width, stream)
+            for s in container.streams.video:
+                try:
+                    if s.codec_context.name != "hevc":
+                        continue
+                    if int(s.disposition) & (1 << 19):  # AV_DISPOSITION_DEPENDENT
+                        continue
+                    w = s.codec_context.width
+                    if w < 800 or w >= 5000:
+                        continue
+                    if best is None or w > best[0]:
+                        best = (w, s)
+                except Exception:
+                    continue
+            if best is None:
+                return None
+            frame = next(container.decode(best[1]))
+            img = frame.to_ndarray(format="rgb24")
+            if scale_width > 0 and img.shape[1] > scale_width * 1.2:
+                h, w = img.shape[:2]
+                new_h = int(round(h * scale_width / w))
+                return cv2.resize(img, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+            return img
+        finally:
+            container.close()
+    except Exception:
+        return None
+
+
 def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     preview = get_preview_stream(path)
     if preview is not None:
+        img_pyav = _load_image_pyav(path, scale_width=scale_width)
+        if img_pyav is not None:
+            return img_pyav
         idx, w, h = preview
         try:
             ffmpeg_bin = _find_ffmpeg_path()
