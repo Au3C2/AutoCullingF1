@@ -139,12 +139,14 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         idx, w, h = preview
         try:
             ffmpeg_bin = _find_ffmpeg_path()
-            # Use hardware acceleration if available (cuda for NVIDIA, d3d11va for generic Windows)
-            hw_accel = "cuda" if sys.platform == "win32" else "auto"
+            # No -hwaccel: camera HEIF previews are often HEVC Rext 4:2:2 10-bit,
+            # which consumer NVDEC cannot decode — the failed hwaccel init then
+            # falls back to software at +~110 ms/file (measured on 4070 Ti).
+            # Software decode is the same code path that produced the current
+            # gate pixels, so output is unchanged.
             cmd = [
-                ffmpeg_bin, "-hide_banner", "-v", "error", 
-                "-hwaccel", hw_accel, 
-                "-i", str(path), "-map", f"0:{idx}", 
+                ffmpeg_bin, "-hide_banner", "-v", "error",
+                "-i", str(path), "-map", f"0:{idx}",
                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-y", "pipe:1"
             ]
             proc = subprocess.run(cmd, capture_output=True, timeout=30)
