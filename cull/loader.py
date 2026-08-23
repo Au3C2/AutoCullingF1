@@ -177,14 +177,22 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
             log.warning(f"pillow-heif failed for {path.name}: {e}")
 
     # JPEG / PNG / TIFF via Pillow + cv2.INTER_AREA.
-    # NOTE: libjpeg DCT draft decode was A/B'd (#13) and REVERTED: draft
-    # pixels flip the P4 integrity classifier on 2/6 real JPGs (raw drops
-    # 0.5 via cut penalty -> min_raw veto -> keep->reject). Pixel changes
-    # are therefore off-limits; speed comes from zero-copy + parallelism.
+    # JPEGs use libjpeg DCT scaling (Pillow draft): decode at the largest
+    # 1/2^k that still yields >= scale_width pixels per side so the final
+    # INTER_AREA step only downscales (~3x less worker CPU). Re-enabled after
+    # the P4 v2 retrain made the integrity head resize-kernel invariant
+    # (v1 flipped 2/6 gate JPGs on draft pixels; see performance_baseline.md).
     try:
-        pil_img = Image.open(path).convert("RGB")
-        # Zero-copy view of the contiguous RGB buffer (np.array would copy
-        # ~72 MB per 24MP frame; asarray is pixel-identical).
+        pil_img = Image.open(path)
+        if scale_width > 0 and suffix in (".jpg", ".jpeg"):
+            dw, dh = pil_img.size
+            dcp_scale = 1
+            while dcp_scale < 8 and dw // (dcp_scale * 2) >= scale_width \
+                    and dh // (dcp_scale * 2) >= scale_width:
+                dcp_scale *= 2
+            if dcp_scale > 1:
+                pil_img.draft("RGB", (dw // dcp_scale, dh // dcp_scale))
+        pil_img = pil_img.convert("RGB")
         img_arr = np.asarray(pil_img)
         if scale_width > 0:
             h, w = img_arr.shape[:2]

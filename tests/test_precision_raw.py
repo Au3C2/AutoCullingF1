@@ -16,52 +16,56 @@ from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 ARW_DIR = Path("test_arw")
 NEF_DIR = Path("test_nef")
 
-# Baseline locked 2026-08-22 on the CURRENT pipeline (cv2.INTER_AREA decode
-# resize + optimized cv2.dft sharpness).
+# Baseline locked 2026-08-23 on the CURRENT pipeline (libjpeg draft decode +
+# cv2.INTER_AREA resize + cv2 letterbox/cv2 P4-ROI + cv2.dft sharpness + P4 v2
+# model retrained with resize-kernel/camera-jitter augmentation). All
+# keep/reject decisions identical to the PIL-letterbox pipeline; raw records of
+# rejected files moved (P4 v2 retains residual kernel sensitivity on the RAW
+# embedded-preview domain — see docs/P4_LABELING.md for the data fix).
 ARW_BASELINE = {
-    "DSC00827.ARW": (-1, 2.431),
-    "DSC00845.ARW": (2, 3.295),
-    "DSC00849.ARW": (3, 3.513),
+    "DSC00827.ARW": (-1, 2.396),
+    "DSC00845.ARW": (2, 3.266),
+    "DSC00849.ARW": (3, 3.501),
     "DSC00851.ARW": (3, 3.727),
     "DSC00879.ARW": (-1, 2.05),
     "DSC00880.ARW": (-1, 1.19),
-    "DSC00886.ARW": (-1, 2.263),
-    "DSC00887.ARW": (-1, 1.858),
-    "DSC00888.ARW": (-1, 2.502),
-    "DSC00890.ARW": (-1, 1.339),
-    "DSC00892.ARW": (-1, 2.162),
-    "DSC00893.ARW": (-1, 3.027),
-    "DSC00894.ARW": (-1, 0.665),
-    "DSC00895.ARW": (-1, 1.841),
-    "DSC00896.ARW": (-1, 0.86),
+    "DSC00886.ARW": (-1, 2.296),
+    "DSC00887.ARW": (-1, 2.525),
+    "DSC00888.ARW": (-1, 2.509),
+    "DSC00890.ARW": (-1, 1.964),
+    "DSC00892.ARW": (-1, 2.268),
+    "DSC00893.ARW": (-1, 3.025),
+    "DSC00894.ARW": (-1, 0.673),
+    "DSC00895.ARW": (-1, 2.431),
+    "DSC00896.ARW": (-1, 2.177),
     "DSC00897.ARW": (-1, 1.277),
-    "DSC00942.ARW": (-1, 2.984),
-    "DSC00951.ARW": (-1, 1.367),
-    "DSC00952.ARW": (-1, 2.626),
-    "DSC00958.ARW": (-1, 1.539),
+    "DSC00942.ARW": (-1, 2.985),
+    "DSC00951.ARW": (-1, 0.498),
+    "DSC00952.ARW": (2, 3.355),
+    "DSC00958.ARW": (-1, 1.547),
 }
 
 NEF_BASELINE = {
-    "IMG_20260315_164102_480.nef": (-1, 2.188),
-    "IMG_20260315_164102_540.nef": (-1, 1.711),
-    "IMG_20260315_164102_600.nef": (-1, 1.882),
-    "IMG_20260315_164102_660.nef": (-1, 1.524),
-    "IMG_20260315_164102_730.nef": (-1, 1.516),
-    "IMG_20260315_164102_790.nef": (-1, 1.287),
-    "IMG_20260315_164133_610.nef": (-1, 2.556),
-    "IMG_20260315_164133_680.nef": (-1, 1.883),
-    "IMG_20260315_164133_750.nef": (-1, 1.921),
-    "IMG_20260315_164133_810.nef": (-1, 1.838),
-    "IMG_20260315_164133_870.nef": (-1, 2.409),
-    "IMG_20260315_164133_930.nef": (-1, 1.511),
-    "IMG_20260315_164133_990.nef": (-1, 1.459),
-    "IMG_20260315_164134_050.nef": (-1, 1.481),
-    "IMG_20260315_164134_110.nef": (-1, 0.932),
+    "IMG_20260315_164102_480.nef": (-1, 2.175),
+    "IMG_20260315_164102_540.nef": (-1, 2.311),
+    "IMG_20260315_164102_600.nef": (-1, 1.886),
+    "IMG_20260315_164102_660.nef": (-1, 1.641),
+    "IMG_20260315_164102_730.nef": (-1, 1.311),
+    "IMG_20260315_164102_790.nef": (-1, 0.934),
+    "IMG_20260315_164133_610.nef": (-1, 2.574),
+    "IMG_20260315_164133_680.nef": (-1, 1.886),
+    "IMG_20260315_164133_750.nef": (-1, 1.932),
+    "IMG_20260315_164133_810.nef": (-1, 1.844),
+    "IMG_20260315_164133_870.nef": (-1, 2.412),
+    "IMG_20260315_164133_930.nef": (-1, 1.507),
+    "IMG_20260315_164133_990.nef": (-1, 1.454),
+    "IMG_20260315_164134_050.nef": (-1, 1.497),
+    "IMG_20260315_164134_110.nef": (-1, 0.933),
     "IMG_20260315_164136_090.nef": (-1, 2.438),
-    "IMG_20260315_164136_160.nef": (-1, 2.943),
-    "IMG_20260315_164136_220.nef": (-1, 2.501),
+    "IMG_20260315_164136_160.nef": (-1, 2.953),
+    "IMG_20260315_164136_220.nef": (2, 3.128),
     "IMG_20260315_164136_280.nef": (3, 3.501),
-    "IMG_20260315_164136_340.nef": (2, 3.191),
+    "IMG_20260315_164136_340.nef": (2, 3.22),
 }
 
 

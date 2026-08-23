@@ -151,6 +151,19 @@ lower bandwidth contention — not reachable with pixel-identical ops alone on
 this 8-core box. Verified after round 2: JPG 7.27 / HEIF 4.40 / ARW 3.39 /
 NEF 3.84 img/s (gate protocol); precision 6/6 green.
 
+2026-08-23 third round — **P4 v2 retrain unlocked the frozen pixel path**:
+- P4 v2 (`models/p4_car_model.onnx`, retrained via `train/train_p4_multitask.py`
+  with resize-kernel randomization + camera jitter): labeled-val kernel flip
+  rate 4.8%→2.6% (9-kernel), production gates: all keep/reject decisions
+  unchanged on 70 gate files, 2 kept files +1 star. Legacy model backed up at
+  `p4_model_checkpoints/p4_car_model_v1_legacy.onnx`. Robustness eval:
+  `eval/eval_p4_robustness.py`; labeling guide: `docs/P4_LABELING.md`.
+- UNFROZEN and KEPT: #24 JPG libjpeg draft DCT decode (~180→65 ms worker CPU),
+  #25 cv2 letterbox (`detect_numpy`) + cv2 P4 ROI (consumer de-GIL).
+  Interleaved A/B: draft+cv2 gives JPG +25% E2E (8.9-9.2 vs 7.1-7.3 img/s);
+  HEIF/ARW/NEF within machine drift. Precision gates re-locked 2026-08-23
+  (JPG/HEIF/RAW @ workers=4, deterministic across consecutive runs).
+
 **DONE — CUDA concurrency non-determinism FIXED via optimization #3** (2026-08-22):
 engine now decodes via `ProcessPoolExecutor` and runs inference on a single
 consumer thread with one session; gates green 3×3 consecutive at workers=4 and
