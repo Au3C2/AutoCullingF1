@@ -161,6 +161,7 @@ def score_image(
     img_rgb: np.ndarray | None = None,
     img_w: int = 0,
     img_h: int = 0,
+    p4_classifier=None,
 ) -> ImageScore:
     """Compute the final score and Rating for a single image.
 
@@ -186,6 +187,11 @@ def score_image(
         Whether to check for wire fence occlusion (P3).
     img_rgb:
         Preloaded RGB numpy array. If provided, ROI cropping is used for fence classification.
+    p4_classifier:
+        Optional pre-built P4Classifier instance. When None, the process-wide
+        lazy singleton is used. Consumer threads pass their own instance so
+        each thread owns its ONNX session (per-thread sessions keep inference
+        deterministic under concurrency — see performance_baseline.md).
 
     Returns
     -------
@@ -258,7 +264,7 @@ def score_image(
         has_img = (img_rgb.size > 0) if isinstance(img_rgb, np.ndarray) else True
 
     if check_p4 and has_img:
-        p4_c = _get_p4_classifier()
+        p4_c = p4_classifier if p4_classifier is not None else _get_p4_classifier()
         if p4_c is not None:
             primary = detections[0]
             bbox = (primary.x1, primary.y1, primary.x2, primary.y2)

@@ -107,6 +107,7 @@ def run(args: argparse.Namespace) -> int:
         autocrop=not args.crop_off,
         rename=args.rename,
         workers=args.workers,
+        consumer_threads=args.consumer_threads,
         dump_scores=Path(args.dump_scores) if args.dump_scores else None,
         label_check=args.label_check,
         label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None
@@ -185,6 +186,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--label-check-dir", type=Path, default=None)
     parser.add_argument("--scale-width", type=int, default=1280)
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--consumer-threads", type=int, default=1,
+                        help="scoring threads; each owns its ONNX sessions (>=2 "
+                             "processes different burst groups concurrently; "
+                             "A/B'd neutral-to-slower on the 8-core dev box)")
     parser.add_argument("-v", "--verbose", action="store_true")
 
     return parser.parse_args(argv)

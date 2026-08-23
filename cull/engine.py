@@ -46,6 +46,7 @@ class EngineConfig:
     autocrop: bool = True
     rename: bool = False
     workers: int = 4
+    consumer_threads: int = 1
     dump_scores: Path | None = None
     label_check: bool = False
     label_check_dir: Path | None = None
@@ -132,6 +133,30 @@ class CullingEngine:
         from cull.scorer import _get_p4_classifier
         _get_p4_classifier()
 
+        # Pre-build per-consumer model bundles OUTSIDE the timed window so the
+        # multi-consumer path pays no session-load tax while scoring.
+        import queue as _queue
+        self._bundle_queue: _queue.Queue | None = None
+        if int(self.config.consumer_threads) > 1 and self.cloud_f1 is None:
+            from cull.p4_classifier import P4Classifier
+            q: _queue.Queue = _queue.Queue()
+            for _ in range(int(self.config.consumer_threads)):
+                f1b = load_f1_model(self.config.f1_model_path) if self.config.f1_model_path.exists() else None
+                cocob = load_coco_model()
+                p4b = P4Classifier()
+                q.put((f1b, cocob, p4b))
+            self._bundle_queue = q
+
+    def _acquire_bundle(self) -> tuple | None:
+        """Check out one exclusive model bundle (or None in single-consumer)."""
+        if self._bundle_queue is None:
+            return None
+        return self._bundle_queue.get()
+
+    def _release_bundle(self, bundle: tuple | None) -> None:
+        if bundle is not None:
+            self._bundle_queue.put(bundle)
+
     def run(self, progress_callback: Callable[[str, float], None] | None = None):
         """Execute the culling process."""
         self.scan(progress_callback)
@@ -143,27 +168,54 @@ class CullingEngine:
         t_start = time.perf_counter()
 
         # Image decoding (the CPU/GIL bottleneck) runs in a ProcessPool so it
-        # parallelizes across cores; inference stays on this single consumer
-        # thread with ONE CUDA session, consumed in burst order. This fixes the
-        # non-determinism of the old threaded-groups design (shared session
-        # under concurrent workers intermittently dropped detections).
-        group_results = []
+        # parallelizes across cores. Scoring runs on consumer thread(s) in
+        # burst-group order: ONE consumer thread with ONE CUDA session is the
+        # default (deterministic); consumer_threads > 1 processes different
+        # groups on threads that each own their model sessions (per-thread
+        # sessions measured bit-identical, see bench_consumer_scaling.py).
+        n_consumers = max(1, int(self.config.consumer_threads))
+        group_results: list[list[ImageScore]] = []
         with ProcessPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
             group_futures = [
                 [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
                  for fp in group.frames]
                 for group in self.groups
             ]
-            for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1):
-                log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
 
-                def _decode_loader(i: int) -> np.ndarray | None:
-                    return futs[i].result()
+            if n_consumers > 1 and self.cloud_f1 is None:
+                def _score_job(job):
+                    idx, group, futs = job
+                    bundle = self._acquire_bundle()
+                    try:
+                        f1, coco, p4 = bundle
 
-                res = self._process_group_internal(group, decode_loader=_decode_loader)
-                for s in res:
-                    s.burst_group = idx
-                group_results.append(res)
+                        def _decode_loader(i: int) -> np.ndarray | None:
+                            return futs[i].result()
+
+                        res = self._process_group_internal(
+                            group, decode_loader=_decode_loader, f1=f1, coco=coco, p4=p4)
+                    finally:
+                        self._release_bundle(bundle)
+                    for s in res:
+                        s.burst_group = idx
+                    return res
+
+                jobs = [(idx, group, futs)
+                        for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1)]
+                with ThreadPoolExecutor(max_workers=n_consumers) as score_pool:
+                    # executor.map preserves group order regardless of completion order.
+                    group_results = list(score_pool.map(_score_job, jobs))
+            else:
+                for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1):
+                    log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
+
+                    def _decode_loader(i: int) -> np.ndarray | None:
+                        return futs[i].result()
+
+                    res = self._process_group_internal(group, decode_loader=_decode_loader)
+                    for s in res:
+                        s.burst_group = idx
+                    group_results.append(res)
         
         self.all_scores = []
         for res in group_results:
@@ -193,12 +245,15 @@ class CullingEngine:
         return self.all_scores, elapsed
 
     def _process_group_internal(self, group: BurstGroup,
-                                decode_loader: Callable[[int], np.ndarray | None] | None = None) -> list[ImageScore]:
+                                decode_loader: Callable[[int], np.ndarray | None] | None = None,
+                                f1=None, coco=None, p4=None) -> list[ImageScore]:
         """Core logic for processing a single burst group.
 
         *decode_loader* optionally provides pre-decoded frames by index from
         the process pool (the pool is drained in burst order by the caller);
-        when None, frames are decoded inline on this thread.
+        when None, frames are decoded inline on this thread. *f1*/*coco*/*p4*
+        override the shared model instances (multi-consumer threads pass their
+        own sessions); None falls back to the primary instances / global P4.
         """
         scores: list[ImageScore] = []
         prev_detections = None
@@ -247,7 +302,10 @@ class CullingEngine:
                 if not detections:
                     detections = detect(img_rgb, None, self.coco_model, conf=self.config.conf)
             else:
-                detections = detect(img_rgb, self.f1_model, self.coco_model, conf=self.config.conf)
+                detections = detect(img_rgb,
+                                    f1 if f1 is not None else self.f1_model,
+                                    coco if coco is not None else self.coco_model,
+                                    conf=self.config.conf)
 
             # Scoring
             s_sharp = score_sharpness(img_rgb, detections[0] if detections else None)
@@ -257,7 +315,8 @@ class CullingEngine:
                 path=frame_path, detections=detections, s_sharp=s_sharp, s_comp=s_comp,
                 sharp_thresh=self.config.sharp_thresh, w_sharp=self.config.w_sharp,
                 w_comp=self.config.w_comp, min_raw=self.config.min_raw,
-                check_p4=check_p4, img_rgb=img_rgb, img_w=w, img_h=h
+                check_p4=check_p4, img_rgb=img_rgb, img_w=w, img_h=h,
+                p4_classifier=p4,
             )
             scores.append(img_score)
             
