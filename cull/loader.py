@@ -254,13 +254,25 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     except Exception:
         pass
 
-    # RAW Fallback via ExifTool (embedded preview, persistent session)
+    # RAW Fallback via ExifTool (embedded preview, persistent session).
+    # The embedded preview is a full-size JPEG; decode it with libjpeg DCT
+    # scaling (draft) exactly like the JPG path. Unlocked after the P4 v2.1
+    # retrain stabilized the RAW-preview domain (kernel-flip rate 15%->~1%).
     if suffix in RAW_EXTS:
         try:
             data = _extract_embedded_raw(path, ["-JpgFromRaw", "-PreviewImage"])
             if data:
-                pil_img = Image.open(io.BytesIO(data)).convert("RGB")
-                img_arr = np.array(pil_img)
+                pil_img = Image.open(io.BytesIO(data))
+                if scale_width > 0 and pil_img.format == "JPEG":
+                    dw, dh = pil_img.size
+                    dcp_scale = 1
+                    while dcp_scale < 8 and dw // (dcp_scale * 2) >= scale_width \
+                            and dh // (dcp_scale * 2) >= scale_width:
+                        dcp_scale *= 2
+                    if dcp_scale > 1:
+                        pil_img.draft("RGB", (dw // dcp_scale, dh // dcp_scale))
+                pil_img = pil_img.convert("RGB")
+                img_arr = np.asarray(pil_img)
                 if scale_width > 0:
                     h, w = img_arr.shape[:2]
                     new_h = int(round(h * scale_width / w))
