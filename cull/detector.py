@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import ast
 
+import cv2
 import numpy as np
 from PIL import Image
 import sys
@@ -147,13 +148,44 @@ class LiteYOLO:
         canvas.paste(img_resized, (left, top))
         return np.array(canvas), r, (float(left), float(top))
 
-    def detect(self, img_pil: Image.Image, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45) -> list[dict]:
-        if self.session is None: return []
-        img_canvas, ratio, (dw, dh) = self.letterbox_pil(img_pil, new_shape=self.imgsz)
+    def letterbox_numpy(self, img: np.ndarray, new_shape=(640, 640), color=114) -> tuple[np.ndarray, float, tuple[float, float]]:
+        """cv2-based letterbox (GIL-released C code) with identical geometry
+        math to ``letterbox_pil``; kernels LINEAR/AREA vs PIL BILINEAR/BOX.
+        Gate-verified with the v2 P4 model (see performance_baseline.md)."""
+        h, w = img.shape[:2]
+        r = min(new_shape[0] / h, new_shape[1] / w)
+        new_unpad = (int(round(w * r)), int(round(h * r)))
+        interp = cv2.INTER_AREA if h > new_shape[0] * 2 else cv2.INTER_LINEAR
+        img_resized = cv2.resize(img, new_unpad, interpolation=interp)
+        dw, dh = (new_shape[1] - new_unpad[0]) / 2.0, (new_shape[0] - new_unpad[1]) / 2.0
+        top, left = int(round(dh - 0.1)), int(round(dw - 0.1))
+        canvas = np.full((new_shape[0], new_shape[1], 3), color, dtype=np.uint8)
+        canvas[top:top + new_unpad[1], left:left + new_unpad[0]] = img_resized
+        return canvas, r, (float(left), float(top))
+
+    def _run_session(self, img_canvas: np.ndarray) -> tuple[np.ndarray, float, float, float]:
         input_tensor = img_canvas.astype(np.float32) / 255.0
         input_tensor = np.transpose(input_tensor, (2, 0, 1))
         input_tensor = np.expand_dims(input_tensor, axis=0)
         outputs = self.session.run(None, {self.input_name: input_tensor})
+        return outputs
+
+    def detect(self, img_pil: Image.Image, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45) -> list[dict]:
+        if self.session is None: return []
+        img_canvas, ratio, (dw, dh) = self.letterbox_pil(img_pil, new_shape=self.imgsz)
+        outputs = self._run_session(img_canvas)
+        return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
+
+    def detect_numpy(self, img: np.ndarray, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45) -> list[dict]:
+        """Same pipeline but letterboxing runs in cv2 directly on the numpy
+        frame (GIL-free) — removes PIL resize from the consumer thread."""
+        if self.session is None: return []
+        img_canvas, ratio, (dw, dh) = self.letterbox_numpy(img, new_shape=self.imgsz)
+        outputs = self._run_session(img_canvas)
+        return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
+
+    def _postprocess(self, outputs, ratio: float, dw: float, dh: float,
+                     conf_thresh: float, nms_thresh: float) -> list[dict]:
         # Vectorized decode of the 1x(C+4)x8400 output: mask-then-gather instead
         # of a per-row python loop (loop measured 12.4 ms/img, vector ~1 ms).
         # np.argmax / arithmetic are elementwise-identical to the old loop, so
@@ -187,16 +219,15 @@ def load_coco_model():
 
 def detect(img_rgb: np.ndarray, f1: LiteYOLO | None, coco: LiteYOLO | None, conf: float = _CONF_THRESHOLD) -> list[Detection]:
     detections: list[Detection] = []
-    pil_img = Image.fromarray(img_rgb)
     if f1:
-        for b in f1.detect(pil_img, conf_thresh=conf):
+        for b in f1.detect_numpy(img_rgb, conf_thresh=conf):
             detections.append(Detection(label="f1_car", weight=_F1_CLASS_WEIGHT, conf=b["conf"], x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"]))
         if detections:
             h, w = img_rgb.shape[:2]
             detections.sort(key=lambda d: d.subject_score(w, h), reverse=True)
             return detections
     if coco:
-        for b in coco.detect(pil_img, conf_thresh=conf):
+        for b in coco.detect_numpy(img_rgb, conf_thresh=conf):
             if b["cls_id"] in _COCO_INTEREST:
                 l, w = _COCO_INTEREST[b["cls_id"]]
                 detections.append(Detection(label=l, weight=w, conf=b["conf"], x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"]))

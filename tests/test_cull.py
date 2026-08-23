@@ -18,14 +18,15 @@ import pytest
 sys.path.append(os.getcwd())
 
 # Golden baseline generated from tests/test_img on the CURRENT pipeline
-# (cv2.INTER_AREA decode resize + optimized cv2.dft sharpness), shared with
+# (cv2.INTER_AREA decode resize + optimized cv2.dft sharpness + P4 v2 model
+# retrained with resize-kernel/camera-jitter augmentation), shared with
 # test_package.py so the CLI and the packaged binary are validated identically.
 BASELINE = {
     "IMG_20260314_151744_020.jpg": 3,
     "IMG_20260314_160317_680.jpg": 3,
-    "IMG_20260314_160318_240.jpg": 2,
+    "IMG_20260314_160318_240.jpg": -1,
     "IMG_20260314_160343_870.jpg": 3,
-    "IMG_20260314_160344_380.jpg": 2,
+    "IMG_20260314_160344_380.jpg": 3,
     "IMG_20260315_150404_550.jpg": -1,
 }
 

@@ -16,33 +16,36 @@ from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 
 HEIF_DIR = Path("test_import")
 
-# Baseline locked 2026-08-22 on the CURRENT pipeline (cv2.INTER_AREA decode
-# resize + optimized cv2.dft sharpness). filename -> (rating, raw_score rounded).
+# Baseline locked 2026-08-23 on the CURRENT pipeline (libjpeg draft decode +
+# cv2.INTER_AREA resize + cv2 letterbox/cv2 P4-ROI + cv2.dft sharpness + P4 v2
+# model retrained with resize-kernel/camera-jitter augmentation). All
+# keep/reject decisions identical to the pre-cv2 pipeline; DSC00849 drifted
+# 1->2 stars (kept either way).
 BASELINE = {
-    "DSC00827.heif": (-1, 1.208),
-    "DSC00845.heif": (-1, 2.854),
-    "DSC00849.heif": (1, 3.1),
-    "DSC00851.heif": (2, 3.371),
+    "DSC00827.heif": (-1, 1.209),
+    "DSC00845.heif": (-1, 2.831),
+    "DSC00849.heif": (2, 3.114),
+    "DSC00851.heif": (2, 3.393),
     "DSC00879.heif": (-1, 1.93),
     "DSC00880.heif": (-1, 1.399),
-    "DSC00886.heif": (-1, 1.805),
-    "DSC00887.heif": (-1, 2.055),
-    "DSC00888.heif": (-1, 2.507),
-    "DSC00890.heif": (-1, 1.512),
-    "DSC00892.heif": (-1, 0.928),
-    "DSC00893.heif": (-1, 2.318),
-    "DSC00894.heif": (-1, 0.766),
-    "DSC00895.heif": (-1, 1.7),
+    "DSC00886.heif": (-1, 1.838),
+    "DSC00887.heif": (-1, 1.996),
+    "DSC00888.heif": (-1, 2.466),
+    "DSC00890.heif": (-1, 2.337),
+    "DSC00892.heif": (-1, 0.924),
+    "DSC00893.heif": (-1, 2.474),
+    "DSC00894.heif": (-1, 0.775),
+    "DSC00895.heif": (-1, 2.3),
     "DSC00896.heif": (-1, 2.974),
-    "DSC00897.heif": (-1, 1.348),
-    "DSC00942.heif": (-1, 2.005),
-    "DSC00951.heif": (-1, 1.208),
-    "DSC00952.heif": (-1, 2.043),
-    "DSC00958.heif": (-1, 1.104),
-    "DSC00959.heif": (-1, 1.104),
-    "DSC00960.heif": (-1, 2.276),
-    "DSC00961.heif": (-1, 1.756),
-    "DSC00962.heif": (-1, 1.469),
+    "DSC00897.heif": (-1, 2.1),
+    "DSC00942.heif": (-1, 2.128),
+    "DSC00951.heif": (-1, 1.301),
+    "DSC00952.heif": (-1, 2.652),
+    "DSC00958.heif": (-1, 1.09),
+    "DSC00959.heif": (-1, 1.718),
+    "DSC00960.heif": (-1, 2.277),
+    "DSC00961.heif": (-1, 1.757),
+    "DSC00962.heif": (-1, 2.118),
 }
 
 

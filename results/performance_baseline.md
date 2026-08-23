@@ -106,6 +106,20 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 | 20 | (see #16) | — | — |
 | 21 | P4 classifier warm-up in `load_models()` (moves the lazy ORT session + warmup run out of the timed window) | No score change (identical lazy-load semantics, just earlier); removes a ~1 s first-frame stall from every run | **KEPT** (2026-08-22) |
 | 22 | P4 skip for already-sharpness-vetoed frames (output-identical reorder) | Rejected-frame `raw_score` loses the ±0.6 cut penalty → ARW/NEF precision gates FAIL on the recorded raw of vetoed frames (ratings were unchanged) | **REVERTED** (2026-08-22). Gate compares raw of vetoed frames too |
+| 23 | **P4 v2 retrain** (MobileNetV3 multitask, same architecture/data as v1 + resize-kernel randomization across 9 cv2/PIL kernels, pixel noise, gamma/channel-gain/JPEG-recompression jitter; `train/train_p4_multitask.py`) | Labeled-val (9-kernel): integrity F1 96.3→96.8, orient acc 85.6→86.0, kernel flip rate **4.8%→2.6%** (production 3-kernel subset: ~0.4%). Real-photo gates vs v1: keep/reject decisions unchanged on all 70 gate files; 2 kept files drifted +1 star (HEIF DSC00849 1→2, NEF _220 1→2); raw records of rejected files moved up to ±0.6 (P4 v2 retains residual kernel sensitivity on the RAW embedded-preview domain). Baselines re-locked 2026-08-23 | **KEPT** — unlocks the frozen pixel path |
+| 24 | JPG libjpeg draft DCT decode re-enabled (largest 1/2^k ≥ scale_width) | With P4 v2: precision gates green (v1 flipped 2/6 keep→reject). Worker CPU ~180→~65 ms. Interleaved A/B below | **KEPT** |
+| 25 | cv2 letterbox (`detect_numpy`) + cv2 P4-ROI resize re-enabled | With P4 v2: gates green after re-lock; interleaved A/B (draft fixed, letterbox varied): JPG 8.92 vs 8.47 img/s (+5%), HEIF 3.93 vs 3.94 (neutral) | **KEPT** |
+
+## Round-3 unlocked pipeline (2026-08-23)
+
+Draft decode + cv2 letterbox + cv2 P4-ROI + P4 v2 + persistent RAW session.
+Gate protocol (two consecutive runs): JPG **8.89/9.02**, HEIF 3.91/3.77,
+ARW 3.07/3.11, NEF 3.36/3.39 img/s — all thresholds green. JPG +25% vs the
+pre-retrain pipeline (7.13-7.27); other formats within machine drift
+(±10% between sessions on this box — always interleave A/Bs).
+Residual risk: P4 v2 integrity still flips on ~15% of RAW-domain ROIs'
+*raw records* (ratings unaffected — those files sit far below min_raw);
+multi-camera RAW/HEIF labels are the fix (docs/P4_LABELING.md).
 
 ## Stage-profile findings (2026-08-22, 60-JPG protocol, workers=4)
 

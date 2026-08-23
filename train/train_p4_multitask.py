@@ -6,13 +6,17 @@ Task 2: Object Integrity (Binary: Full vs Cut/Occluded)
 Incorporates:
 - Dynamic "Cut" augmentation (crops >1/3 of "Full" images to generate infinite "Cut" data)
 - YOLO native context simulation (crops away the 15% extraction padding for pure YOLO box validation)
+- Resize-kernel randomization (cv2/PIL interpolation zoo) so the integrity head is
+  invariant to the decode/ROI resampling chain — v1 trained on a single cv2.INTER_AREA
+  kernel flipped verdicts on ~5% of real photos when the pipeline kernel changed
+- Camera-pipeline jitter (gamma, per-channel gain, JPEG recompression, sensor noise)
+  for cross-camera robustness
 """
 
 import argparse
 import logging
 import random
 from pathlib import Path
-from dataclasses import dataclass
 from PIL import Image
 
 import cv2
@@ -37,12 +41,62 @@ ORIENT_MAP = {
 }
 NUM_ORIENT_CLASSES = 5
 
+# Interpolation zoo spanning the kernels seen in production (PIL BILINEAR for
+# ROI prep, cv2.INTER_AREA for decode) plus the ones we want to unlock
+# (libjpeg draft ~= BOX, cv2 letterbox = LINEAR).
+_CV2_KERNELS = [cv2.INTER_AREA, cv2.INTER_LINEAR, cv2.INTER_NEAREST, cv2.INTER_CUBIC]
+_PIL_KERNELS = [Image.BILINEAR, Image.BICUBIC, Image.BOX, Image.HAMMING, Image.LANCZOS]
+
+
+def rand_resize(img: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """Resize with a randomly drawn interpolation kernel."""
+    if random.random() < 0.6:
+        return cv2.resize(img, size, interpolation=random.choice(_CV2_KERNELS))
+    pil = Image.fromarray(img).resize(size, random.choice(_PIL_KERNELS))
+    return np.array(pil)
+
+
+def pixel_jitter(img: np.ndarray) -> np.ndarray:
+    """Emulate +-LSB decoder differences and sensor/readout noise."""
+    sigma = random.uniform(0.0, 1.5)
+    if sigma > 0:
+        noise = np.random.default_rng().normal(0, sigma, img.shape)
+        img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+    return img
+
+
+def gamma_jitter(img: np.ndarray) -> np.ndarray:
+    """Random gamma response curve (cross-camera tonal robustness)."""
+    gamma = random.uniform(0.75, 1.35)
+    lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)], dtype=np.uint8)
+    return cv2.LUT(img, lut)
+
+
+def channel_gain_jitter(img: np.ndarray) -> np.ndarray:
+    """Small per-channel multiplicative gain (white-balance variation)."""
+    gains = np.random.default_rng().uniform(0.94, 1.06, 3).astype(np.float32)
+    out = img.astype(np.float32) * gains[None, None, :]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def jpeg_roundtrip(img: np.ndarray, quality_range=(60, 95)) -> np.ndarray:
+    """Re-encode/decode as JPEG to emulate camera codec differences."""
+    q = int(random.uniform(*quality_range))
+    ok, enc = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, q])
+    if not ok:
+        return img
+    dec = cv2.imdecode(enc, cv2.IMREAD_COLOR)
+    return img if dec is None else dec
+
 class MultiTaskCarDataset(Dataset):
-    def __init__(self, img_paths, labels_orient, labels_integ, is_train=True):
+    def __init__(self, img_paths, labels_orient, labels_integ, is_train=True,
+                 pixel_jitter=True, jpeg_jitter=True):
         self.img_paths = img_paths
         self.labels_orient = labels_orient
         self.labels_integ = labels_integ
         self.is_train = is_train
+        self.pixel_jitter = pixel_jitter
+        self.jpeg_jitter = jpeg_jitter
 
         self.transform_base = transforms.Compose([
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
@@ -112,12 +166,25 @@ class MultiTaskCarDataset(Dataset):
                     
                 integ = 0 # Label is now CUT
                 
-        # Resize to typical network input size
-        img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+        # Resize to typical network input size. Training draws a random
+        # interpolation kernel so the integrity head becomes invariant to the
+        # production decode/ROI resampling chain; validation keeps the
+        # cv2.INTER_AREA reference.
+        img = rand_resize(img, (224, 224)) if self.is_train \
+            else cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
 
-        if self.is_train and random.random() < 0.5:
-            img = cv2.flip(img, 1) # Horizontal flip is orientation-invariant
-            
+        if self.is_train:
+            if random.random() < 0.5:
+                img = cv2.flip(img, 1) # Horizontal flip is orientation-invariant
+            if self.pixel_jitter:
+                img = pixel_jitter(img)
+            if random.random() < 0.3:
+                img = gamma_jitter(img)
+            if random.random() < 0.3:
+                img = channel_gain_jitter(img)
+            if self.jpeg_jitter and random.random() < 0.35:
+                img = jpeg_roundtrip(img)
+
         pil_img = Image.fromarray(img)
         if self.is_train:
             pil_img = self.transform_base(pil_img)
@@ -154,6 +221,48 @@ class MultiTaskMobileNet(nn.Module):
         orient_logits = self.orient_head(x)
         integ_logits = self.integ_head(x).squeeze(1)
         return orient_logits, integ_logits
+
+@torch.no_grad()
+def kernel_flip_rate(model, paths, integ_labels) -> tuple[int, int]:
+    """Fraction of val images whose binary integrity verdict changes across
+    resize kernels (cv2.INTER_AREA / PIL.BILINEAR / cv2.INTER_LINEAR).
+
+    This is the production-critical metric: v1 flipped ~5% of real photos when
+    the pipeline kernel changed, blocking every decode-path optimization."""
+    model.eval()
+    kernels = [cv2.INTER_AREA, Image.BILINEAR, cv2.INTER_LINEAR]
+    per_kernel = [[] for _ in kernels]
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    for path in paths:
+        try:
+            img = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            h, w = img.shape[:2]
+            nw, nh = int(w / 1.3), int(h / 1.3)
+            x1, y1 = (w - nw) // 2, (h - nh) // 2
+            roi = img[y1:y1 + nh, x1:x1 + nw]
+            batch = []
+            for k in kernels:
+                if isinstance(k, int):
+                    r = cv2.resize(roi, (224, 224), interpolation=k)
+                else:
+                    r = np.array(Image.fromarray(roi).resize((224, 224), k))
+                x = torch.from_numpy(np.ascontiguousarray(r)).float().permute(2, 0, 1) / 255.0
+                batch.append((x - mean) / std)
+            xb = torch.stack(batch).to(device)
+            _, i_logits = model(xb)
+            probs = torch.sigmoid(i_logits).cpu().numpy()
+            for j in range(len(kernels)):
+                per_kernel[j].append(int(probs[j] > 0.5))
+        except Exception:
+            continue
+    n = len(per_kernel[0])
+    flips = sum(1 for t in zip(*per_kernel) if len(set(t)) > 1)
+    return flips, n
+
 
 def train():
     parser = argparse.ArgumentParser()
@@ -220,6 +329,8 @@ def train():
         [labels_integ[i] for i in train_idx],
         is_train=True
     )
+    val_paths = [img_paths[i] for i in val_idx]
+    val_integ = [labels_integ[i] for i in val_idx]
     val_dataset = MultiTaskCarDataset(
         [img_paths[i] for i in val_idx],
         [labels_orient[i] for i in val_idx],
@@ -312,6 +423,9 @@ def train():
         f1 = 2 * prec * rec / (prec + rec) if prec + rec > 0 else 0
         
         log.info(f"Epoch [{epoch+1}/{args.epochs}] TL:{t_l:.3f} VL:{v_l:.3f} | OrientAcc:{o_acc:.3f} IntegAcc:{i_acc:.3f} IntegF1:{f1:.3f}")
+        if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epochs:
+            flips, n = kernel_flip_rate(model, val_paths, val_integ)
+            log.info(f"  KernelFlipRate: {flips}/{n} = {flips / max(1, n):.2%} (target ~0)")
         
         if v_l < best_loss:
             best_loss = v_l
