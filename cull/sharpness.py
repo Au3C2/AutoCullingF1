@@ -64,21 +64,24 @@ def score_sharpness(
         # Expand ROI slightly to be robust to bbox jitter
         bw, bh = detection.x2 - detection.x1, detection.y2 - detection.y1
         pad_w, pad_h = bw * _ROI_BUFFER, bh * _ROI_BUFFER
-        
+
         x1 = max(0, int(detection.x1 - pad_w))
         y1 = max(0, int(detection.y1 - pad_h))
         x2 = min(w, int(detection.x2 + pad_w))
         y2 = min(h, int(detection.y2 + pad_h))
-        
+
         region = img_rgb[y1:y2, x1:x2] if (x2-x1) >= _MIN_CROP_PX and (y2-y1) >= _MIN_CROP_PX else img_rgb
     else:
         region = img_rgb
 
-    # Grayscale: BT.601 exactly to match OpenCV color conversion
-    gray = (0.299 * region[..., 0] + 0.587 * region[..., 1] + 0.114 * region[..., 2]).astype(np.uint8)
+    # Grayscale via cv2 (fixed-point BT.601): ~12x faster than the float dot
+    # product; differs by <=1 LSB on ~64% of pixels. The Laplacian gate runs
+    # on cv2.Laplacian(CV_32F) (~2.4x faster, variance within ~1% of the f64
+    # reference). Both changes are gate-verified (see performance_baseline.md).
+    gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
 
     if lap_reject > 0.0:
-        lvar = laplacian_variance(gray)
+        lvar = float(cv2.Laplacian(gray, cv2.CV_32F).var())
         if lvar <= 0: return 0.0
         lv = float(np.log(lvar + 1e-9))
         if lv < lap_reject: return 0.0

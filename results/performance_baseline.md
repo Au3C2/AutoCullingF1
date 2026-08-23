@@ -110,6 +110,9 @@ Target after #1–#6: serial critical path ≈ 21 ms/frame → 25–35 img/s JPG
 | 24 | JPG libjpeg draft DCT decode re-enabled (largest 1/2^k ≥ scale_width) | With P4 v2: precision gates green (v1 flipped 2/6 keep→reject). Worker CPU ~180→~65 ms. Interleaved A/B below | **KEPT** |
 | 25 | cv2 letterbox (`detect_numpy`) + cv2 P4-ROI resize re-enabled | With P4 v2: gates green after re-lock; interleaved A/B (draft fixed, letterbox varied): JPG 8.92 vs 8.47 img/s (+5%), HEIF 3.93 vs 3.94 (neutral) | **KEPT** |
 | 26 | Dual-consumer scoring threads (`--consumer-threads`, per-thread ONNX sessions, eager bundle pool outside the timed window) | Isolated probe: chain 46→58 fps with 0/120 detection mismatches, GPU util 17% (not saturated). In-engine interleaved A/B: ct=2 consistently SLOWER than ct=1 (JPG 8.67 vs 9.21, HEIF 3.62 vs 3.77) — the overlap gain is eaten by memory-bandwidth contention with 4 decode workers | **KEPT AS FLAG, default 1** (2026-08-23). Revisit on hardware with more memory bandwidth; determinism verified (gates green) |
+| 27 | Sharpness internals → cv2: `cvtColor` RGB2GRAY (12x) + `Laplacian(CV_32F)` variance (2.4x) | Gray conversion differs <=1 LSB on ~64% of pixels → raw records drift <=0.016 on 19/70 gate files, 1 star drift on a kept HEIF (DSC00849 2→1). Interleaved A/B JPG 10.65 vs 10.34 (+3%), HEIF neutral. Baselines re-locked | **KEPT** (2026-08-23) |
+
+## Scoring-chain sub-step profile (2026-08-23, cached 1280px frames, warm)
 
 ## Round-3 unlocked pipeline (2026-08-23)
 
@@ -121,6 +124,26 @@ pre-retrain pipeline (7.13-7.27); other formats within machine drift
 Residual risk: P4 v2 integrity still flips on ~15% of RAW-domain ROIs'
 *raw records* (ratings unaffected — those files sit far below min_raw);
 multi-camera RAW/HEIF labels are the fix (docs/P4_LABELING.md).
+
+## Scoring-chain sub-step profile (2026-08-23, cached 1280px frames, warm)
+
+Whole chain = 22.3 ms/frame → 46 fps single-thread (GPU util 17%). Sub-steps:
+
+| sub-step | ms | note |
+|---|---|---|
+| letterbox cv2 (640) | 0.78 | — |
+| preprocess float32/255 + CHW | 2.95 | cv2.blobFromImage slower (3.7) — kept numpy |
+| f1 session.run (CUDA) | 6.29 | batch x6 = 3.6 ms/img, but CPU-side dominates chain |
+| postprocess argmax+NMS | 0.26 | vectorized |
+| gray conversion | 2.06 | → cv2.cvtColor 0.04 (#27) |
+| Laplacian veto | 3.07 | → cv2.CV_32F 0.36 (#27) |
+| hf_ratio dft | 2.33 | cv2.dft, optimized |
+| P4 roi+prep+run | 4.1 | mostly session.run 3.5 (CUDA) |
+| score_image veto/dataclass | ~0.3 | pure python |
+
+After #27 the chain is ~21 ms. Remaining consumer-side items are either GPU
+necessary (f1 6.3 + p4 3.5) or within ~2-3 ms of floor; no further
+pixel-equivalent wins identified — verified by the sub-step inventory above.
 
 ## Stage-profile findings (2026-08-22, 60-JPG protocol, workers=4)
 
