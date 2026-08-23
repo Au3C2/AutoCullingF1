@@ -187,3 +187,49 @@ e.g. DSC00827.ARW raw 2.436→0.394). The engine now decodes in a process pool
 and runs inference on a single consumer thread with one session; `--workers`
 now controls the decode-pool size. Verified: all precision gates green for 3
 consecutive runs at workers=4.
+## macOS platform baseline (2026-08-24)
+
+Platform re-lock on macOS (Apple Silicon, `.venv`: Python 3.10.20, pyav
+17.1.0/libav 61, exiftool 13.50, ffmpeg 8.0). All decision semantics vs the
+Windows locks are preserved; raw_score drifts come from decode LSB
+differences (HEVC/RGB conversion, exiftool Perl-version byte extraction).
+
+| Dataset | Files | Rating flips | Max \|Δraw\| | Largest drift file |
+|---|---|---|---|---|
+| HEIF (test_import) | 24 | 0 | 0.035 | DSC00893.heif 2.468 → 2.433 |
+| ARW (test_arw) | 20 | 0 | 0.034 | DSC00886.ARW 2.217 → 2.183 |
+| NEF (test_nef) | 20 | 0 | 0.026 | IMG...136_220.nef 3.072 → 3.046 |
+| JPG (test_img) | 6 | 0 | 0.000 | identical to Windows lock |
+
+Mac internal stability: two consecutive full gate runs are bit-identical
+(max_drift 0.000, 0 rating flips). Baselines in the three test files were
+re-locked to the macOS measured values on 2026-08-24; JPG baseline untouched.
+Full per-file diff is recorded in the git history of tests/.
+
+### macOS performance work (2026-08-24, same day)
+
+Three optimizations landed on the macOS line, all zero-drift against the
+Mac lock above:
+
+1. **P4 on CPU EP (darwin only)** — CoreML partitions only 20/77 nodes of
+   the small P4 model and pays bridge overhead: measured 16.6 ms vs 5.0 ms
+   for plain CPU on the scored chain (Apple M4). Logit diff vs CoreML is
+   <= 0.011 and never crosses a decision margin: all 64 HEIF/ARW/NEF gate
+   files keep rating AND raw_score bit-identical (max_drift 0.000).
+   Scoring chain: 18.4 -> 23.4 fps serial, 26.7 fps at 4 threads (CoreML
+   made multi-threading a loss; CPU restores positive scaling).
+2. **EXIF scan parallelization** — exiftool reading sharded across 4
+   processes with argv file lists (8.1 ms/file vs 18.5 ms/file for the
+   `-@ -` stdin protocol on M4; `-@ -` retained for > 400 files).
+   Verified field-identical output; EXIF feeds burst grouping only, so
+   scores are untouched. End-to-end JPG: 13.6 -> 14.5 img/s.
+3. **videotoolbox HEIF hwaccel: REJECTED** — interleaved A/B (5 rounds)
+   shows hwaccel is 100 ms vs 56 ms soft spawn on M4 (hw transfer +
+   yuv422p10le->rgb24 conversion cost more than the soft HEVC decode it
+   replaces; pyav exposes no working hwaccel API). Pixels are bit-identical
+   to soft, so there is no precision upside either.
+
+Final macOS end-to-end (gate protocol, workers=4): JPG 14.37, HEIF 7.48,
+ARW 6.67, NEF 7.99 img/s (vs Windows 10.8 / 5.9 / 4.5 / 4.7). Scoring
+chain serial 23.4 fps. `--consumer-threads` 2/4 is a LOSS end-to-end on
+M4 (13.6 -> 11.4 -> 9.0 img/s, interleaved A/B) — default 1 stays.

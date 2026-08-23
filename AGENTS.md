@@ -176,3 +176,31 @@ Gates (2026-08-22): precision = `tests/test_cull.py` +
 (20 ARW + 20 NEF), at `--workers 4`; performance =
 `benchmarks/run_benchmarks.py` (thresholds: JPG 4.2 / HEIF 3.0 / ARW 2.3 /
 NEF 1.9 img/s; measured after #3: 6.84/3.73/2.98/3.15).
+
+## macOS platform (Apple M4, 2026-08-24)
+
+Dev machine: MacBook M4 (10 cores, 24 GB), Python 3.10.20 (uv venv), pyav
+17.1.0, exiftool 13.50, ffmpeg 8.0. Precision gates re-locked on macOS
+(platform decode LSB diffs vs Windows; all 64 HEIF/ARW/NEF ratings
+identical, raw drift <= 0.035 — see tests/ headers and
+results/performance_baseline.md "macOS platform baseline").
+
+macOS-specific optimizations (all zero-drift vs the macOS gate lock):
+- **P4 model runs on CPUExecutionProvider on darwin** (cull/p4_classifier.py):
+  CoreML partitions 20/77 nodes and costs 16.6 ms vs 5.0 ms CPU. Logit diff
+  vs CoreML <= 0.011, never crosses a decision; scoring chain 18.4 ->
+  23.4 fps serial (26.7 fps at 4 threads). CoreML EP for YOLO stays
+  (27 ms vs 51 ms CPU; CoreML EP options are unsupported in ORT 1.23.2 on
+  this build).
+- **EXIF scan sharded across 4 exiftool processes** (cull/exif_reader.py,
+  argv file lists, `-@ -` kept for > 400 files): 8.1 vs 18.5 ms/file on M4;
+  field-identical output verified; feeds burst grouping only.
+- **videotoolbox HEIF hwaccel REJECTED**: interleaved A/B 100 vs 56 ms
+  (spawn overhead + yuv422p10le->rgb24 transfer > soft HEVC decode); pixels
+  bit-identical so no precision upside. pyav has no working hwaccel API.
+- `--consumer-threads` 2/4 is a LOSS end-to-end on M4 (13.6 -> 11.4 -> 9.0
+  img/s interleaved A/B); default 1 stays (differs from nothing on Windows).
+
+macOS final numbers (gate protocol, workers=4): JPG 14.37 / HEIF 7.48 /
+ARW 6.67 / NEF 7.99 img/s vs Windows 10.8 / 5.9 / 4.5 / 4.7. Scoring chain
+serial 23.4 fps — the 20 fps scoring-chain target is met on M4.
