@@ -16,33 +16,36 @@ from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 
 HEIF_DIR = Path("test_import")
 
-# Baseline locked 2026-08-23 on the CURRENT pipeline (libjpeg draft decode +
+# Baseline locked 2026-08-24 on macOS (Apple Silicon, pyav 17.1.0/libav 61,
+# exiftool 13.50) — platform re-lock of the 2026-08-23 Windows baseline.
+# All 24 ratings identical to the Windows lock (0 flips); raw_score drifts
+# within ±0.035 from HEVC/RGB LSB platform decode differences (DSC00893 is
+# the largest at -0.035). Pipeline unchanged: libjpeg draft decode +
 # cv2.INTER_AREA resize + cv2 letterbox/cv2 P4-ROI + cv2.dft sharpness with
-# cv2 gray/Laplacian internals + P4 v2 model). All keep/reject decisions
-# identical to the previous lock; DSC00849 drifted 2->1 stars (kept either way).
+# cv2 gray/Laplacian internals + P4 v2 model.
 BASELINE = {
     "DSC00827.heif": (-1, 1.204),
-    "DSC00845.heif": (-1, 2.827),
+    "DSC00845.heif": (-1, 2.826),
     "DSC00849.heif": (1, 3.108),
     "DSC00851.heif": (2, 3.381),
     "DSC00879.heif": (-1, 1.926),
     "DSC00880.heif": (-1, 1.399),
     "DSC00886.heif": (-1, 1.834),
-    "DSC00887.heif": (-1, 1.987),
+    "DSC00887.heif": (-1, 1.985),
     "DSC00888.heif": (-1, 2.458),
-    "DSC00890.heif": (-1, 1.735),
-    "DSC00892.heif": (-1, 0.924),
-    "DSC00893.heif": (-1, 2.468),
+    "DSC00890.heif": (-1, 1.736),
+    "DSC00892.heif": (-1, 0.923),
+    "DSC00893.heif": (-1, 2.433),
     "DSC00894.heif": (-1, 0.772),
     "DSC00895.heif": (-1, 1.697),
     "DSC00896.heif": (-1, 2.974),
     "DSC00897.heif": (-1, 2.095),
-    "DSC00942.heif": (-1, 2.72),
+    "DSC00942.heif": (-1, 2.719),
     "DSC00951.heif": (-1, 1.299),
     "DSC00952.heif": (-1, 2.047),
     "DSC00958.heif": (-1, 1.09),
     "DSC00959.heif": (-1, 1.117),
-    "DSC00960.heif": (-1, 2.277),
+    "DSC00960.heif": (-1, 2.278),
     "DSC00961.heif": (-1, 1.753),
     "DSC00962.heif": (-1, 1.513),
 }

@@ -33,10 +33,17 @@ class P4Classifier:
             import onnxruntime as ort
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
-            providers = []
-            for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']:
-                if p in available: providers.append(p)
-            if not providers: providers = ['CPUExecutionProvider']
+            if sys.platform == "darwin":
+                # CoreML partitions only 20/77 nodes of this small model and
+                # pays per-partition bridge overhead — measured 16.6 ms vs
+                # 5.0 ms for plain CPU on Apple M4 (2026-08-24). Logit diff
+                # vs CoreML <= 0.011; precision gates re-verified on macOS.
+                providers = ['CPUExecutionProvider']
+            else:
+                providers = []
+                for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']:
+                    if p in available: providers.append(p)
+                if not providers: providers = ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(self.model_path), providers=providers)
             
             dummy = np.zeros((1, 3, 224, 224), dtype=np.float32)
