@@ -40,7 +40,6 @@ log = logging.getLogger(__name__)
 _DEFAULT_WORKSPACE = "jayanths-workspace"
 _DEFAULT_PROJECT   = "formula-one-car-detection"
 _DEFAULT_VERSION   = 1
-_DEFAULT_API_KEY   = "NQI4igULp4JqFsyY2L2t"  # provided by user; replace if expired
 _DEFAULT_OUT       = Path(__file__).parent / "f1_yolov8n.onnx"
 
 
@@ -192,7 +191,7 @@ def _print_permission_error(exc: Exception) -> None:
         "Fallback option — use the Roboflow cloud API instead:\n"
         "  The culling pipeline (cull_photos.py) will automatically fall back\n"
         "  to inference_sdk when no local ONNX is present.  Pass:\n"
-        "    --rf-api-key NQI4igULp4JqFsyY2L2t\n"
+        "    --rf-api-key <YOUR_ROBOFLOW_KEY>\n"
         "  and it will call serverless.roboflow.com for F1 detection.\n",
         file=sys.stderr,
     )
@@ -213,7 +212,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-key",
-        default=_DEFAULT_API_KEY,
+        default=None,
         help="Roboflow API key.",
     )
     parser.add_argument(
