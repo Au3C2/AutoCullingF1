@@ -205,16 +205,20 @@ class MultiTaskCarDataset(Dataset):
         return tensor_img, torch.tensor(orient, dtype=torch.long), torch.tensor(integ, dtype=torch.float32)
 
 class MultiTaskMobileNet(nn.Module):
-    def __init__(self, num_orient_classes=5):
+    def __init__(self, num_orient_classes=5, arch: str = "large"):
         super().__init__()
-        # Use MobileNetV3-Large for high accuracy and fast ONNX deployment
-        backbone = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
+        # MobileNetV3-Large for high accuracy and fast ONNX deployment;
+        # 'small' is the speed variant (A/B'd — see perf docs).
+        assert arch in ("large", "small"), arch
+        if arch == "large":
+            backbone = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
+            in_features = 960
+        else:
+            backbone = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT)
+            in_features = 576
         self.features = backbone.features
         self.pool = nn.AdaptiveAvgPool2d(1)
-        
-        # Output channels for MobileNetV3-Large features is 960
-        in_features = 960 
-        
+
         # Dual Heads
         self.orient_head = nn.Sequential(
             nn.Dropout(p=0.3),
@@ -285,6 +289,7 @@ def train():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--arch", type=str, default="large", choices=["large", "small"])
     parser.add_argument("--num-workers", type=int, default=8,
                         help="DataLoader workers; the per-sample pipeline is CPU-heavy "
                              "(decode + resize-kernel zoo + JPEG recompression) and "
@@ -389,7 +394,7 @@ def train():
                             persistent_workers=args.num_workers > 0, pin_memory=True)
     
     # Model
-    model = MultiTaskMobileNet(NUM_ORIENT_CLASSES).to(device)
+    model = MultiTaskMobileNet(NUM_ORIENT_CLASSES, arch=args.arch).to(device)
     
     # Weighted Cross Entropy for Imbalanced Orientation
     orient_counts = np.array(dist_orient)
