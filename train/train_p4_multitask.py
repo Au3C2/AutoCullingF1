@@ -90,13 +90,14 @@ def jpeg_roundtrip(img: np.ndarray, quality_range=(60, 95)) -> np.ndarray:
 
 class MultiTaskCarDataset(Dataset):
     def __init__(self, img_paths, labels_orient, labels_integ, is_train=True,
-                 pixel_jitter=True, jpeg_jitter=True):
+                 pixel_jitter=True, jpeg_jitter=True, cache_dir: Path | None = None):
         self.img_paths = img_paths
         self.labels_orient = labels_orient
         self.labels_integ = labels_integ
         self.is_train = is_train
         self.pixel_jitter = pixel_jitter
         self.jpeg_jitter = jpeg_jitter
+        self.cache_dir = cache_dir
 
         self.transform_base = transforms.Compose([
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
@@ -109,6 +110,16 @@ class MultiTaskCarDataset(Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
+    def _load_roi(self, path: str) -> np.ndarray | None:
+        """Decoded ROI: from the .npy cache when enabled, else JPEG decode."""
+        if self.cache_dir is not None:
+            cpath = self.cache_dir / (Path(path).stem + ".npy")
+            if cpath.exists():
+                arr = np.load(cpath)
+                return arr if arr.ndim == 3 and arr.size else None
+        img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        return None if img is None else cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
     def __len__(self):
         return len(self.img_paths)
 
@@ -118,9 +129,10 @@ class MultiTaskCarDataset(Dataset):
         integ = self.labels_integ[idx]  # 1 for full, 0 for cut
         
         try:
-            img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = self._load_roi(path)
         except Exception:
+            img = None
+        if img is None:
             img = np.zeros((224, 224, 3), dtype=np.uint8)
             
         h, w = img.shape[:2]
@@ -265,6 +277,7 @@ def kernel_flip_rate(model, paths, integ_labels) -> tuple[int, int]:
 
 
 def train():
+    torch.backends.cudnn.benchmark = True  # fixed 224x224 input: one autotune pass
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default="p4_data/labeled")
     parser.add_argument("--epochs", type=int, default=50)
@@ -272,6 +285,14 @@ def train():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--num-workers", type=int, default=8,
+                        help="DataLoader workers; the per-sample pipeline is CPU-heavy "
+                             "(decode + resize-kernel zoo + JPEG recompression) and "
+                             "num_workers=0 starves the GPU")
+    parser.add_argument("--cache-dir", type=str, default="p4_data/cache_raw",
+                        help="pre-decoded ROI .npy cache (built once, then reads "
+                             "raw pixels instead of JPEG-decode every epoch; "
+                             "pass '' to disable)")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -323,11 +344,32 @@ def train():
     split = int(0.8 * total)
     train_idx, val_idx = indices[:split], indices[split:]
     
+    cache_dir: Path | None = None
+    if args.cache_dir:
+        cache_dir = Path(args.cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        # One pre-decode pass: raw-pixel .npy per ROI, so DataLoader workers
+        # never JPEG-decode again (GPU starvation fix — see perf docs).
+        import time as _t
+        missing = [p for p in img_paths
+                   if not (cache_dir / (Path(p).stem + ".npy")).exists()]
+        if missing:
+            log.info(f"Building decode cache for {len(missing)} ROIs...")
+            t0 = _t.perf_counter()
+            n_ok = 0
+            for p in missing:
+                im = cv2.imdecode(np.fromfile(str(p), dtype=np.uint8), cv2.IMREAD_COLOR)
+                if im is not None:
+                    np.save(cache_dir / (Path(p).stem + ".npy"), im[:, :, ::-1])
+                    n_ok += 1
+            log.info(f"Cache built: {n_ok}/{len(missing)} in {_t.perf_counter()-t0:.0f}s")
+
     train_dataset = MultiTaskCarDataset(
         [img_paths[i] for i in train_idx],
         [labels_orient[i] for i in train_idx],
         [labels_integ[i] for i in train_idx],
-        is_train=True
+        is_train=True,
+        cache_dir=cache_dir,
     )
     val_paths = [img_paths[i] for i in val_idx]
     val_integ = [labels_integ[i] for i in val_idx]
@@ -335,11 +377,16 @@ def train():
         [img_paths[i] for i in val_idx],
         [labels_orient[i] for i in val_idx],
         [labels_integ[i] for i in val_idx],
-        is_train=False
+        is_train=False,
+        cache_dir=cache_dir,
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                              num_workers=args.num_workers, persistent_workers=args.num_workers > 0,
+                              pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
+                            num_workers=args.num_workers if args.num_workers <= 2 else 2,
+                            persistent_workers=args.num_workers > 0, pin_memory=True)
     
     # Model
     model = MultiTaskMobileNet(NUM_ORIENT_CLASSES).to(device)
