@@ -200,6 +200,13 @@ macOS-specific optimizations (all zero-drift vs the macOS gate lock):
   bit-identical so no precision upside. pyav has no working hwaccel API.
 - `--consumer-threads` 2/4 is a LOSS end-to-end on M4 (13.6 -> 11.4 -> 9.0
   img/s interleaved A/B); default 1 stays (differs from nothing on Windows).
+- **YOLO CoreML ANE/compute-units REJECTED** (2026-08-24): option keys are
+  CamelCase (`MLComputeUnits`, `ModelFormat`, `RequireStaticInputShapes`);
+  f1 YOLO is 7 partitions / 233 of 318 nodes on CoreML (the "29 partitions"
+  log line was P4's). ANE is -16% on the YOLO stage alone but SLOWER on the
+  full scoring chain (submit-wait schedule vs the CPU sharpness/P4 stages);
+  RequireStaticInputShapes cannot work on ultralytics graphs (~3000
+  data-dependent dynamic dims). Details: performance_baseline.md.
 
 macOS final numbers (gate protocol, workers=4): JPG 14.37 / HEIF 7.48 /
 ARW 6.67 / NEF 7.99 img/s vs Windows 10.8 / 5.9 / 4.5 / 4.7. Scoring chain
