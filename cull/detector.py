@@ -127,8 +127,18 @@ class LiteYOLO:
                 static_path = model_path.with_name(model_path.stem + "_static.onnx")
                 if static_path.exists():
                     model_file = static_path
+                    # Pin the compute units. With the default ALL the runtime
+                    # silently switches between ANE and GPU depending on
+                    # system load; the two paths differ by ~0.01 detection
+                    # confidence, which flips rating-boundary files across
+                    # runs (observed on DSC00849.heif). ANE is also the
+                    # fastest unit for this graph (idle-state full chain:
+                    # locked-ANE 18.2 vs ALL 17.8 vs locked-GPU 28.0 ms).
                     providers = [
-                        ("CoreMLExecutionProvider", {"RequireStaticInputShapes": "1"}),
+                        ("CoreMLExecutionProvider", {
+                            "RequireStaticInputShapes": "1",
+                            "MLComputeUnits": "CPUAndNeuralEngine",
+                        }),
                         "CPUExecutionProvider",
                     ]
                 else:

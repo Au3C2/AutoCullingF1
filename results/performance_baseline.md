@@ -321,3 +321,36 @@ Shapes, 3 partitions) remains the fastest combination measured.
 - Re-validation of the static-graph win under the idle state: full chain
   dynamic 38.6 vs static 18.8 ms/frame (-51%) — larger than the loaded-
   state measurement (-34%); conclusion unchanged and strengthened.
+
+### Rating-boundary instability root-caused: CoreML ALL-mode unit switching (2026-08-25)
+
+After the static-graph integration, DSC00849.heif (a historical rating-
+boundary file, raw ~3.108 vs the 1-star/2-star threshold) flipped 1<->2
+stars between sessions with identical code. Root cause, verified by
+explicit compute-unit pinning on the same frame:
+
+| MLComputeUnits | DSC00849 detection |
+|---|---|
+| default ALL | conf 0.53174 — matches ANE exactly |
+| CPUAndNeuralEngine | conf 0.53174 |
+| CPUAndGPU | conf 0.52412 (y -0.12 px) |
+
+The runtime silently switches between ANE and GPU depending on system load;
+the two paths differ by ~0.01 confidence, enough to move knife-edge files
+across rating thresholds AND to explain part of the day/night absolute-
+timing swings. Fix: the darwin static branch now pins
+`MLComputeUnits: CPUAndNeuralEngine` — same speed as ALL in the idle state
+(full chain 18.2 vs 17.8 ms/frame; locked GPU would cost 28.0), and a
+single deterministic execution path. Gates re-locked to the pinned values:
+1 known boundary file changes star level within keep semantics, everything
+else <=0.037 raw drift, two consecutive runs bit-stable.
+
+Decode workers additionally request UTILITY QoS on darwin (loader.py),
+steering them toward efficiency cores; measured effect at idle is within
+noise (+0.6%) but kept as load-state protection. Consumer-thread QoS
+elevation (USER_INTERACTIVE) was tested and has NO effect.
+
+Idle-state macOS numbers with pinned ANE (gate protocol, workers=4):
+JPG 18.99 / HEIF 8.77 / ARW 6.83 / NEF 8.19 img/s; scoring chain 52.3 fps
+serial. Note: end-to-end numbers swing with system load; only interleaved
+A/Bs are comparable.
