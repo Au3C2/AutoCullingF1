@@ -354,3 +354,24 @@ Idle-state macOS numbers with pinned ANE (gate protocol, workers=4):
 JPG 18.99 / HEIF 8.77 / ARW 6.83 / NEF 8.19 img/s; scoring chain 52.3 fps
 serial. Note: end-to-end numbers swing with system load; only interleaved
 A/Bs are comparable.
+
+### Pre-existing models/*.mlpackage tested — legacy artifacts, incompatible (2026-08-25)
+
+The repo ships `models/f1_yolov8n.mlpackage` and `models/yolov8n.mlpackage`
+(March exports, image input 640x640 + built-in NMS -> confidence/coords).
+Findings:
+
+- The "f1" package emits an 80-class confidence row — a COCO-era head, not
+  the current 4+10-class production graph; its weights differ from both the
+  current ONNX and yolov8n.mlpackage (md5). Stale training lineage.
+- Image-input semantics (BGR colorSpace, stretch-to-640 or in-graph
+  preprocessing) do not match the pipeline's RGB letterbox; final detections
+  disagree with the production path on every gate frame.
+- Latency with built-in NMS included: ~7.9 ms/frame vs 6.1 ms for the
+  shipped ORT static+ANE path (which excludes our ~0.4 ms postprocess).
+  No speed advantage either.
+
+Native CoreML (.mlpackage) routes are closed end-to-end: correct-weight
+fp16 conversion showed parity at best (19.3 vs 18.8 ms full chain), and the
+legacy packages are semantically incompatible. The shipped configuration
+(static ONNX via ORT CoreML EP, ANE-pinned) remains optimal.
