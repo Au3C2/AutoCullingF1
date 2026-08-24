@@ -202,12 +202,17 @@ macOS-specific optimizations (all zero-drift vs the macOS gate lock):
   img/s interleaved A/B); default 1 stays (differs from nothing on Windows).
 - **YOLO CoreML ANE/compute-units REJECTED** (2026-08-24): option keys are
   CamelCase (`MLComputeUnits`, `ModelFormat`, `RequireStaticInputShapes`);
-  f1 YOLO is 7 partitions / 233 of 318 nodes on CoreML (the "29 partitions"
-  log line was P4's). ANE is -16% on the YOLO stage alone but SLOWER on the
-  full scoring chain (submit-wait schedule vs the CPU sharpness/P4 stages);
-  RequireStaticInputShapes cannot work on ultralytics graphs (~3000
-  data-dependent dynamic dims). Details: performance_baseline.md.
+  ANE is -16% on the YOLO stage alone but SLOWER on the full scoring chain
+  (submit-wait schedule vs the CPU sharpness/P4 stages).
+- **STATIC-GRAPH YOLO KEPT** (2026-08-25): ultralytics exports are symbolic
+  on ALL dims (`batch/height/width`) — freeze all three, constant-fold with
+  onnxsim (`models/f1_yolov8n_static.onnx`), then RequireStaticInputShapes
+  qualifies 227/231 nodes in 3 partitions (vs 7/233-of-318 dynamic). Full
+  scoring chain 40.2 -> 26.4 ms/frame; scoring chain 37.5 fps serial;
+  end-to-end JPG 17.41 img/s. Darwin-only branch in LiteYOLO (engine always
+  runs batch=1); Windows keeps the dynamic model. Gate: 0 rating flips,
+  9 raw entries re-locked (~3% P4 knife-edge drift <=0.6, rest <=0.012).
 
-macOS final numbers (gate protocol, workers=4): JPG 14.37 / HEIF 7.48 /
-ARW 6.67 / NEF 7.99 img/s vs Windows 10.8 / 5.9 / 4.5 / 4.7. Scoring chain
-serial 23.4 fps — the 20 fps scoring-chain target is met on M4.
+macOS final numbers (gate protocol, workers=4): JPG 17.41 / HEIF 8.79 /
+ARW 6.91 / NEF 8.05 img/s vs Windows 10.8 / 5.9 / 4.5 / 4.7. Scoring chain
+serial 37.5 fps — the 20 fps scoring-chain target is exceeded by 87%.

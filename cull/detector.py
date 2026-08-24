@@ -112,11 +112,32 @@ class LiteYOLO:
             import onnxruntime as ort
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
-            providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
-            providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
             opts = ort.SessionOptions()
             opts.log_severity_level = 3  # Suppress non-fatal fallback warnings (e.g. CUDA -> CPU)
-            self.session = ort.InferenceSession(str(model_path), sess_options=opts, providers=providers)
+            model_file = model_path
+            if sys.platform == "darwin" and 'CoreMLExecutionProvider' in available:
+                # Prefer the batch=1 static graph (onnxsim constant-folded):
+                # RequireStaticInputShapes qualifies 227/231 nodes in 3
+                # partitions vs 7/233-of-318 for the dynamic export — full
+                # scoring chain 40.2 -> 26.4 ms/frame on Apple M4, interleaved
+                # A/B (2026-08-25). The engine always calls session.run with
+                # batch=1. Side effect: ~3% of gate files drift raw_score via
+                # the P4 ROI knife-edge (ratings unchanged; see
+                # performance_baseline.md). Windows keeps the dynamic model.
+                static_path = model_path.with_name(model_path.stem + "_static.onnx")
+                if static_path.exists():
+                    model_file = static_path
+                    providers = [
+                        ("CoreMLExecutionProvider", {"RequireStaticInputShapes": "1"}),
+                        "CPUExecutionProvider",
+                    ]
+                else:
+                    providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+                    providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
+            else:
+                providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+                providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
+            self.session = ort.InferenceSession(str(model_file), sess_options=opts, providers=providers)
             log.info(f"YOLO LITE active providers: {self.session.get_providers()}")
             self.input_name = self.session.get_inputs()[0].name
             meta = self.session.get_modelmeta().custom_metadata_map
