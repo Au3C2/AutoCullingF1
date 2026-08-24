@@ -375,3 +375,18 @@ Native CoreML (.mlpackage) routes are closed end-to-end: correct-weight
 fp16 conversion showed parity at best (19.3 vs 18.8 ms full chain), and the
 legacy packages are semantically incompatible. The shipped configuration
 (static ONNX via ORT CoreML EP, ANE-pinned) remains optimal.
+
+### Official ultralytics CoreML re-export of current weights (2026-08-25, retried)
+
+Re-ran the native route through the official exporter with CURRENT weights
+(`YOLO(best.pt).export(format="coreml", imgsz=640, nms=False)`) after
+confirming its ImageType uses scale=1/255 bias=0 RGB — numerically aligned
+with the pipeline's letterbox+normalize. Fed our letterboxed canvas as a PIL
+image so preprocessing matches exactly.
+
+Result: full chain 18.4 vs 18.2 ms/frame (parity, no gain); detection boxes
+drift <=0.54 px vs the ORT path (fp16 weight rounding). Same verdict as the
+hand-rolled coremltools conversion: the ORT CoreML EP already executes on
+the identical CoreML runtime stack, so bypassing ORT adds an integration
+(detector backend branch, image-buffer marshalling) for zero speed. The
+native route is closed with data, not assumption.
