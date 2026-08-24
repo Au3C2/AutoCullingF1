@@ -303,3 +303,21 @@ are slower than NeuralNetwork's, and the 4 remaining CPU nodes in the
 NN-format graph cost almost nothing. Partition count is not a goal in
 itself; the shipped config (static graph, NN format, RequireStaticInput-
 Shapes, 3 partitions) remains the fastest combination measured.
+
+### FP16 export investigation — no gain over the CoreML EP pipeline (2026-08-25)
+
+- **ONNX-level fp16 is a dead end**: the CoreML EP accepts only float32
+  graphs (0/233 nodes qualified for an fp16-converted model). This is by
+  design — the EP hands the graph to CoreML, which applies its own fp16
+  precision internally; a manually fp16'd ONNX buys nothing.
+- **Native CoreML fp16 (.mlpackage via coremltools from best.pt,
+  compute_precision=FLOAT16)** was benchmarked end-to-end against the
+  shipped ORT static path in the same process: 19.3 vs 18.8 ms/frame
+  (no gain), identical ±0.75 px box drift. The EP pipeline already pays
+  the same conversion and scheduling costs. Not adopted.
+- Machine-state note: absolute numbers swing strongly with system load
+  (YOLO stage measured 5.6 ms idle at night vs 27.5 ms under daytime
+  load). Only interleaved A/Bs within one process are valid.
+- Re-validation of the static-graph win under the idle state: full chain
+  dynamic 38.6 vs static 18.8 ms/frame (-51%) — larger than the loaded-
+  state measurement (-34%); conclusion unchanged and strengthened.
