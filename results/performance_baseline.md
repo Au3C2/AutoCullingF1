@@ -264,3 +264,31 @@ partition-split question):
   Zero rating flips — but the performance verdict above stands, so the
   shipped config stays NeuralNetwork default + P4 on CPU.
 - CPUAndGPU compute units are bit-identical to default but +1% slower.
+
+### Static-graph YOLO — partition split SOLVED (2026-08-25, KEPT)
+
+Root cause of the earlier "RequireStaticInputShapes dead end": the
+ultralytics export is symbolic on ALL input dims — `['batch', 3, 'height',
+'width']` — and freezing only the batch axis left H/W symbols everywhere.
+Freezing all three (`batch=1, height=640, width=640`) and constant-folding
+with onnx-simplifier collapses the graph to ZERO dynamic dims (318 -> 231
+nodes; the shape-computation subgraphs fold away):
+
+| Graph | CoreML partitions | Nodes on CoreML | Full chain (interleaved) |
+|---|---|---|---|
+| dynamic (shipped before) | 7 | 233/318 | 40.2 ms/frame |
+| static + RequireStaticInputShapes | **3** | **227/231** | **26.4 ms/frame (-34%)** |
+
+Integrated as `models/f1_yolov8n_static.onnx`, loaded by a darwin-only branch
+in LiteYOLO (Windows keeps the dynamic model; engine always runs batch=1).
+P4 static conversion: no gain (CPU EP 4.91 vs 4.85 ms), not adopted.
+
+Score impact: ALL 64 HEIF/ARW/NEF gate files keep their ratings (0 flips);
+9 raw_score entries re-locked to measured values. Two files drift ~0.6 via
+the known P4 ROI knife-edge (box moves <=0.75 px -> integrity prob crosses
+0.5, e.g. IMG...810.nef 0.535 -> 0.482); the rest drift <=0.012. Gate rounds
+are bit-stable across consecutive runs.
+
+Final macOS numbers with the static graph (gate protocol, workers=4):
+JPG 17.41 / HEIF 8.79 / ARW 6.91 / NEF 8.05 img/s. Scoring chain 37.5 fps
+serial (was 23.4). `--consumer-threads` 2/4 remains a loss (31.1/27.4).
