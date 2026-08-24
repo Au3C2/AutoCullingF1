@@ -16,38 +16,41 @@ from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 
 HEIF_DIR = Path("test_import")
 
-# Baseline locked 2026-08-24 on macOS (Apple Silicon, pyav 17.1.0/libav 61,
-# exiftool 13.50) — platform re-lock of the 2026-08-23 Windows baseline.
-# All 24 ratings identical to the Windows lock (0 flips); raw_score drifts
-# within ±0.035 from HEVC/RGB LSB platform decode differences (DSC00893 is
-# the largest at -0.035). Pipeline unchanged: libjpeg draft decode +
-# cv2.INTER_AREA resize + cv2 letterbox/cv2 P4-ROI + cv2.dft sharpness with
-# cv2 gray/Laplacian internals + P4 v2 model.
+# Baseline locked 2026-08-25 on macOS (Apple Silicon, pyav 17.1.0/libav 61,
+# exiftool 13.50) with the YOLO detector on the batch=1 STATIC graph
+# (models/f1_yolov8n_static.onnx: onnxsim constant-folded, CoreML
+# RequireStaticInputShapes, 3 partitions) pinned to CPUAndNeuralEngine.
+# Pinning removes the runtime's silent ANE<->GPU switching, which flipped
+# the rating-boundary file DSC00849 (1<->2 stars, both keep) across
+# system-load states. All ratings identical to the Windows lock; raw_score
+# drifts within ±0.035 of it from platform decode LSB differences.
+# Pipeline: libjpeg draft decode + cv2.INTER_AREA resize + cv2
+# letterbox/cv2 P4-ROI + cv2.dft sharpness + P4 v2 model on CPU EP.
 BASELINE = {
     "DSC00827.heif": (-1, 1.204),
     "DSC00845.heif": (-1, 2.838),
-    "DSC00849.heif": (1, 3.107),
-    "DSC00851.heif": (2, 3.38),
-    "DSC00879.heif": (-1, 1.926),
+    "DSC00849.heif": (2, 3.11),
+    "DSC00851.heif": (2, 3.381),
+    "DSC00879.heif": (-1, 1.937),
     "DSC00880.heif": (-1, 1.399),
-    "DSC00886.heif": (-1, 1.834),
-    "DSC00887.heif": (-1, 1.985),
-    "DSC00888.heif": (-1, 2.458),
-    "DSC00890.heif": (-1, 1.735),
+    "DSC00886.heif": (-1, 1.818),
+    "DSC00887.heif": (-1, 2.005),
+    "DSC00888.heif": (-1, 2.459),
+    "DSC00890.heif": (-1, 1.726),
     "DSC00892.heif": (-1, 0.923),
-    "DSC00893.heif": (-1, 2.433),
-    "DSC00894.heif": (-1, 0.771),
-    "DSC00895.heif": (-1, 1.697),
+    "DSC00893.heif": (-1, 2.436),
+    "DSC00894.heif": (-1, 0.77),
+    "DSC00895.heif": (-1, 1.694),
     "DSC00896.heif": (-1, 2.974),
     "DSC00897.heif": (-1, 2.095),
-    "DSC00942.heif": (-1, 2.127),
-    "DSC00951.heif": (-1, 1.297),
-    "DSC00952.heif": (-1, 2.044),
+    "DSC00942.heif": (-1, 2.123),
+    "DSC00951.heif": (-1, 1.306),
+    "DSC00952.heif": (-1, 2.048),
     "DSC00958.heif": (-1, 1.09),
     "DSC00959.heif": (-1, 1.117),
     "DSC00960.heif": (-1, 2.278),
-    "DSC00961.heif": (-1, 1.752),
-    "DSC00962.heif": (-1, 1.512),
+    "DSC00961.heif": (-1, 1.755),
+    "DSC00962.heif": (-1, 1.503),
 }
 
 

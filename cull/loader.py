@@ -19,12 +19,20 @@ from PIL import Image
 
 # Decode workers (spawned by the engine's ProcessPoolExecutor) run CPU-heavy
 # JPEG/RAW decode; demote them below the main consumer thread so scoring
-# latency isn't starved on the shared 8 physical cores.
+# latency isn't starved on the shared 8 physical cores. On Apple Silicon,
+# UTILITY QoS additionally steers workers toward the efficiency cores.
 try:
     import multiprocessing as _mp
     if _mp.current_process().name != "MainProcess":
         import psutil
         psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+        if sys.platform == "darwin":
+            try:
+                import ctypes as _ct
+                _libc = _ct.CDLL("/usr/lib/libpthread.dylib")
+                _libc.pthread_set_qos_class_self_np(0x11, 0)  # QOS_CLASS_UTILITY
+            except Exception:
+                pass
 except Exception:
     pass
 
