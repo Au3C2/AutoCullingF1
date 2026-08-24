@@ -233,3 +233,34 @@ Final macOS end-to-end (gate protocol, workers=4): JPG 14.37, HEIF 7.48,
 ARW 6.67, NEF 7.99 img/s (vs Windows 10.8 / 5.9 / 4.5 / 4.7). Scoring
 chain serial 23.4 fps. `--consumer-threads` 2/4 is a LOSS end-to-end on
 M4 (13.6 -> 11.4 -> 9.0 img/s, interleaved A/B) — default 1 stays.
+
+### YOLO CoreML compute-units / partition investigation (2026-08-24, later)
+
+Follow-up on the CoreML EP options ("Unknown option" root cause + the
+partition-split question):
+
+- **Root cause of "Unknown option"**: the option keys are CamelCase —
+  `MLComputeUnits`, `ModelFormat`, `RequireStaticInputShapes` (the snake_case
+  `ml_compute_units`/`coreml_compute_units` forms are rejected). With correct
+  keys ORT 1.23.2 accepts all options; the earlier failures were purely a
+  naming error, not a build limitation.
+- **Real partition structure**: production f1_yolov8n.onnx = 7 partitions,
+  233/318 nodes on CoreML (NeuralNetwork format). The "29 partitions" line in
+  earlier logs belonged to p4_car_model.onnx (140 nodes), not the YOLO.
+  MLProgram format supports 255/318 nodes but still yields 7 partitions.
+- **RequireStaticInputShapes is a dead end** for ultralytics exports: the
+  graph carries ~3000 data-dependent dynamic dims (Reshape/Concat shapes);
+  even with the batch axis frozen and full onnx.shape_inference applied, only
+  0-6 nodes qualify for CoreML (everything falls back to CPU).
+- **ANE compute units: REJECTED despite -16% on the YOLO stage alone.**
+  Interleaved A/B, Apple M4: YOLO session.run 24.2 vs 28.7 ms (MLProgram+ANE
+  vs NeuralNetwork default), but the FULL scoring chain gets SLOWER —
+  MLProgram+ANE 40.9 vs 39.1 ms/frame, NN+ANE 41.8 vs 38.3 ms/frame (higher
+  variance too). ANE's synchronous submit-wait schedule interleaves badly
+  with the CPU stages (sharpness/P4) that follow every run.
+- **Side finding**: gate files scored under ANE keep ALL ratings and mostly
+  return to the ORIGINAL Windows-locked raw values (fp16 accumulation
+  converges with CUDA's low-precision path where Mac NN/CPU fp32 differed).
+  Zero rating flips — but the performance verdict above stands, so the
+  shipped config stays NeuralNetwork default + P4 on CPU.
+- CPUAndGPU compute units are bit-identical to default but +1% slower.
