@@ -292,3 +292,14 @@ are bit-stable across consecutive runs.
 Final macOS numbers with the static graph (gate protocol, workers=4):
 JPG 17.41 / HEIF 8.79 / ARW 6.91 / NEF 8.05 img/s. Scoring chain 37.5 fps
 serial (was 23.4). `--consumer-threads` 2/4 remains a loss (31.1/27.4).
+
+### Single-partition variant tested — possible but slower (2026-08-25)
+
+The static graph + `ModelFormat: "MLProgram"` + RequireStaticInputShapes
+qualifies ALL 231/231 nodes in ONE partition (zero CPU fallback). However,
+interleaved A/B on the full chain: MLProgram single-partition 27.5 vs
+NeuralNetwork 3-partition 25.8 ms/frame — the MLProgram op implementations
+are slower than NeuralNetwork's, and the 4 remaining CPU nodes in the
+NN-format graph cost almost nothing. Partition count is not a goal in
+itself; the shipped config (static graph, NN format, RequireStaticInput-
+Shapes, 3 partitions) remains the fastest combination measured.
