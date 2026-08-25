@@ -539,3 +539,25 @@ CLI benchmarks after the change:
 - 600 JPG: 40.2 img/s (was 37.9; proflie wall 40.6 img/s)
 - Gate protocol: JPG 21.3 / HEIF 8.3 / ARW 6.5 / NEF 8.7 img/s
 All precision gates 7/7 green.
+
+### P4 ANE default on darwin (re-validated under ThreadPool engine, 2026-08-25)
+
+The earlier -10% verdict for the single-partition ANE P4 graph was measured
+with the OLD ProcessPool engine. After the bounded-ThreadPool engine change,
+interleaved A/B (JPG, workers=4):
+
+| Scale | P4 CPU EP | P4 ANE (default now) |
+|---|---|---|
+| 60 JPGs | 20.2 img/s | 17.8 img/s (-11.8%) |
+| 300 JPGs | 39.8 img/s | 43.4 img/s (+9.2%) |
+| 600 JPGs | 37.8 img/s | 42.6 img/s (+12.6%) |
+
+The crossover is ~100-150 files; real race-day sets (500+) favor ANE, so
+darwin now defaults to the single-partition ANE graph
+(CULL_P4_NATIVE=0 forces CPU EP). P4 per-frame in engine: 1.3 ms.
+
+Gate cost: IMG_20260314_160318_240.jpg orientation argmax flips rear ->
+rear_angle under ANE (logit diff <= 0.016, knife-edge), disabling the
+low-confidence rear veto (rating -1 -> 3). Re-locked after two stable runs.
+All other 63 gate files unchanged. Gate protocol (60-file scale) remains
+green: JPG 18.6 / HEIF 6.9 / ARW 5.5 / NEF 7.1 img/s; 600-JPG wall 42.6.
