@@ -118,6 +118,11 @@ class CullingEngine:
         if progress_callback:
             progress_callback("Loading models...", 0.8)
             
+        # COCO model is NOT a pure fallback: in the HEIF/RAW domain the
+        # camera-preview-resolution frames often carry targets too small for
+        # the F1 model (e.g. DSC00827 has zero f1 detections, top conf 0.03),
+        # and detections then come from the COCO person/car classes. Keep it
+        # loaded unconditionally (it gates HEIF/RAW precision baselines).
         self.coco_model = load_coco_model()
         if self.config.rf_api_key:
             self.cloud_f1 = CloudF1Detector(self.config.rf_api_key)
@@ -159,9 +164,16 @@ class CullingEngine:
 
     def run(self, progress_callback: Callable[[str, float], None] | None = None):
         """Execute the culling process."""
-        self.scan(progress_callback)
-        self.load_models(progress_callback)
-        
+        # scan() (walk + EXIF + grouping) and load_models() (CoreML session
+        # init) are data-independent; run concurrently to hide the ~1.1s model
+        # load behind the EXIF/directory scan.
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        with _TPE(max_workers=2) as _setup_pool:
+            _f_scan = _setup_pool.submit(self.scan, progress_callback)
+            _f_models = _setup_pool.submit(self.load_models, progress_callback)
+            _f_scan.result()
+            _f_models.result()
+
         if progress_callback:
             progress_callback("Analyzing images...", 0.9)
 

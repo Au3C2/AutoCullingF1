@@ -561,3 +561,18 @@ rear_angle under ANE (logit diff <= 0.016, knife-edge), disabling the
 low-confidence rear veto (rating -1 -> 3). Re-locked after two stable runs.
 All other 63 gate files unchanged. Gate protocol (60-file scale) remains
 green: JPG 18.6 / HEIF 6.9 / ARW 5.5 / NEF 7.1 img/s; 600-JPG wall 42.6.
+
+### Parallel setup: scan || load_models (2026-08-25, KEPT) + COCO lesson
+
+scan() (directory walk + EXIF + burst grouping) and load_models() (CoreML
+session init, ~1.1s) have no data dependency. Running them on two threads
+hides the model-load tax behind the scan — gate protocol JPG 18.3 -> 19.2
+img/s, 300-JPG 43.1 -> 49.3 img/s. All gates green.
+
+COCO model lesson: it is NOT a pure fallback. In the HEIF/RAW domain the
+camera-preview-resolution frames often contain targets too small for the F1
+model (DSC00827.heif: f1 top anchor conf 0.03, zero detections) — the gates
+then score detections from the COCO person/car classes (label coco_person,
+weight 0.5). An attempt to skip loading COCO when f1 exists broke 3/7 gates
+(raw drift to 'no_detection'); reverted with this note. Keep load_coco_model
+unconditional.
