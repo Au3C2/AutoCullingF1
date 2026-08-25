@@ -74,7 +74,7 @@ def bench_jpg(files: list[Path], workers: int) -> float:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def bench_copies(files: list[Path], workers: int, extra_flags: list[str] | None = None) -> float:
+def bench_copies(files: list[Path], workers: int) -> float:
     """Direct-dir bench for RAW/HEIF sets (copy subset, no replication)."""
     tmp = Path(tempfile.mkdtemp(prefix="bench_raw_"))
     try:
@@ -82,14 +82,9 @@ def bench_copies(files: list[Path], workers: int, extra_flags: list[str] | None 
             shutil.copy(p, tmp / p.name)
         n = len(list(tmp.iterdir()))
         t0 = time.perf_counter()
-        cmd = [
-            SYS, str(ROOT / "cull_photos.py"), "--input-dir", str(tmp),
-            "--workers", str(workers), "--force", "--dry-run"
-        ]
-        if extra_flags:
-            cmd.extend(extra_flags)
         proc = subprocess.run(
-            cmd,
+            [SYS, str(ROOT / "cull_photos.py"), "--input-dir", str(tmp),
+             "--workers", str(workers), "--force", "--dry-run"],
             capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT)},
             timeout=600,
         )
@@ -106,11 +101,7 @@ def main() -> int:
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--enable-apple-hwdecoder", action="store_true",
-                        help="pass --enable-apple-hwdecoder to cull_photos.py")
     args = parser.parse_args()
-
-    extra = ["--enable-apple-hwdecoder"] if args.enable_apple_hwdecoder else None
 
     failures = []
     for subdir, glob, count, workers, threshold in DATASETS:
@@ -121,7 +112,7 @@ def main() -> int:
         if subdir == "tests/test_img":
             ips = bench_jpg(files, workers)
         else:
-            ips = bench_copies(files, workers, extra_flags=extra)
+            ips = bench_copies(files, workers)
         flag = "OK " if ips >= threshold else "FAIL"
         print(f"[{flag}] {subdir}: {ips:.2f} img/s (min {threshold})")
         if ips < threshold:

@@ -195,11 +195,11 @@ macOS-specific optimizations (all zero-drift vs the macOS gate lock):
 - **EXIF scan sharded across 4 exiftool processes** (cull/exif_reader.py,
   argv file lists, `-@ -` kept for > 400 files): 8.1 vs 18.5 ms/file on M4;
   field-identical output verified; feeds burst grouping only.
-- **In-process VideoToolbox HEIF hardware decoding** via `--enable-apple-hwdecoder`
-  (cull/loader.py): Decodes in 12.4 ms vs 21.8 ms soft (1.76x faster). Fixed color
-  metadata alignment (propagating JPEG full range AVCOL_RANGE_JPEG) ensures 100%
-  bit-identical RGB output (0 drift, 0 flips across all 24 HEIFs). Optional flag,
-  defaults to OFF.
+- **In-process VideoToolbox HEIF hardware decoding** (cull/loader.py):
+  Decodes in 12.4 ms vs 21.8 ms soft (1.76x faster). Color metadata alignment
+  (propagating JPEG full range AVCOL_RANGE_JPEG) ensures 100% bit-identical
+  RGB output (0 drift, 0 flips across all 24 HEIFs). Active by default on macOS
+  with automatic fallback to software decoding.
 - `--consumer-threads` 2/4 is a LOSS end-to-end on M4 (13.6 -> 11.4 -> 9.0
   img/s interleaved A/B); default 1 stays (differs from nothing on Windows).
 - **YOLO CoreML ANE/compute-units REJECTED** (2026-08-24): option keys are

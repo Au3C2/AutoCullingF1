@@ -461,7 +461,7 @@ in-process via pyav software, supply already outpaces the consumer
 (decode_wait 6.5 ms), and every hardware alternative either cannot see the
 preview stream or pays a transfer cost that erases the win.
 
-### In-process VideoToolbox HW Decode via PyAV (`--enable-apple-hwdecoder`, 2026-08-25)
+### In-process VideoToolbox HW Decode via PyAV (Default on macOS, 2026-08-25)
 
 **Color metadata mismatch root-caused and SOLVED**:
 Previous tests with VideoToolbox hardware decoding showed non-identical
@@ -477,6 +477,5 @@ pixels (max diff 20) and rating flips on HEIFs. Root-cause diagnosis revealed:
 
 **Performance characteristics**:
 - Single-frame HEIF decode: **12.4 ms (VT HW)** vs **21.8 ms (Soft)** (提速 1.76x).
-- End-to-end throughput is decode-supply saturated at `workers=4` (`decode_wait` ~6.5 ms),
-  so E2E fps is nearly identical.
-- Feature is exposed as `--enable-apple-hwdecoder` (default OFF).
+- Enabled by default on macOS (`cull/loader.py`) with automatic fallback to software
+  decoding. Zero CLI flags needed.

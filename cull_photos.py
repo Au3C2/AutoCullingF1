@@ -108,7 +108,6 @@ def run(args: argparse.Namespace) -> int:
         rename=args.rename,
         workers=args.workers,
         consumer_threads=args.consumer_threads,
-        enable_apple_hwdecoder=args.enable_apple_hwdecoder,
         dump_scores=Path(args.dump_scores) if args.dump_scores else None,
         label_check=args.label_check,
         label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None
@@ -191,9 +190,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="scoring threads; each owns its ONNX sessions (>=2 "
                              "processes different burst groups concurrently; "
                              "A/B'd neutral-to-slower on the 8-core dev box)")
-    parser.add_argument("--enable-apple-hwdecoder", action="store_true",
-                        help="enable Apple VideoToolbox in-process hardware decoding for HEIF on macOS "
-                             "(faster single-frame decode with color-metadata aligned zero-drift RGB output)")
     parser.add_argument("-v", "--verbose", action="store_true")
 
     return parser.parse_args(argv)
