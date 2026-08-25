@@ -576,3 +576,23 @@ then score detections from the COCO person/car classes (label coco_person,
 weight 0.5). An attempt to skip loading COCO when f1 exists broke 3/7 gates
 (raw drift to 'no_detection'); reverted with this note. Keep load_coco_model
 unconditional.
+
+### Static-graph COCO model (2026-08-26, KEPT)
+
+The COCO fallback detector (models/yolov8n.onnx, dynamic export) got the
+same treatment as the F1 model: freeze batch/height/width symbols, onnxsim
+constant-fold -> models/yolov8n_static.onnx, loaded automatically by the
+existing LiteYOLO darwin branch (RequireStaticInputShapes + ANE).
+
+| Metric | Dynamic | Static ANE |
+|---|---|---|
+| COCO session.run | 34.25 ms | **7.14 ms** (4.8x) |
+| CoreML qualification | 237/331, 8 partitions | 229/233, 3 partitions |
+| Detection parity (HEIF) | baseline | same counts/class ids, coord+conf drift <=1.13 px |
+
+Impact on gates: 0 rating flips across all 64 HEIF/ARW/NEF files; 6 raw
+entries re-locked (max drift 0.043) — same magnitude as the F1 staticization.
+The COCO path matters mainly in the HEIF/RAW domain where F1 yields zero
+detections (e.g. DSC00827: f1 top conf 0.03) and scoring relies on COCO
+person/car boxes; its 34->7 ms speedup does not show on the JPG pipeline
+where F1 always detects.
