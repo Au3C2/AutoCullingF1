@@ -390,3 +390,20 @@ hand-rolled coremltools conversion: the ORT CoreML EP already executes on
 the identical CoreML runtime stack, so bypassing ORT adds an integration
 (detector backend branch, image-buffer marshalling) for zero speed. The
 native route is closed with data, not assumption.
+
+### P4 static-graph question closed (2026-08-25)
+
+P4 (own MobileNetV3 export) staticizes trivially — freezing the batch axis
+plus onnx-simplifier reaches ZERO dynamic dims (the graph has no
+shape-computation subgraphs). But static form buys it nothing, measured:
+
+| Variant | Latency | Output vs prod |
+|---|---|---|
+| dynamic ONNX, CPU EP (shipped) | 5.05 ms | — |
+| static ONNX, CPU EP | 5.06 ms | bit-identical |
+| static ONNX, CoreML ANE-pinned | **11.76 ms** | logits ±0.016 |
+
+CoreML qualification stays fragmented regardless of format or shape
+(20/77 nodes NN, 20/79 MLProgram): MobileNetV3's SE/hard-swish composition
+is an op-support problem, not a shape problem. The shipped dynamic ONNX on
+CPU EP remains optimal for P4.
