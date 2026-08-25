@@ -513,3 +513,29 @@ prefixed JPEG blob (tag 0x0201/0x0202 pair).
 
 Falls back to exiftool persistent session when the TIFF walk fails
 (non-TIFF RAWs, unusual layouts). End-to-end JPG now reaches 20.05 img/s.
+
+### Engine decode pool: ProcessPool -> Bounded ThreadPool (2026-08-25, KEPT)
+
+Root-caused why E2E plateaued: the engine submitted EVERY frame of the whole
+dataset to a ProcessPoolExecutor up front. At 600 JPGs this means up to
+~2 GB of decoded RGB arrays queued in IPC pipes at once — memory bandwidth
+collapse, pipe blocking, and pickle serialization overhead. Measurements
+(600 pure JPGs, interleaved):
+
+| Mode | img/s | ms/frame |
+|---|---|---|
+| Current engine (ProcessPool, full pre-submit) | 5.4 | 185 |
+| True in-thread serial (0 IPC) | 16.7 | 60 |
+| ThreadPool bounded per-burst-group (LANDED) | **64.2** (in-process test) / **40.2** (CLI) | 15.6 / 24.9 |
+
+The landed design: `ThreadPoolExecutor` for decode (load_image_rgb passes the
+GIL to C: ImageIO, VideoToolbox, OpenCV, libjpeg, numpy), submitting only ONE
+burst group at a time and consuming in group order — bounded in-flight memory,
+zero pickle IPC. `n_consumers > 1` path kept intact.
+
+CLI benchmarks after the change:
+- 60 JPG: 21.2 img/s (was 17.6)
+- 300 JPG: 43.1 img/s (was 39.6)
+- 600 JPG: 40.2 img/s (was 37.9; proflie wall 40.6 img/s)
+- Gate protocol: JPG 21.3 / HEIF 8.3 / ARW 6.5 / NEF 8.7 img/s
+All precision gates 7/7 green.
