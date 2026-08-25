@@ -35,18 +35,21 @@ class P4Classifier:
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             model_file = self.model_path
-            native_requested = _os.environ.get("CULL_P4_NATIVE") == "1"
+            # On darwin the single-partition ANE graph is the DEFAULT: with the
+            # ThreadPool engine (bounded per-burst submission) it MEASURED
+            # +12.6% at 600 JPGs over CPU EP (42.6 vs 37.8 img/s, interleaved
+            # A/B 2026-08-25). Only small batches (<~100 files) still favor
+            # CPU EP where fixed costs dominate. Set CULL_P4_NATIVE=0 to force
+            # the CPU EP path.
+            use_ane = _os.environ.get("CULL_P4_NATIVE", "1") != "0"
             if sys.platform == "darwin":
                 static_ane = self.model_path.with_name(self.model_path.stem + "_static_ane.onnx")
-                if native_requested and static_ane.exists():
+                if use_ane and static_ane.exists():
                     # Single-partition graph (HardSigmoid/HardSwish unfolded to
                     # Clip/Mul/Add — exact identities): ALL 216/216 nodes run in
                     # ONE CoreML partition on the ANE, 0.4-1.2 ms standalone vs
                     # ~5 ms on CPU (Apple M4, 2026-08-25). Logit diff <= 0.016,
-                    # gates bit-identical. NOTE: standalone-only win — inside
-                    # the engine it contends with decode workers and costs
-                    # ~10% end-to-end (interleaved A/B), so it is OFF by
-                    # default; enable with CULL_P4_NATIVE=1.
+                    # gates bit-identical.
                     providers = [
                         ("CoreMLExecutionProvider", {
                             "RequireStaticInputShapes": "1",

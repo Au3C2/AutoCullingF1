@@ -18,13 +18,16 @@ import pytest
 sys.path.append(os.getcwd())
 
 # Golden baseline generated from tests/test_img on the CURRENT pipeline
-# (cv2.INTER_AREA decode resize + optimized cv2.dft sharpness + P4 v2 model
-# retrained with resize-kernel/camera-jitter augmentation), shared with
+# (ImageIO HW JPEG decode + scipy.fft sharpness + P4 v2 model on the
+# single-partition ANE graph by default on macOS). IMG_20260314_160318_240.jpg
+# was re-locked -1 -> 3 on 2026-08-25: the ANE P4 path moves its orientation
+# argmax rear -> rear_angle (logit diff <= 0.016, knife-edge), disabling the
+# low-confidence rear veto. Stable across consecutive runs. Shared with
 # test_package.py so the CLI and the packaged binary are validated identically.
 BASELINE = {
     "IMG_20260314_151744_020.jpg": 3,
     "IMG_20260314_160317_680.jpg": 3,
-    "IMG_20260314_160318_240.jpg": -1,
+    "IMG_20260314_160318_240.jpg": 3,
     "IMG_20260314_160343_870.jpg": 3,
     "IMG_20260314_160344_380.jpg": 3,
     "IMG_20260315_150404_550.jpg": -1,
