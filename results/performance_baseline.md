@@ -407,3 +407,36 @@ CoreML qualification stays fragmented regardless of format or shape
 (20/77 nodes NN, 20/79 MLProgram): MobileNetV3's SE/hard-swish composition
 is an op-support problem, not a shape problem. The shipped dynamic ONNX on
 CPU EP remains optimal for P4.
+
+### P4 fragmentation root-caused and SOLVED: single whole-model achieved (2026-08-25)
+
+**Root cause of the 20/77 CoreML qualification**: the CoreML EP supports
+NEITHER HardSigmoid NOR HardSwish. P4 contains 8 HardSigmoid + 20 HardSwish
+nodes; each unsupported node severs the partition, yielding 20 tiny
+partitions of mostly-Conv islands (20/77 nodes). Earlier single-op probes
+misled: a lone HardSwish model reports "1/2 supported" because ORT's graph
+optimizer adds an extra node — the HardSwish itself was never accepted.
+Verified by topological prefix bisection over the real graph.
+
+**Fix — exact algebraic unfolding** (mathematical identities, opset-17 ops
+the EP does support):
+
+    HardSigmoid(x) = Clip(Mul(x, alpha) + beta, 0, 1)        alpha=1/6 beta=0.5
+    HardSwish(x)   = Mul(x, Clip(Mul(x, 1/6) + 0.5, 0, 1))
+
+Applied to the batch-frozen static graph -> `models/p4_car_model_static_ane.onnx`:
+**216/216 nodes qualify in ONE partition** (RequireStaticInputShapes +
+CPUAndNeuralEngine). CPU parity max |logit diff| 4e-6; gate files
+bit-identical (0 flips, max_drift 0.0000).
+
+Performance is context-dependent:
+| Context | dynamic CPU EP | single-model ANE |
+|---|---|---|
+| standalone session.run | 5.09 ms | **0.40-1.16 ms (4-12x)** |
+| full scoring chain serial | 52 fps | **71.7 fps** |
+| END-TO-END engine (workers=4) | **18.8 img/s** | 16.8 img/s (-10%) |
+
+Inside the engine the ANE submit-wait schedule contends with the decode
+process pool — same pattern as the YOLO-ANE rejection. Shipped default
+remains CPU EP; the single-model artifact ships in models/ and can be
+enabled with CULL_P4_NATIVE=1 (verified: both paths load, gates green).
