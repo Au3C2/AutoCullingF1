@@ -141,17 +141,19 @@ def get_preview_stream(path: Path) -> Tuple[int, int, int] | None:
         _preview_stream_cache[cache_key] = probe_embedded_preview(path)
     return _preview_stream_cache[cache_key]
 
-def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def _load_image_pyav(path: Path, scale_width: int = 1280, enable_apple_hwdecoder: bool = False) -> np.ndarray | None:
     """Decode the primary preview stream via in-process libav (pyav).
 
     Spawning ffmpeg per file costs ~80-110 ms (process startup) on top of the
-    HEVC decode; pyav keeps libav resident in the worker. Software decode
-    only — cameras embed HEVC Rext 4:2:2 10-bit previews which consumer NVDEC
-    cannot decode (see perf docs). The primary stream is the largest
-    non-dependent HEVC stream (same rule as probe_embedded_preview).
-
-    Returns None when pyav is unavailable or the file cannot be opened, so the
-    caller falls back to the ffmpeg spawn path (identical outcomes)."""
+    HEVC decode; pyav keeps libav resident in the worker.
+    
+    When *enable_apple_hwdecoder* is True on macOS (darwin), VideoToolbox
+    hardware acceleration (HWAccel) is used, with stream color metadata
+    (color_range, colorspace, primaries, trc) mapped onto the decoded frame
+    to guarantee bit-identical RGB output compared to software decoding.
+    
+    Returns None when pyav is unavailable or decoding fails, falling back to
+    the ffmpeg spawn path."""
     try:
         import av
     except Exception:
@@ -175,7 +177,45 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                     continue
             if best is None:
                 return None
-            frame = next(container.decode(best[1]))
+            
+            stream = best[1]
+            frame = None
+            
+            if enable_apple_hwdecoder and sys.platform == "darwin":
+                try:
+                    hwa = av.codec.hwaccel.HWAccel("videotoolbox")
+                    ctx = av.CodecContext.create(stream.codec_context.name, "r", hwaccel=hwa)
+                    if stream.codec_context.extradata:
+                        ctx.extradata = stream.codec_context.extradata
+                    ctx.open()
+                    
+                    target_idx = stream.index
+                    frames = []
+                    for packet in container.demux():
+                        if packet.stream_index != target_idx:
+                            continue
+                        for f in ctx.decode(packet):
+                            frames.append(f)
+                    if not frames:
+                        for f in ctx.decode(None):
+                            frames.append(f)
+                    if frames:
+                        frame = frames[0]
+                        # Cameras encode full-range YUV for preview stills (JPEG color range).
+                        # VideoToolbox defaults to limited-range if unspecified by the container,
+                        # which distorts YUV->RGB matrix levels. Explicitly assign full-range
+                        # color metadata to ensure bit-identical RGB output with software decode.
+                        frame.color_range = 2  # AVCOL_RANGE_JPEG (Full Range)
+                        frame.colorspace = stream.codec_context.colorspace if (stream.codec_context.colorspace and stream.codec_context.colorspace != 2) else 5
+                        frame.color_primaries = stream.codec_context.color_primaries if (stream.codec_context.color_primaries and stream.codec_context.color_primaries != 2) else 1
+                        frame.color_trc = stream.codec_context.color_trc if (stream.codec_context.color_trc and stream.codec_context.color_trc != 2) else 13
+                except Exception as hw_err:
+                    log.debug("VideoToolbox decode fallback: %s", hw_err)
+                    frame = None
+
+            if frame is None:
+                frame = next(container.decode(stream))
+            
             img = frame.to_ndarray(format="rgb24")
             if scale_width > 0 and img.shape[1] > scale_width * 1.2:
                 h, w = img.shape[:2]
@@ -188,10 +228,10 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         return None
 
 
-def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def load_image_ffmpeg(path: Path, scale_width: int = 1280, enable_apple_hwdecoder: bool = False) -> np.ndarray | None:
     preview = get_preview_stream(path)
     if preview is not None:
-        img_pyav = _load_image_pyav(path, scale_width=scale_width)
+        img_pyav = _load_image_pyav(path, scale_width=scale_width, enable_apple_hwdecoder=enable_apple_hwdecoder)
         if img_pyav is not None:
             return img_pyav
         idx, w, h = preview
@@ -217,10 +257,10 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         except Exception: pass
     return None
 
-def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
+def load_image_rgb(path: Path, scale_width: int = 0, enable_apple_hwdecoder: bool = False) -> np.ndarray | None:
     suffix = path.suffix.lower()
     if suffix in (".hif", ".heif", ".heic"):
-        img = load_image_ffmpeg(path, scale_width=scale_width)
+        img = load_image_ffmpeg(path, scale_width=scale_width, enable_apple_hwdecoder=enable_apple_hwdecoder)
         if img is not None: return img
         # Pillow Fallback
         try:

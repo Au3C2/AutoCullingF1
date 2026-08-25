@@ -47,6 +47,7 @@ class EngineConfig:
     rename: bool = False
     workers: int = 4
     consumer_threads: int = 1
+    enable_apple_hwdecoder: bool = False
     dump_scores: Path | None = None
     label_check: bool = False
     label_check_dir: Path | None = None
@@ -177,7 +178,7 @@ class CullingEngine:
         group_results: list[list[ImageScore]] = []
         with ProcessPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
             group_futures = [
-                [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                [decode_pool.submit(load_image_rgb, fp, self.config.scale_width, self.config.enable_apple_hwdecoder)
                  for fp in group.frames]
                 for group in self.groups
             ]
@@ -289,7 +290,8 @@ class CullingEngine:
 
             # Load image (from the process pool when available, else inline)
             img_rgb = decode_loader(frame_idx) if decode_loader is not None else \
-                load_image_rgb(frame_path, scale_width=self.config.scale_width)
+                load_image_rgb(frame_path, scale_width=self.config.scale_width,
+                               enable_apple_hwdecoder=self.config.enable_apple_hwdecoder)
             if img_rgb is None:
                 continue
 

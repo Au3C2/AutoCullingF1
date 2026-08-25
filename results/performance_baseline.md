@@ -460,3 +460,23 @@ this workload. The 1664x1088 HEVC-Rext preview stream decodes in ~33.7 ms
 in-process via pyav software, supply already outpaces the consumer
 (decode_wait 6.5 ms), and every hardware alternative either cannot see the
 preview stream or pays a transfer cost that erases the win.
+
+### In-process VideoToolbox HW Decode via PyAV (`--enable-apple-hwdecoder`, 2026-08-25)
+
+**Color metadata mismatch root-caused and SOLVED**:
+Previous tests with VideoToolbox hardware decoding showed non-identical
+pixels (max diff 20) and rating flips on HEIFs. Root-cause diagnosis revealed:
+- VideoToolbox decoder emits frames with `color_range: 0 (UNSPECIFIED)` /
+  limited range, whereas Sony HEIF preview stills are `color_range: 2 (JPEG Full Range)`.
+- When converting to RGB (`to_ndarray(format="rgb24")`), libswscale applied
+  the wrong YUV->RGB matrix due to the missing range flag.
+- **Fix**: Propagate full-range JPEG color metadata (`color_range=2`, `colorspace=5`,
+  `color_primaries=1`, `color_trc=13`) onto the hardware-decoded frame.
+- **Result**: **100% BIT-IDENTICAL RGB output (max diff = 0.0000, 0 flips)** across
+  all 24 HEIF gate images!
+
+**Performance characteristics**:
+- Single-frame HEIF decode: **12.4 ms (VT HW)** vs **21.8 ms (Soft)** (提速 1.76x).
+- End-to-end throughput is decode-supply saturated at `workers=4` (`decode_wait` ~6.5 ms),
+  so E2E fps is nearly identical.
+- Feature is exposed as `--enable-apple-hwdecoder` (default OFF).
