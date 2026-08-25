@@ -167,21 +167,16 @@ class CullingEngine:
 
         t_start = time.perf_counter()
 
-        # Image decoding (the CPU/GIL bottleneck) runs in a ProcessPool so it
-        # parallelizes across cores. Scoring runs on consumer thread(s) in
-        # burst-group order: ONE consumer thread with ONE CUDA session is the
-        # default (deterministic); consumer_threads > 1 processes different
-        # groups on threads that each own their model sessions (per-thread
-        # sessions measured bit-identical, see bench_consumer_scaling.py).
+        # Image decoding parallelizes across cores via a ThreadPoolExecutor.
+        # load_image_rgb releases the GIL in its C layers (ImageIO, VideoToolbox,
+        # OpenCV/libjpeg, numpy), so thread-based parallelism matches a process
+        # pool for decode throughput while eliminating Pickle/IPC transfer of the
+        # decoded RGB arrays (~3.2 MB per frame). Frames are submitted per burst
+        # group and consumed in group order, bounding in-flight buffers to one
+        # group instead of the whole dataset.
         n_consumers = max(1, int(self.config.consumer_threads))
         group_results: list[list[ImageScore]] = []
-        with ProcessPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
-            group_futures = [
-                [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
-                 for fp in group.frames]
-                for group in self.groups
-            ]
-
+        with ThreadPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
             if n_consumers > 1 and self.cloud_f1 is None:
                 def _score_job(job):
                     idx, group, futs = job
@@ -200,14 +195,21 @@ class CullingEngine:
                         s.burst_group = idx
                     return res
 
-                jobs = [(idx, group, futs)
-                        for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1)]
+                jobs = [
+                    (idx, group, [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                                  for fp in group.frames])
+                    for idx, (group) in enumerate(self.groups, start=1)
+                ]
                 with ThreadPoolExecutor(max_workers=n_consumers) as score_pool:
                     # executor.map preserves group order regardless of completion order.
                     group_results = list(score_pool.map(_score_job, jobs))
             else:
-                for idx, (group, futs) in enumerate(zip(self.groups, group_futures), start=1):
+                for idx, group in enumerate(self.groups, start=1):
                     log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
+
+                    # Submit only this group's decode tasks (bounded in-flight memory).
+                    futs = [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                            for fp in group.frames]
 
                     def _decode_loader(i: int) -> np.ndarray | None:
                         return futs[i].result()
