@@ -496,3 +496,20 @@ Result: Integrated C++ `cv2.imread(..., cv2.IMREAD_REDUCED_COLOR_2)` for standal
 and `cv2.imdecode` for RAW embedded previews, eliminating Python `io.BytesIO` / PIL object
 overhead while guaranteeing 100% bit-identical precision with the locked baseline.
 EOF
+
+### TIFF Header Direct-Read RAW extraction (Default on macOS, 2026-08-25)
+
+Replaced exiftool persistent session for ARW/NEF preview extraction with a
+pure-Python TIFF IFD chain walker (`find_embedded_jpeg_tiff` +
+`_extract_raw_tiff_direct` in cull/loader.py). Walks IFD0 -> NextIFD chain
+plus SubIFDs (tag 0x014A, multi-value) to locate the largest `\xff\xd8`
+prefixed JPEG blob (tag 0x0201/0x0202 pair).
+
+| Metric | ExifTool persistent session | TIFF direct-read | Speedup |
+|---|---|---|---|
+| Sony ARW extraction | 12.0 ms | **0.012 ms** | ~1000x |
+| Nikon NEF extraction | 7.4 ms | **0.015 ms** | ~500x |
+| Byte identity (20+20 files) | — | **ALL MATCH** (bit-identical) | — |
+
+Falls back to exiftool persistent session when the TIFF walk fails
+(non-TIFF RAWs, unusual layouts). End-to-end JPG now reaches 20.05 img/s.
