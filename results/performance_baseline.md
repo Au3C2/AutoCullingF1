@@ -440,3 +440,23 @@ Inside the engine the ANE submit-wait schedule contends with the decode
 process pool — same pattern as the YOLO-ANE rejection. Shipped default
 remains CPU EP; the single-model artifact ships in models/ and can be
 enabled with CULL_P4_NATIVE=1 (verified: both paths load, gates green).
+
+### Persistent hardware-decode paths on macOS — all candidates tested (2026-08-25)
+
+Searched and empirically tested every viable in-process (persistent) HW
+decode route for the HEIF preview stream:
+
+| Route | Verdict | Evidence |
+|---|---|---|
+| PyAV hwaccel (PR #1685 API) | unavailable in wheel | `hevc_videotoolbox` decoder lookup fails: the bundled libavcodec compiles only the VT **encoders**; no VT decoders. `CodecContext.hwaccel` attr is read-only. |
+| ffmpeg CLI `-hwaccel videotoolbox` | previously rejected | spawn mode: 100 vs 56 ms soft; pixel transfer is structural, not spawn-limited |
+| ImageIO (CGImageSource, system HEIF) | rejected | sees ONLY the primary image (7008x4672 tile grid): 240 ms/decode (7x the 1664x1088 preview stream), different aspect ratio -> different-source pixels from the gate-locked baseline |
+| AVFoundation AVAssetReader | rejected | Sony HEIF presents as an image asset with **0 video tracks** — cannot select the 1664x1088 preview track |
+| VideoToolbox low-level (VTDecompressionSession) | not pursued | requires own HEIF container demux + hvc1->AnnexB NALU rewrite; hw->sw transfer cost remains |
+| Rebuild PyAV against brew ffmpeg 8.0 (full VT decode) | not pursued | theoretical ceiling ~= soft decode (VT Rext decode ~10-20ms + transfer + container ~= 25-35 ms vs 33.7 ms current); would change pixels -> gate re-lock; end-to-end decode_wait is already only 6.5 ms so E2E gain ~= 0 |
+
+Conclusion: on this M4 the persistent-hardware-decode space is empty for
+this workload. The 1664x1088 HEVC-Rext preview stream decodes in ~33.7 ms
+in-process via pyav software, supply already outpaces the consumer
+(decode_wait 6.5 ms), and every hardware alternative either cannot see the
+preview stream or pays a transfer cost that erases the win.
