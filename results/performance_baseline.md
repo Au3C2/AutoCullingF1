@@ -479,3 +479,20 @@ pixels (max diff 20) and rating flips on HEIFs. Root-cause diagnosis revealed:
 - Single-frame HEIF decode: **12.4 ms (VT HW)** vs **21.8 ms (Soft)** (提速 1.76x).
 - Enabled by default on macOS (`cull/loader.py`) with automatic fallback to software
   decoding. Zero CLI flags needed.
+
+### JPEG / RAW (ARW / NEF) Hardware & SIMD Decoding Investigation (2026-08-25)
+
+Tested hardware decoding options for the JPEG stream in standalone JPGs and
+RAW-embedded previews (ARW / NEF):
+
+| Path / Hardware Engine | Latency | Pixel & Score Precision | Verdict |
+|---|---|---|---|
+| **Apple ImageIO HW Thumbnail** (`CGImageSourceCreateThumbnailAtIndex`) | 41.5 ms (vs 55 ms) | ❌ **4/6 JPGs FLIPPED rating**. Apple HW Bicubic downsampling diverges from standard INTER_AREA. | Rejected |
+| **Apple ImageIO Full HW Decode** + `cv2.INTER_AREA` | 212 ms | ❌ **4/6 JPGs FLIPPED rating**. IDCT quantization differences. | Rejected |
+| **TurboJPEG (PyTurboJPEG)** | 73.5 ms | ❌ Slower via ctypes bridge; color matrix differs. | Rejected |
+| **C++ OpenCV libjpeg-turbo (ARM NEON SIMD)** (`cv2.IMREAD_REDUCED_COLOR_2`) | **54.0 ms (JPG) / 55.9 ms (RAW)** | 🟢 **100% BIT-IDENTICAL (diff=0) across all 6 JPG + 20 ARW + 20 NEF files**. 0 flips. | **KEPT & Integrated** |
+
+Result: Integrated C++ `cv2.imread(..., cv2.IMREAD_REDUCED_COLOR_2)` for standalone JPGs
+and `cv2.imdecode` for RAW embedded previews, eliminating Python `io.BytesIO` / PIL object
+overhead while guaranteeing 100% bit-identical precision with the locked baseline.
+EOF
