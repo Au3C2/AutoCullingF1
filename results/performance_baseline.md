@@ -670,3 +670,20 @@ items are small: detect 5.7 ms (session.run ~2.8 dominates), P4 1.3,
 score_image 1.3. E2E on bursty JPG sets sits at decode-supply/consumer
 max ~= 50-80 img/s steady-state; the gate-protocol small-N numbers
 (JPG ~18) remain dominated by the fixed ~2.2 s model-load tax.
+
+### Consumer-side round 3: shared NCHW tensor in the cascade (2026-08-26, KEPT)
+
+Detect internals on Apple M4 (clean): session.run 3.94 / preprocess 1.30 /
+letterbox 0.36 / postprocess 0.23 ms. prepare_numpy() now builds the
+letterbox + NCHW float tensor once per frame (in-place /255 — elementwise
+identical IEEE ops) and the COCO fallback reuses the SAME tensor when imgsz
+matches, instead of re-letterboxing + re-normalizing.
+
+Bit-equality: 0 box mismatches, conf diff 0.00e+00 across JPG+HEIF frames
+vs the old two-pass path. Interleaved HEIF A/B: detect stage 10.9 -> 9.35
+ms/call (-1.4). Clean chain unchanged at ~9.0 ms/frame on JPGs (F1 hits;
+in-place divide gain within machine noise).
+
+Remaining detect floor is session.run (~3.9 ms ANE dispatch + run) — model
+surgery territory, out of scope. p4_roi is ~1.3 ms and almost entirely its
+own session.run.
