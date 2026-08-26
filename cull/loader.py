@@ -12,6 +12,7 @@ import io
 import struct
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Tuple
 
@@ -140,17 +141,27 @@ _preview_stream_cache: dict[Path, Tuple[int, int, int] | None] = {}
 # Apple ImageIO hardware JPEG decoder (lazy import; None when unavailable).
 _imageio_module = None
 _imageio_checked = False
+_imageio_lock = threading.Lock()
 
 def _get_quartz():
-    """Lazy-load the Quartz (ImageIO) bindings once per process."""
+    """Lazy-load the Quartz (ImageIO) bindings once per process.
+
+    Thread-safe: concurrent first-time callers block on the lock until the
+    import finishes. Without this, threads that arrive during `import Quartz`
+    saw checked=True / module=None and silently fell back to the cv2 decode
+    path — whose pixels differ enough to flip P4 decisions on knife-edge
+    frames (rating gates failed nondeterministically on thread-startup
+    timing)."""
     global _imageio_module, _imageio_checked
     if not _imageio_checked:
-        _imageio_checked = True
-        try:
-            import Quartz as _q
-            _imageio_module = _q
-        except Exception:
-            _imageio_module = None
+        with _imageio_lock:
+            if not _imageio_checked:
+                try:
+                    import Quartz as _q
+                    _imageio_module = _q
+                except Exception:
+                    _imageio_module = None
+                _imageio_checked = True
     return _imageio_module
 
 def decode_jpeg_imageio(path: Path, scale_width: int = 1280) -> np.ndarray | None:
