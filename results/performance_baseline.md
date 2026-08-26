@@ -687,3 +687,63 @@ in-place divide gain within machine noise).
 Remaining detect floor is session.run (~3.9 ms ANE dispatch + run) — model
 surgery territory, out of scope. p4_roi is ~1.3 ms and almost entirely its
 own session.run.
+
+### RAW preview JPEG hard-decode on macOS — investigated and abandoned (2026-08-27, NOT KEPT)
+
+**Preview format**: both ARW and NEF previews are 8-bit, SOF0 baseline,
+4:2:2 subsampling (Y 2x1, Cb/Cr 1x1) — verified on all 20+20 gate files
+(all exhibit identical markers/DQT/Huffman tables). Marker sequence is
+SOI->DQT->DHT->SOF0->SOS with no APP/JFIF/Adobe/ICC segments. Crucially the
+absence is by design: old-style TIFF JPEG (Compression=6) stores its decode
+parameters in EXIF tags, not JPEG markers — ARW's SubIFD carries
+`PhotometricInterpretation: YCbCr` + `YCbCrSubSampling: 4:2:2` +
+`YCbCrCoefficients: 0.299/0.587/0.114` (BT.601) + `ColorSpace: sRGB`; NEF's
+MakerNotes likewise. The bare stream is intentionally metadata-free.
+
+Every in-process persistent (no subprocess spawn) decode path was built
+and measured for speed + pixel drift vs the gate-locked
+`cv2.imdecode(REDUCED_COLOR_2)+AREA` pipeline:
+
+| Path | Decode engine | ms/img (single-thread) | vs gate pixel diff |
+|---|---|---|---|
+| A. Gate-locked (cv2 REDUCED_2 + AREA, current default) | libjpeg-turbo NEON (CPU) | **49.3** | 0 |
+| B. ImageIO memory-source -> thumbnail 1280 | ImageIO private libJPEG (OS ASIC/firmware-tuned) | 39.5 (-20%) | max 54 / mean 1.55 |
+| C. ImageIO via tempfile (existing JPG path) | same + tempfile I/O | >=B | same as B |
+| D. PIL draft 1/2 | libjpeg draft path | 57.9 | 0 |
+| E. VideoToolbox persistent session (kCMVideoCodecType_JPEG -> BGRA) | IOMobile/Tiled-J hardware on M4 (ctypes ctypes.bind to dyld cache, one session per resolution, reused across all frames) | 46.1 (-7%) | max 24 / mean 0.61 |
+| F. Core Image resident CIContext | Metal compute pipeline | 307 | — (rejected outright) |
+
+Attribution (synthetic JPEG ablation: grayscale/4:4:4/4:2:2 + full-res vs
+half-size vs shared-resize control). The full-resolution dispatch is
+already max=54 mean=1.47 vs libjpeg-turbo (R 23 / G 12 / B 27 — chroma
+channels twice the luma error, canonically the chroma-upsample + YCC->RGB
+fixed-point rounding). Thumbnail resize only adds a little. ICC/APP color
+management is NOT the cause (no profiles present to misinterpret).
+
+**Why hardware cannot substantially beat software here**:
+- The 3.3 MB (ARW) entropy stream must still be Huffman-decoded; that work
+  is serial and unchanged by hardware.
+- VideoToolbox must emit full-res BGRA (131 MB buffer copy per frame); the
+  hardware DCT->1280 downscale path is unavailable for static JPEG.
+- ImageIO's only "fast" mode (thumbnail DCT downscale) uses a private
+  libJPEG whose chroma upsample kernel and YCC rounding are undocumented
+  and not configurable; its Apple-private libJPEG.dylib is fused into the
+  dyld cache on modern macOS (not loadable for alignment).
+
+**Alignment is not feasible**: ImageIO has no exposed knobs for upsample
+kernel or rounding; its dylib is no longer a standalone file; and switching
+to it would re-introduce a permanent Windows<->macOS pixel fork (RAW gates
+would require split baselines). A handwritten decoder (Metal/NEON half or
+register-level media-engine drive) is 6-8 weeks / 3-6 months respectively
+and still converges to the same libjpeg-turbo NEON floor.
+
+Verdict: -7% to -20% speed for a platform fork and gate re-lock is not
+justified. Current pure-decode supply @4 threads (81.7 img/s JPG) already
+outpaces the consumer chain (111 fps); steady-state is 50-80 img/s on
+bursty sets. The only zero-drift lever left for RAW is range I/O (IFD head
+and preview sit within the first 6% of the file; read_bytes() reads 40-52
+MB but the JPEG slice is ~6 MB): -4~5 ms/frame ARW, 1-2 days.
+
+Artifacts: /tmp/vt_ctypes_probe.py, /tmp/vt_session_bench.py and a patched
+benchmark script (ImageIO) exist locally; pyobjc-framework-VideoToolbox
+was installed to the venv as a probe artifact and may be removed.

@@ -218,3 +218,19 @@ macOS-specific optimizations (all zero-drift vs the macOS gate lock):
 macOS final numbers (gate protocol, workers=4): JPG 17.41 / HEIF 8.79 /
 ARW 6.91 / NEF 8.05 img/s vs Windows 10.8 / 5.9 / 4.5 / 4.7. Scoring chain
 serial 37.5 fps — the 20 fps scoring-chain target is exceeded by 87%.
+
+## RAW inner-JPEG hard-decode (2026-08-27, ABANDONED)
+
+ARW/NEF inner previews are all 8-bit SOF0 baseline, 4:2:2. Every in-process
+persistent hard-decode path was measured (VideoToolbox persistent session
+via ctypes, ImageIO memory-source thumbnail, Core Image): the floor is
+VideoToolbox 46 ms or ImageIO thumbnail 39 ms — only -7% to -20% vs the
+gate-locked cv2 REDUCED_2 path (49 ms), but with max pixel drift 24-54
+(chroma-upsample kernel + YCC fixed-point rounding, isolated by synthetic
+grayscale/4:4:4/4:2:2 ablation; full-res already max=54). Alignment is
+impossible — ImageIO has no exposed upsample/rounding knobs, its private
+libJPEG.dylib is fused into the dyld cache, and switching introduces a
+permanent Windows/macOS baseline fork. Decided: abandon hard-decode,
+keep the zero-drift cv2 path. Only zero-drift lever left for ARW is
+range I/O (IFD+JPEG within first 6% of file). Details in
+results/performance_baseline.md hard-decode section.
