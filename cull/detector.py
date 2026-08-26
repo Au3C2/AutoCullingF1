@@ -207,18 +207,30 @@ class LiteYOLO:
         outputs = self._run_session(img_canvas)
         return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
 
+    def prepare_numpy(self, img: np.ndarray) -> tuple[np.ndarray, float, float, float]:
+        """Letterbox + build this model's NCHW float input tensor in one step.
+
+        The divide runs in place on the astype copy (elementwise-identical to
+        ``astype(f32) / 255.0`` — same operands, same IEEE division), saving a
+        full 9.4 MB intermediate allocation per frame."""
+        img_canvas, ratio, (dw, dh) = self.letterbox_numpy(img, new_shape=self.imgsz)
+        x = img_canvas.astype(np.float32)
+        x /= 255.0
+        x = np.ascontiguousarray(np.transpose(x, (2, 0, 1)))[np.newaxis, ...]
+        return x, ratio, dw, dh
+
     def detect_numpy(self, img: np.ndarray, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45,
-                     prep: tuple[np.ndarray, float, tuple[float, float]] | None = None) -> list[dict]:
+                     prep: tuple[np.ndarray, float, float, float] | None = None) -> list[dict]:
         """Same pipeline but letterboxing runs in cv2 directly on the numpy
         frame (GIL-free) — removes PIL resize from the consumer thread.
 
-        ``prep`` accepts a precomputed ``letterbox_numpy`` result so cascaded
-        detectors (F1 miss -> COCO fallback) letterbox the shared frame once;
-        the canvas geometry depends only on the input image and ``imgsz``."""
+        ``prep`` accepts a precomputed ``prepare_numpy`` result so cascaded
+        detectors (F1 miss -> COCO fallback) share one letterbox AND one
+        input tensor; both depend only on the frame and ``imgsz``, which is
+        equal across the cascade."""
         if self.session is None: return []
-        img_canvas, ratio, (dw, dh) = prep if prep is not None else \
-            self.letterbox_numpy(img, new_shape=self.imgsz)
-        outputs = self._run_session(img_canvas)
+        tensor, ratio, dw, dh = prep if prep is not None else self.prepare_numpy(img)
+        outputs = self.session.run(None, {self.input_name: tensor})
         return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
 
     def _postprocess(self, outputs, ratio: float, dw: float, dh: float,
@@ -258,11 +270,11 @@ def detect(img_rgb: np.ndarray, f1: LiteYOLO | None, coco: LiteYOLO | None, conf
     detections: list[Detection] = []
     prep = None
     if f1:
-        # Letterbox once up front; when F1 misses, the COCO fallback reuses
-        # the same canvas (identical geometry for equal imgsz) instead of
-        # resizing the full frame a second time.
+        # Letterbox + tensor build once up front; when F1 misses, the COCO
+        # fallback reuses the same input tensor (identical geometry for equal
+        # imgsz) instead of resizing and re-normalizing the full frame.
         if f1.session is not None:
-            prep = f1.letterbox_numpy(img_rgb, new_shape=f1.imgsz)
+            prep = f1.prepare_numpy(img_rgb)
         for b in f1.detect_numpy(img_rgb, conf_thresh=conf, prep=prep):
             detections.append(Detection(label="f1_car", weight=_F1_CLASS_WEIGHT, conf=b["conf"], x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"]))
         if detections:
