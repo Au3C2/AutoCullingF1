@@ -216,12 +216,23 @@ class CullingEngine:
                     # executor.map preserves group order regardless of completion order.
                     group_results = list(score_pool.map(_score_job, jobs))
             else:
+                # Decode prefetch: submit the NEXT group's decodes before
+                # scoring the current one so the pool never idles while the
+                # consumer scores. Without this, decoding of group i+1 waited
+                # for ALL scoring of group i (a barrier at every group
+                # boundary); a timeline profile showed the decode pool idle
+                # ~70% of wall time on bursty JPG sets. In-flight memory is
+                # bounded by one extra group (~2 groups x frames x 3.2 MB).
+                next_futs: list = []
                 for idx, group in enumerate(self.groups, start=1):
                     log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
 
-                    # Submit only this group's decode tasks (bounded in-flight memory).
-                    futs = [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
-                            for fp in group.frames]
+                    futs = next_futs or [
+                        decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                        for fp in group.frames]
+                    next_futs = [
+                        decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                        for fp in self.groups[idx].frames] if idx < len(self.groups) else []
 
                     def _decode_loader(i: int) -> np.ndarray | None:
                         return futs[i].result()
