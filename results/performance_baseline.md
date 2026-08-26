@@ -646,3 +646,27 @@ bursty sets instead of their sum. Next candidates, in expected-value order:
 (a) shave consumer detect cost (COCO letterbox reuse when f1 misses),
 (b) sharpness FFT input crop/downscale (pixel-frozen, needs identical-op proof),
 (c) setup tax amortization is already fine for real folder sizes (>1000 files).
+
+### Consumer-side round 2: shared letterbox + half-spectrum rfft2 (2026-08-26, KEPT)
+
+1. **COCO letterbox reuse** (detector.py, 8566090). detect() letterboxes
+   once and passes the canvas to both cascade stages when imgsz matches.
+   F1-miss frames save ~0.5 ms (10.11 -> 9.63 ms/detect on a 12-frame HEIF
+   set, 58% miss rate). No effect on F1-hit frames.
+
+2. **Half-spectrum sharpness** (sharpness.py, 1eec181). score_sharpness
+   already ROI-crops; the remaining cost is the FFT block, now rfft2 on the
+   half spectrum with cached conjugate-symmetry weights. Warm-mask A/B
+   8.0 -> 2.4 ms; clean serial chain 9.44 -> 8.99 ms/frame (106 -> 111 fps);
+   in-engine interleaved HEIF A/B: sharpness stage 4.85 -> 3.05 ms (-37%),
+   E2E +2.4%. Score drift vs fft2: ~1e-7 relative summation-order noise
+   (real gate frames max abs diff 6.9e-9) — same class as the accepted
+   cv2.dft -> scipy.fft2 swap. All macOS gates green twice consecutively.
+   Windows gates must be re-run before the next Windows release for the
+   same reason.
+
+Consumer serial is now ~8.99 ms/frame clean (111 fps). Remaining consumer
+items are small: detect 5.7 ms (session.run ~2.8 dominates), P4 1.3,
+score_image 1.3. E2E on bursty JPG sets sits at decode-supply/consumer
+max ~= 50-80 img/s steady-state; the gate-protocol small-N numbers
+(JPG ~18) remain dominated by the fixed ~2.2 s model-load tax.
