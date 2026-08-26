@@ -596,3 +596,53 @@ The COCO path matters mainly in the HEIF/RAW domain where F1 yields zero
 detections (e.g. DSC00827: f1 top conf 0.03) and scoring relies on COCO
 person/car boxes; its 34->7 ms speedup does not show on the JPG pipeline
 where F1 always detects.
+
+### Decode-prefetch across burst groups + Quartz lazy-import race fix (2026-08-26, KEPT)
+
+Two changes landed together after a full module re-breakdown:
+
+1. **Group-boundary decode barrier removed** (engine.py, 839ad11). The
+   single-consumer loop decoded group i, scored it fully, THEN submitted
+   group i+1's decodes — the pool idled at every boundary. Timeline
+   profiling showed decode-active only ~26% of wall with long idle gaps.
+   Fix: submit next group's decodes before scoring the current one
+   (in-flight memory bounded by one extra group).
+   A/B (300 frames as realistic 8-frame bursts): 37.7 -> 50.2 img/s (+33%).
+   600-JPG single-group-heavy set: 41.8 -> 44.5 img/s (few boundaries).
+
+2. **_get_quartz() lazy-import race** (loader.py, fd1dd6c). Threads arriving
+   during `import Quartz` saw checked=True/module=None and silently fell
+   back to the cv2 decode path — whose pixels differ from ImageIO by up to
+   ~40 gray levels (NOT the documented +-3; docstring updated separately),
+   flipping knife-edge P4 decisions (IMG_...160318_240.jpg 3 -> -1,
+   deterministic under prefetch scheduling). Double-checked locking added;
+   120/120 in-engine decodes now take ImageIO; all gates green twice.
+
+Also fixed en route: find_embedded_jpeg_tiff returned (length, offset)
+swapped vs its docstring, so TIFF direct RAW extraction always failed its
+SOI check and silently used the exiftool session for every RAW (d64b759;
+ARW now extracts in 4-6 ms, NEF 2-3 ms; RAW gates re-verified).
+
+Module breakdown on Apple M4 (2026-08-26 machine state, workers=4):
+
+| Stage | JPG | HEIF | ARW | NEF |
+|---|---|---|---|---|
+| Single-thread decode ms/img | 42.8 | 18.6 (VideoToolbox) | 55.5 | 26.7 |
+| Pure decode supply @4 threads | 81.6 img/s | - | - | - |
+| Clean serial scoring chain | 9.4 ms/frame (106 fps) | detect doubles via COCO fallback | | |
+| Consumer serial in-engine | 18.3 | 26.1 | 22.6 | 22.9 ms/frame |
+| E2E gate protocol | 17.8-18.7 | 7.6-7.7 | 6.2 | 7.0 img/s |
+
+Setup tax: scan() 91 ms || load_models() 2189 ms cold / 1529 ms warm.
+load_models is COCO 811 + F1 770 + P4 598 ms; loading the three models on
+parallel threads gives ZERO gain (2198 ms) — ANE compilation serializes
+internally in one CoreML queue. Small-N "img/s" numbers conflate this fixed
+~2.2 s tax; steady-state processing of 60 JPGs is ~0.8 s (~75 img/s).
+
+Remaining bottleneck ranking (JPG): consumer serial 18.3 ms/frame in-engine
+(detect 6.8 incl. letterbox+postprocess, sharpness 3.1, P4 1.4) vs decode
+supply 81 img/s — E2E now sits at max(supply, consumer) ~= 50-80 img/s on
+bursty sets instead of their sum. Next candidates, in expected-value order:
+(a) shave consumer detect cost (COCO letterbox reuse when f1 misses),
+(b) sharpness FFT input crop/downscale (pixel-frozen, needs identical-op proof),
+(c) setup tax amortization is already fine for real folder sizes (>1000 files).
