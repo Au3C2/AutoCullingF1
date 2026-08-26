@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import ctypes
 import io
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -353,7 +354,7 @@ def find_embedded_jpeg_tiff(data: bytes) -> tuple[int, int] | None:
         if next_ifd_off > 0:
             queue.append(next_ifd_off)
 
-    return (best[1], best[0]) if best else None
+    return (best[0], best[1]) if best else None
 
 
 def _extract_raw_tiff_direct(path: Path) -> bytes | None:
