@@ -207,11 +207,17 @@ class LiteYOLO:
         outputs = self._run_session(img_canvas)
         return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
 
-    def detect_numpy(self, img: np.ndarray, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45) -> list[dict]:
+    def detect_numpy(self, img: np.ndarray, conf_thresh: float = _CONF_THRESHOLD, nms_thresh: float = 0.45,
+                     prep: tuple[np.ndarray, float, tuple[float, float]] | None = None) -> list[dict]:
         """Same pipeline but letterboxing runs in cv2 directly on the numpy
-        frame (GIL-free) — removes PIL resize from the consumer thread."""
+        frame (GIL-free) — removes PIL resize from the consumer thread.
+
+        ``prep`` accepts a precomputed ``letterbox_numpy`` result so cascaded
+        detectors (F1 miss -> COCO fallback) letterbox the shared frame once;
+        the canvas geometry depends only on the input image and ``imgsz``."""
         if self.session is None: return []
-        img_canvas, ratio, (dw, dh) = self.letterbox_numpy(img, new_shape=self.imgsz)
+        img_canvas, ratio, (dw, dh) = prep if prep is not None else \
+            self.letterbox_numpy(img, new_shape=self.imgsz)
         outputs = self._run_session(img_canvas)
         return self._postprocess(outputs, ratio, dw, dh, conf_thresh, nms_thresh)
 
@@ -250,15 +256,23 @@ def load_coco_model():
 
 def detect(img_rgb: np.ndarray, f1: LiteYOLO | None, coco: LiteYOLO | None, conf: float = _CONF_THRESHOLD) -> list[Detection]:
     detections: list[Detection] = []
+    prep = None
     if f1:
-        for b in f1.detect_numpy(img_rgb, conf_thresh=conf):
+        # Letterbox once up front; when F1 misses, the COCO fallback reuses
+        # the same canvas (identical geometry for equal imgsz) instead of
+        # resizing the full frame a second time.
+        if f1.session is not None:
+            prep = f1.letterbox_numpy(img_rgb, new_shape=f1.imgsz)
+        for b in f1.detect_numpy(img_rgb, conf_thresh=conf, prep=prep):
             detections.append(Detection(label="f1_car", weight=_F1_CLASS_WEIGHT, conf=b["conf"], x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"]))
         if detections:
             h, w = img_rgb.shape[:2]
             detections.sort(key=lambda d: d.subject_score(w, h), reverse=True)
             return detections
     if coco:
-        for b in coco.detect_numpy(img_rgb, conf_thresh=conf):
+        coco_prep = prep if (prep is not None and f1 is not None
+                             and tuple(f1.imgsz) == tuple(coco.imgsz)) else None
+        for b in coco.detect_numpy(img_rgb, conf_thresh=conf, prep=coco_prep):
             if b["cls_id"] in _COCO_INTEREST:
                 l, w = _COCO_INTEREST[b["cls_id"]]
                 detections.append(Detection(label=l, weight=w, conf=b["conf"], x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"]))
