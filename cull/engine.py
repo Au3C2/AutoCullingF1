@@ -216,26 +216,42 @@ class CullingEngine:
                     # executor.map preserves group order regardless of completion order.
                     group_results = list(score_pool.map(_score_job, jobs))
             else:
-                # Decode prefetch: submit the NEXT group's decodes before
-                # scoring the current one so the pool never idles while the
-                # consumer scores. Without this, decoding of group i+1 waited
-                # for ALL scoring of group i (a barrier at every group
-                # boundary); a timeline profile showed the decode pool idle
-                # ~70% of wall time on bursty JPG sets. In-flight memory is
-                # bounded by one extra group (~2 groups x frames x 3.2 MB).
-                next_futs: list = []
+                # Continuous Sliding Window Pipeline (Global Bounded Buffer):
+                # Rather than coarse per-group prefetching (which stalls when a
+                # group is small or has 1-2 frames), maintain a continuous
+                # in-flight decode window of bounded depth across ALL groups.
+                # As each frame is popped and scored, the next frame down the line
+                # is submitted to keep the decode pool 100% busy without memory blowup.
+                import queue as _pyqueue
+
+                # Flatten group frames to build the continuous sequence
+                flat_sequence: list[tuple[int, int, Path]] = []
+                for g_idx, grp in enumerate(self.groups):
+                    for f_idx, fp in enumerate(grp.frames):
+                        flat_sequence.append((g_idx, f_idx, fp))
+
+                total_frames = len(flat_sequence)
+                window_depth = max(8, min(16, self.config.workers * 3))
+                in_flight_queue: _pyqueue.Queue = _pyqueue.Queue()
+                submitted_idx = 0
+
+                # Pre-fill sliding window
+                while submitted_idx < min(window_depth, total_frames):
+                    _, _, fp_sub = flat_sequence[submitted_idx]
+                    in_flight_queue.put(decode_pool.submit(load_image_rgb, fp_sub, self.config.scale_width))
+                    submitted_idx += 1
+
                 for idx, group in enumerate(self.groups, start=1):
                     log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
 
-                    futs = next_futs or [
-                        decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
-                        for fp in group.frames]
-                    next_futs = [
-                        decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
-                        for fp in self.groups[idx].frames] if idx < len(self.groups) else []
-
                     def _decode_loader(i: int) -> np.ndarray | None:
-                        return futs[i].result()
+                        nonlocal submitted_idx
+                        fut = in_flight_queue.get()
+                        if submitted_idx < total_frames:
+                            _, _, fp_next = flat_sequence[submitted_idx]
+                            in_flight_queue.put(decode_pool.submit(load_image_rgb, fp_next, self.config.scale_width))
+                            submitted_idx += 1
+                        return fut.result()
 
                     res = self._process_group_internal(group, decode_loader=_decode_loader)
                     for s in res:
