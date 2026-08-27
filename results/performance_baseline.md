@@ -763,3 +763,19 @@ ms in quick test but variance dominates; no reliable E2E gain worth a
 platform fork. **Reverted per sequence protocol**; code retained as a
 reference implementation behind `sys.platform != "darwin"` (no-op).
 Re-try only if YCC alignment becomes configurable.
+
+#### Re-trial 2026-08-27 — RAW VideoToolbox persistent session (TRY 2, REVERTED — crash)
+
+Integrated as `_vt_decode_jpeg_bytes()` in `cull/loader.py` (darwin, one
+`VTDecompressionSession` per resolution, `BGRA` full-res then `AREA` to
+1280). Session created via `ctypes` `CMVideoFormatDescriptionCreate` +
+`VTDecompressionSessionCreate` with BGRA `PixelFormatType` and per-frame
+`CMBlockBuffer`/`CMSampleBuffer` wrapping.
+
+Result: `cull_photos.py` crashes with `SIGABRT (rc=-5)` during burst
+grouping/scoring — VT session is not thread-safe across the
+`ThreadPoolExecutor` decode workers without additional serialization, and
+`BGRA` full-res output (131 MB copy) negates the limited -7% ceiling
+observed in prior single-thread `vt_session_bench.py` (46.1 ms). Drift
+was already `max 24` in prior measurements. **Reverted per sequence
+protocol**; probe scripts `/tmp/vt_ctypes_probe.py` retained.
