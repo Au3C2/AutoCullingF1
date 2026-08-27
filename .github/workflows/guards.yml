@@ -16,6 +16,15 @@ on:
     branches: [develop, master]
   pull_request:
   workflow_dispatch:
+    inputs:
+      count:
+        description: "files per dataset (debug the VM hang with 120)"
+        type: number
+        default: 500
+      samples:
+        description: "interleaved samples per format"
+        type: number
+        default: 3
 
 jobs:
   # ---- manual: measure runner baselines, commit result as ci_config.json ----
@@ -36,17 +45,19 @@ jobs:
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
-      - name: Measure seed performance baselines (3 samples/format)
+      - name: Measure seed performance baselines
         timeout-minutes: 30
         run: |
           mkdir -p build
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
+            --seed-dir ci_sample --count ${{ inputs.count }} \
+            --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_source.json --no-prewarm
           .venv/bin/python packaging/build.py --onedir
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
+            --seed-dir ci_sample --count ${{ inputs.count }} \
+            --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_onedir.json
       - name: Measure seed ratings
         run: .venv/bin/python benchmarks/ci_seed_precision.py --calibrate \
