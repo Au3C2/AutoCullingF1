@@ -919,6 +919,22 @@ with `workers=6` while consumer runs on P-Cores:
 
 Conclusion: For decode-bound formats (especially 33MP ARW), `workers=6` fully unlocks M4's 6 efficiency cores, boosting pure steady-state throughput by **+16.6%** with zero regression on other formats. All 7/7 precision gates remain bit-identical.
 
+#### 7. Dedicated macOS Regression Guards & Gate Baselines Locked (2026-08-27, KEPT `68f9934`)
+
+To strictly protect the achieved precision and throughput on macOS (Apple Silicon M4) without relying on obsolete Windows baseline margins:
+
+1. **Platform-Dedicated Performance Gate (`benchmarks/run_benchmarks.py`)**:
+   - Locked dedicated macOS thresholds (leaving ~20% headroom against system load jitter):
+     - **JPG**: `14.0 img/s` (measured 17.6 - 18.3, threshold was 4.2)
+     - **HEIF**: `6.0 img/s` (measured 7.6 - 7.9, threshold was 3.0)
+     - **ARW**: `5.0 img/s` (measured 6.7 - 6.9, threshold was 2.3)
+     - **NEF**: `5.5 img/s` (measured 7.1 - 7.3, threshold was 1.9)
+   - Generic Windows/Linux fallback thresholds remain untouched.
+2. **Concurrency Determinism & Precision Guard (`tests/test_cull.py`)**:
+   - `test_rating_precision_matches_baseline` is now parameterized across `workers=(1, 4, 6)`.
+   - Strictly enforces that single-threaded, default (4-thread), and 6-thread pool executions produce 100% bit-identical ratings (9/9 passed).
+
+
 
 
 

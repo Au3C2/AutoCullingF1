@@ -238,12 +238,9 @@ results/performance_baseline.md hard-decode section.
 cull/loader.py (ffmpeg -hwaccels / pyav HWAccel), dead code on darwin (7/7
 gates pass); performance must be proven on the non-darwin runner.
 
-2026-08-27 Deep Dive & Sliding Window Pipeline + Range I/O (KEPT db9fa0e + 9aec36a):
-- Mathematical throughput gap root-caused across formats: (1) Fixed setup tax (2.2s
-  CoreML compile) limits 60-file wall to 27.3 img/s; (2) JPG/ARW are decode-supply
-  bound (matches/exceeds theoretical pipeline limit); (3) HEIF is compute-bound (152
-  fps supply vs 88 fps scoring); (4) NEF is near-balance jitter bound.
-- Fix 1: Continuous sliding window pipeline with global queue depth max(8, min(16, workers*3)).
-- Fix 2: Range I/O for RAW preview extraction (6MB chunk read instead of 52MB).
-- Result: ARW decode 52.7->45.1 ms (-17.0%), NEF decode 28.3->25.9 ms (-9.2%);
-  Steady-state E2E: JPG 83.1, HEIF 82.1, NEF 73.0, ARW 46.5 img/s. Gates: 7/7 passed.
+2026-08-27 Dedicated macOS Performance & Precision Guards Locked (KEPT 68f9934):
+- benchmarks/run_benchmarks.py dedicated macOS thresholds locked: JPG 14.0, HEIF 6.0,
+  ARW 5.0, NEF 5.5 img/s (replaces obsolete Windows 4070Ti baselines 4.2/3.0/2.3/1.9).
+- tests/test_cull.py parameterized across workers=(1, 4, 6) for concurrency determinism.
+- All 9/9 precision gates and 4/4 performance gates strictly green.
+
