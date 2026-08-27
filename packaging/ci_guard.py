@@ -58,16 +58,18 @@ def main() -> int:
     calibrated = bool(baselines.get("source"))
 
     rcs = []
-    # 1. precision — packaged == source (calibration-free)
-    rcs.append(run([str(PY), "benchmarks/ci_seed_precision.py", "--compare"],
-                   "1. precision (seed consistency, packaged vs source)",
-                   env_base))
-    # 2. packaging flow
+    # 1. packaging flow FIRST — the precision gate compares against the
+    #    packaged binary, so the onedir artifact must exist.
     rcs.append(run([str(PY), "packaging/build.py", "--onedir"],
-                   "2. packaging flow (build onedir)", env_base))
+                   "1. packaging flow (build onedir)", env_base))
     if not ONEDIR.exists():
         print(f"\nERROR: onedir artifact missing: {ONEDIR}", file=sys.stderr)
         return 1
+
+    # 2. precision — packaged == source (calibration-free)
+    rcs.append(run([str(PY), "benchmarks/ci_seed_precision.py", "--compare"],
+                   "2. precision (seed consistency, packaged vs source)",
+                   env_base))
 
     # 3. performance — seed steady-state (needs calibrated baselines)
     if calibrated:
