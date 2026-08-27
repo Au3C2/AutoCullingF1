@@ -37,15 +37,16 @@ jobs:
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
       - name: Measure seed performance baselines (3 samples/format)
+        timeout-minutes: 35
         run: |
           mkdir -p build
           .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
-            --seed-dir ci_sample --samples 3 --no-guard \
+            --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
             --json build/calib_source.json --no-prewarm
           .venv/bin/python packaging/build.py --onedir
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
-            --seed-dir ci_sample --samples 3 --no-guard \
+            --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
             --json build/calib_onedir.json
       - name: Measure seed ratings
         run: .venv/bin/python benchmarks/ci_seed_precision.py --calibrate \
