@@ -80,14 +80,14 @@ def main() -> int:
         env_pkg = {**env_base, "CULL_EXE": str(ONEDIR)}
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
                         "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
-                        "--samples", str(args.samples),
+                        "--count", "200", "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG), "--no-prewarm",
                         "--json", str(ROOT / "build" / "ci_source.json")],
                        "3a. performance (seed steady, source)", env_base))
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
                         "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
-                        "--samples", str(args.samples),
+                        "--count", "200", "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG),
                         "--json", str(ROOT / "build" / "ci_onedir.json")],

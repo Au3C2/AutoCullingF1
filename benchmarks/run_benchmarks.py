@@ -74,16 +74,18 @@ def _load_baselines(path: Path | None) -> dict[str, dict[str, float]]:
     """Return a {pipeline: {fmt: baseline}} map.
 
     Without *path*, the built-in local baselines (multi-source protocol) are
-    used. A JSON file with the shape {"JPG": {...}, ...} replaces the whole
-    table — the CI workflow calibrates its own runner-specific baselines on
-    the seed protocol and pins them here.
+    used. A JSON file with the shape {"baselines": {"source": {...},
+    "onedir": {...}}} replaces the whole table — the CI workflow calibrates
+    its own runner-specific baselines through ci_config.json.
     """
     if path is None:
         return dict(STEADY_BASELINES)
     data = json.loads(path.read_text())
+    entries = data.get("baselines", data)
     out = {}
     for pipe in ("source", "onedir"):
-        out[pipe] = {str(f): float(data[pipe][f]) for f in data.get(pipe, {})}
+        out[pipe] = {str(f): float(v)
+                     for f, v in (entries.get(pipe) or {}).items()}
     return out
 
 
