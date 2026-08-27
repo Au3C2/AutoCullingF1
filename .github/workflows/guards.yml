@@ -64,9 +64,6 @@ jobs:
             --seed-dir ci_sample --count ${{ inputs.count }} \
             --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_onedir.json
-      - name: Measure seed ratings
-        run: .venv/bin/python benchmarks/ci_seed_precision.py --calibrate \
-               > build/calib_ratings.json
       - name: Merge into ci_config.json
         run: |
           python - <<'EOF'
@@ -74,8 +71,6 @@ jobs:
           base = json.loads(pathlib.Path("ci_config.json").read_text())
           src = json.loads(pathlib.Path("build/calib_source.json").read_text())["results"]
           od  = json.loads(pathlib.Path("build/calib_onedir.json").read_text())["results"]
-          rat = json.loads(pathlib.Path("build/calib_ratings.json").read_text())
-          base["seed_ratings"] = rat["seed_ratings"]
           base["baselines"] = {
               "source": {f: src[f]["steady"] for f in src},
               "onedir": {f: od[f]["steady"] for f in od},

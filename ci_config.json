@@ -1,8 +1,8 @@
 {
-  "note": "Runner-specific performance baselines for the CI seed protocol. Produce via the perf-calibrate workflow (workflow_dispatch) on the target macOS runner and commit the artifact here. Until baselines.source is non-empty, the CI performance gate is skipped (the precision + packaging gates always run). seed_ratings is reference-only.",
+  "note": "Calibrated on the GitHub-hosted macos-14-arm64 runner: seed protocol count=200, samples=2, workers=2 (2026-08-28). This VM is ~10x slower than the local Apple M4 (JPG 8 vs 84 img/s) and has no ANE; the CI perf gate runs with tolerance 0.85 against these baselines. Re-calibrate (perf-calibrate workflow) if the runner image changes materially.",
   "seed_ratings": {},
   "baselines": {
-    "source": {},
-    "onedir": {}
+    "source": {"JPG": 7.88, "HEIF": 0.86, "ARW": 7.11, "NEF": 7.29},
+    "onedir": {"JPG": 7.32, "HEIF": 0.96, "ARW": 7.31, "NEF": 8.16}
   }
 }
