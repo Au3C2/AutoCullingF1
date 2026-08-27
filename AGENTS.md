@@ -234,3 +234,6 @@ permanent Windows/macOS baseline fork. Decided: abandon hard-decode,
 keep the zero-drift cv2 path. Only zero-drift lever left for ARW is
 range I/O (IFD+JPEG within first 6% of file). Details in
 results/performance_baseline.md hard-decode section.
+2026-08-27 TRY 3/4: non-darwin JPG/HEIF HWAccel probing scaffolds landed in
+cull/loader.py (ffmpeg -hwaccels / pyav HWAccel), dead code on darwin (7/7
+gates pass); performance must be proven on the non-darwin runner.

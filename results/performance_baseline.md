@@ -779,3 +779,24 @@ grouping/scoring — VT session is not thread-safe across the
 observed in prior single-thread `vt_session_bench.py` (46.1 ms). Drift
 was already `max 24` in prior measurements. **Reverted per sequence
 protocol**; probe scripts `/tmp/vt_ctypes_probe.py` retained.
+
+#### TRY 3/4 — Non-darwin JPG/HEIF HWAccel scaffolds (KEPT as probing code, pending platform runner)
+
+Added probing branches that are **dead code on this darwin host**
+(`sys.platform != "darwin"` guards) and do not affect local gates:
+
+- **TRY 3 (JPG)**: `cull/loader.py: _hw_decode_jpeg_ffmpeg()` —
+  `ffmpeg -hwaccels` probe + `auto/dxva2/d3d11va/vaapi/cuda` try loop with
+  rawvideo `rgb24` pipe and `INTER_AREA` downscale on success, `None` fallback
+  otherwise. Wired before the macOS ImageIO path in `load_image_rgb`.
+- **TRY 4 (HEIF)**: `cull/loader.py: _load_image_pyav()` `elif sys.platform
+  != "darwin"` branch — iterates `av.codec.hwaccel.HWAccel("cuda"/"dxva2"/
+  "d3d11va"/"vaapi")` with per-probe `av.open()` to avoid consuming the
+  primary container's `demux` state, then falls back to `container.decode`.
+
+Local gates: `7/7 passed` (dead code). E2E `run_benchmarks.py` gates still
+require **interleaved A/B on the actual non-darwin runner** before any
+performance claim can be made — prior teaching on `4:2:2 10-bit Rext` is
+that `NVDEC` often fails and falls back at `+110 ms`, so `+5%` and `0`
+drift must be proven there, not here. **Kept as probing scaffolds** for
+the next platform pass; memory updated per sequence protocol.
