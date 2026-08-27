@@ -46,6 +46,9 @@ def main() -> int:
     ap.add_argument("--tolerance", type=float, default=0.85,
                     help="steady-state floor fraction for the runner")
     ap.add_argument("--samples", type=int, default=3)
+    ap.add_argument("--workers", type=int, default=4,
+                    help="decoder workers (CULL_WORKERS env overrides; CI VM "
+                         "uses 2 — workers=4 was observed to stall there)")
     args = ap.parse_args()
 
     env_base = os.environ.copy()
