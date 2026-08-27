@@ -1,0 +1,8 @@
+{
+  "note": "Runner-specific performance baselines for the CI seed protocol. Produce via the perf-calibrate workflow (workflow_dispatch) on the target macOS runner and commit the artifact here. Until baselines.source is non-empty, the CI performance gate is skipped (the precision + packaging gates always run). seed_ratings is reference-only.",
+  "seed_ratings": {},
+  "baselines": {
+    "source": {},
+    "onedir": {}
+  }
+}

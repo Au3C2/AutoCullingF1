@@ -938,3 +938,34 @@ To strictly protect the achieved precision and throughput on macOS (Apple Silico
 
 
 
+
+## macOS perf-gate protocol rework (2026-08-27)
+
+The end-to-end gate (all file counts incl. startup) was split into two
+independent measurements per format on the ~500-file protocol, because the
+fanless M4 shows 10-30% thermal drift on serial full-load batches and the
+old small-N gate mixed startup tax into the throughput number:
+
+- setup tax: wall from process start to `[90%] Analyzing images...`
+  (binary startup, code-signature verification on first load, imports,
+  model loading, EXIF scan + burst grouping). Guarded by a wide ceiling
+  (source 8.0s, onedir 12.0s — the packaged form includes the one-time
+  per-boot signature verification when not prewarmed).
+- steady E2E: files / (`[95%] Saving metadata` - `[90%]`), pure processing
+  window. Guarded at `baseline x 0.90` (10% downward tolerance).
+
+Locked baselines (Apple M4, idle, interleaved, 20s cooldown between
+formats; gate wall ~3.1 min):
+
+| Pipeline | JPG | HEIF | ARW | NEF | floor = x0.90 |
+|---|---|---|---|---|---|
+| source | 83.5 | 65.5 | 49.9 | 70.0 | JPG 75.2 HEIF 59.0 ARW 44.9 NEF 63.0 |
+| onedir | 82.4 | 62.6 | 48.7 | 67.9 | JPG 74.2 HEIF 56.3 ARW 43.8 NEF 61.1 |
+
+Two consecutive verified runs after locking: source 83.4/69.8/49.2/71.9
+(gate 186s), onedir 83.9/69.9/50.2/73.9 (gate 188s) — all green. Note how
+much idle-machine state matters: HEIF/NEF range 62-70/58-74 across the day.
+
+Unified guard entrypoint: `packaging/guards.py` (5 guards: source
+precision -> source perf -> onedir build -> packaged precision -> packaged
+perf; ~12-15 min). Requires the ~1.3 GB camera datasets present.

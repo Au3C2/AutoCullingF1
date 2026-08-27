@@ -1,0 +1,91 @@
+name: culling-guards
+
+# Three guarded concerns (precision / packaging / performance) against the
+# seed protocol on macOS:
+#   - seed files (ONE per format, ci_sample/) are replicated to ~500 files at
+#     runtime — no camera datasets in the repo;
+#   - precision + performance steps read ci_config.json, which is produced by
+#     the perf-calibrate workflow (manual, per runner type). Until calibrated
+#     they are SKIPPED and only the packaging flow runs: GitHub-hosted
+#     runners have no ANE and different silicon than the local M4, so both the
+#     seed ratings and the steady-state baselines MUST be measured on the
+#     runner type that will gate them.
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ---- manual: measure runner baselines, commit result as ci_config.json ----
+  perf-calibrate:
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps
+        run: |
+          uv pip install --system "opencv-python==5.0.0.93" \
+            "onnxruntime==1.23.2" "numpy>=1.26" "pillow>=10.0" \
+            "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" "pyinstaller"
+      - name: Measure seed performance baselines (3 samples/format)
+        run: |
+          mkdir -p build
+          python benchmarks/run_benchmarks.py --workers 4 --seed-dir ci_sample \
+            --samples 3 --no-guard --json build/calib_source.json --no-prewarm
+          python packaging/build.py --onedir
+          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
+            python benchmarks/run_benchmarks.py --workers 4 --seed-dir ci_sample \
+            --samples 3 --no-guard --json build/calib_onedir.json
+      - name: Measure seed ratings
+        run: python benchmarks/ci_seed_precision.py --calibrate > build/calib_ratings.json
+      - name: Merge into ci_config.json
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          base = json.loads(pathlib.Path("ci_config.json").read_text())
+          src = json.loads(pathlib.Path("build/calib_source.json").read_text())["results"]
+          od  = json.loads(pathlib.Path("build/calib_onedir.json").read_text())["results"]
+          rat = json.loads(pathlib.Path("build/calib_ratings.json").read_text())
+          base["seed_ratings"] = rat["seed_ratings"]
+          base["baselines"] = {
+              "source": {f: src[f]["steady"] for f in src},
+              "onedir": {f: od[f]["steady"] for f in od},
+          }
+          pathlib.Path("build/ci_config.json").write_text(
+              json.dumps(base, indent=2))
+          EOF
+      - name: Upload calibrated config
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_config.json
+          path: build/ci_config.json
+      - name: Next step
+        run: |
+          echo "Download ci_config.json and commit it to the repo root to "
+          echo "enable the guarded steps on this runner type."
+
+  # ---- automatic: three guarded concerns on every push/PR ----
+  guards:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps
+        run: |
+          uv pip install --system "opencv-python==5.0.0.93" \
+            "onnxruntime==1.23.2" "numpy>=1.26" "pillow>=10.0" \
+            "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" "pyinstaller"
+      - name: Run CI guards (precision / packaging / performance)
+        run: python packaging/ci_guard.py --tolerance 0.85 --samples 3

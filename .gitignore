@@ -83,5 +83,13 @@ p4_model_checkpoints/*.onnx
 *.NEF
 *.ARW
 *.bin
+
+# CI seed samples (one file per format, committed for the GitHub Actions gate)
+ci_sample/*
+!ci_sample/seed.jpg
+!ci_sample/seed.heif
+!ci_sample/seed.ARW
+!ci_sample/seed.nef
+
 auto_cull
 external/

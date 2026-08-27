@@ -97,11 +97,13 @@ python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
 1. 从 Release 页面下载最新的 `cull_photos_lite.zip`。
 2. 解压到任意文件夹。
 3. 直接运行命令（以管理员权限运行性能更好）：
-   - **macOS:** `./dist/cull_photos/cull_photos --input-dir /你的照片路径`
-   - **Windows:** `.\dist\cull_photos\cull_photos.exe --input-dir C:\Photos`
+   - **macOS:** `./auto_cull_v0.1_macos_arm64 --input-dir /你的照片路径`
+   - **Windows:** `.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos`
 
 ### 2. 自行打包 (Packaging)
-如果你希望基于当前代码自行编译二进制文件：
+
+打包产物为单文件可执行，无需 Python、无需安装模型与 exiftool（全部内置）。
+支持 macOS（Apple Silicon）与 Windows 双平台（spec 按平台分支）。
 
 **第一步：安装 PyInstaller**
 ```bash
@@ -110,10 +112,57 @@ uv pip install pyinstaller
 
 **第二步：执行打包脚本**
 ```bash
-# 使用已优化的 spec 文件（已排除 Torch/CV2 等冗余库）
-pyinstaller cull_photos.spec --noconfirm
+python packaging/build.py                 # 单文件产物 → 项目根目录
+python packaging/build.py --onedir        # 目录形态（性能验证用，见下）
 ```
-打包产物将生成在 `dist/cull_photos/` 目录下。
+产物为 `auto_cull_v0.1_macos_arm64` / `auto_cull_v0.1_win_x64.exe`。
+
+**在打包产物上跑现有测试脚本**（`CULL_EXE` 环境变量使精度/性能脚本指向二进制）：
+
+```bash
+# 精度门（JPG + 24 HEIF + 20 ARW + 20 NEF 逐文件比对基线）
+CULL_EXE=./auto_cull_v0.1_macos_arm64 pytest tests/test_package.py \
+    tests/test_precision_heif.py tests/test_precision_raw.py
+
+# 性能门（4 数据集吞吐，JPG 14.0 / HEIF 6.0 / ARW 5.0 / NEF 5.5 img/s）
+CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
+    python benchmarks/run_benchmarks.py
+```
+
+**打包策略**：性能与精度验证一律使用 **onedir（目录形态）**——单文件形态在 macOS 上每次运行都要重新支付代码签名验证税（约 15–25 秒，且稳态吞吐因冷页缓存下降 10–50%）。onedir 由 `build.py --onedir` 产出，zip 后可分发；`build.py`（默认）仍产出单文件形态用于简单分发。
+
+**统一回归看护**（覆盖源码精度/性能、打包流程、打包产物精度/性能）：
+```bash
+python packaging/guards.py                # 5 项全部，约 12-15 分钟
+python packaging/guards.py --perf-only    # 仅性能门（源码 + 打包，各约 3 分钟）
+python packaging/guards.py --skip-build   # 复用已有 dist 产物（精度第 2 次起）
+```
+
+## 🤖 GitHub Actions CI（精度 / 打包 / 性能三层）
+
+仓库内 `ci_sample/` 每种格式只存 1 张种子（约 70MB），CI 运行时复制成
+约 500 张数据集，无需把 1.3GB 相机数据集入库。
+
+- **精度门**（无需校准）：`benchmarks/ci_seed_precision.py --compare` 用
+  源码与打包产物分别评分同一批种子副本，逐文件断言 raw_score（±0.002 容差，
+  吸收 ANE 每次运行的 ±0.0004 抖动）与 rating 多重集一致。同源复制会进入
+  同一 burst 并被 Top-N 降级，因此只看"打包 vs 源码"的一致性而非绝对评级。
+- **打包流程门**：`build.py --onedir` + 产物存在性检查。
+- **性能门**（需校准）：`run_benchmarks.py --seed-dir ci_sample
+  --baseline-file ci_config.json --tolerance 0.85`。CI 托管的 macOS runner
+  无 ANE、硅片与本地 M4 不同，**基线必须在目标 runner 上实测**：手动触发
+  `perf-calibrate` workflow → 下载产物 → 把 baselines 提交进 `ci_config.json`。
+  校准前性能门自动跳过（精度与打包门始终运行）。
+
+workflow 见 `.github/workflows/guards.yml`；CI 统一入口 `packaging/ci_guard.py`。
+本地 seed 协议参考值（Apple M4，源码，workers=4）：JPG 84.5 / HEIF 42.6 /
+ARW 48.7 / NEF 69.9 img/s——HEIF 单张代表性差（DSC00827 走 COCO 回退），
+CI 基线必须以实测为准。
+
+**macOS 平台说明（冷启动签名验证税）**：macOS 内核对包内每个 Mach-O 的 adhoc
+签名做首次加载验证（按 inode 缓存）。单文件形态每次运行都解包到新临时目录，
+因此每次启动多付约 15–25 s（文件越多越慢）；目录形态（`--onedir`）只在每次
+开机后的首个进程付一次，之后吞吐与源码一致。
 
 ## 📂 项目结构
 

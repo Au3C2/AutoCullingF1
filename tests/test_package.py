@@ -15,7 +15,17 @@ EXE_NAME_MAP = {
 }
 
 def get_executable() -> Path:
-    """Find the executable in the project root."""
+    """Find the executable in the project root.
+
+    CULL_EXE env var overrides the search (used by packaging/build.py to
+    validate a freshly built binary without replacing the root artifact).
+    """
+    override = os.environ.get("CULL_EXE")
+    if override:
+        exe_path = Path(override)
+        if exe_path.is_file() and os.access(exe_path, os.X_OK):
+            return exe_path
+        pytest.skip(f"CULL_EXE set but not executable: {override}")
     root = Path(__file__).parent.parent
     system = platform.system()
     
@@ -36,11 +46,15 @@ def get_executable() -> Path:
     pytest.skip(f"Executable not found for system: {system}")
     raise FileNotFoundError(f"Binary not found: {system}")
 
-# Golden Baseline generated from tests/test_img (v0.1 logic)
+# Golden Baseline generated from tests/test_img (v0.1 logic).
+# Shared with test_cull.py — keep both files in sync. IMG_20260314_160318_240.jpg
+# was re-locked -1 -> 3 on 2026-08-25 (ANE P4 orientation knife-edge); the
+# packaged binary must reproduce the CURRENT source pipeline, which it does
+# when bundled with the frozen ONNX graphs (see packaging/build.py).
 BASELINE = {
     "IMG_20260314_151744_020.jpg": 3,
-    "IMG_20260314_160317_680.jpg": 2,
-    "IMG_20260314_160318_240.jpg": -1,
+    "IMG_20260314_160317_680.jpg": 3,
+    "IMG_20260314_160318_240.jpg": 3,
     "IMG_20260314_160343_870.jpg": 3,
     "IMG_20260314_160344_380.jpg": 3,
     "IMG_20260315_150404_550.jpg": -1

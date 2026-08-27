@@ -105,6 +105,28 @@ def ensure_nvidia_runtime_on_path() -> None:
     os.environ["PATH"] = os.pathsep.join(extra + ([existing] if existing else []))
 
 
+def _has_concrete_input_shape(model_path: Path, sess_opts) -> bool:
+    """True when the graph's first input has fully concrete dimensions.
+
+    Ultralytics exports keep batch/height/width symbolic ('batch'/'height'/
+    'width'); onnxsim constant-folded exports freeze them to ints. The
+    packaged single-file binary ships the frozen graph under the plain base
+    name (no ``_static`` sibling), so file-name detection is not enough —
+    probe the graph itself. Returns False when the session cannot load.
+    """
+    try:
+        import onnxruntime as _ort
+        probe = _ort.InferenceSession(str(model_path), sess_options=sess_opts,
+                                      providers=["CPUExecutionProvider"])
+        try:
+            shape = probe.get_inputs()[0].shape
+        finally:
+            del probe
+        return all(isinstance(d, int) and d > 0 for d in shape)
+    except Exception:
+        return False
+
+
 class LiteYOLO:
     def __init__(self, model_path: Path):
         self.model_path = model_path
@@ -127,6 +149,14 @@ class LiteYOLO:
                 static_path = model_path.with_name(model_path.stem + "_static.onnx")
                 if static_path.exists():
                     model_file = static_path
+                    static = True
+                else:
+                    # Packaged binaries ship the frozen graph under the base
+                    # name; identical pinned options apply once concrete
+                    # input dims are detected.
+                    model_file = model_path
+                    static = _has_concrete_input_shape(model_file, opts)
+                if static:
                     # Pin the compute units. With the default ALL the runtime
                     # silently switches between ANE and GPU depending on
                     # system load; the two paths differ by ~0.01 detection
