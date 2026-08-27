@@ -91,5 +91,8 @@ ci_sample/*
 !ci_sample/seed.ARW
 !ci_sample/seed.nef
 
+# Bundled exiftool (perl script + lib tree) — required by the packaged build
+external/*
+!external/exiftool/
+
 auto_cull
-external/

@@ -29,22 +29,27 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.10"
-      - name: Install runtime deps
+      - name: Install runtime deps into .venv
         run: |
-          uv pip install --system "opencv-python==5.0.0.93" \
-            "onnxruntime==1.23.2" "numpy>=1.26" "pillow>=10.0" \
-            "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" "pyinstaller"
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" \
+            "pyinstaller"
       - name: Measure seed performance baselines (3 samples/format)
         run: |
           mkdir -p build
-          python benchmarks/run_benchmarks.py --workers 4 --seed-dir ci_sample \
-            --samples 3 --no-guard --json build/calib_source.json --no-prewarm
-          python packaging/build.py --onedir
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
+            --seed-dir ci_sample --samples 3 --no-guard \
+            --json build/calib_source.json --no-prewarm
+          .venv/bin/python packaging/build.py --onedir
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
-            python benchmarks/run_benchmarks.py --workers 4 --seed-dir ci_sample \
-            --samples 3 --no-guard --json build/calib_onedir.json
+            .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
+            --seed-dir ci_sample --samples 3 --no-guard \
+            --json build/calib_onedir.json
       - name: Measure seed ratings
-        run: python benchmarks/ci_seed_precision.py --calibrate > build/calib_ratings.json
+        run: .venv/bin/python benchmarks/ci_seed_precision.py --calibrate \
+               > build/calib_ratings.json
       - name: Merge into ci_config.json
         run: |
           python - <<'EOF'
@@ -82,10 +87,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.10"
-      - name: Install runtime deps
+      - name: Install runtime deps into .venv
         run: |
-          uv pip install --system "opencv-python==5.0.0.93" \
-            "onnxruntime==1.23.2" "numpy>=1.26" "pillow>=10.0" \
-            "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" "pyinstaller"
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "pyav>=17.0" "scipy>=1.15" \
+            "pyinstaller"
       - name: Run CI guards (precision / packaging / performance)
-        run: python packaging/ci_guard.py --tolerance 0.85 --samples 3
+        run: .venv/bin/python packaging/ci_guard.py --tolerance 0.85 --samples 3
