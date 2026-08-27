@@ -37,15 +37,15 @@ jobs:
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
       - name: Measure seed performance baselines (3 samples/format)
-        timeout-minutes: 35
+        timeout-minutes: 30
         run: |
           mkdir -p build
-          .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
             --json build/calib_source.json --no-prewarm
           .venv/bin/python packaging/build.py --onedir
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
-            .venv/bin/python benchmarks/run_benchmarks.py --workers 4 \
+            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --samples 3 --cooldown 10 --no-guard \
             --json build/calib_onedir.json
       - name: Measure seed ratings
@@ -96,4 +96,12 @@ jobs:
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
       - name: Run CI guards (precision / packaging / performance)
+        timeout-minutes: 40
         run: .venv/bin/python packaging/ci_guard.py --tolerance 0.85 --samples 3
+        env:
+          # workers=4 ProcessPoolExecutor deadlocks on the macOS VM runner
+          # (observed 2x on perf calibration, >25 min stuck in measure);
+          # workers=2 completes (guards precision gate measured 61 s). The
+          # CI baselines below are therefore measured at workers=2 too, so
+          # gate and baseline stay consistent.
+          CULL_WORKERS: 2

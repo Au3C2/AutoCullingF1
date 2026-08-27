@@ -73,16 +73,17 @@ def main() -> int:
 
     # 3. performance — seed steady-state (needs calibrated baselines)
     if calibrated:
+        workers = os.environ.get("CULL_WORKERS", str(args.workers))
         env_pkg = {**env_base, "CULL_EXE": str(ONEDIR)}
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
-                        "--workers", "4", "--seed-dir", str(ROOT / "ci_sample"),
+                        "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
                         "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG), "--no-prewarm",
                         "--json", str(ROOT / "build" / "ci_source.json")],
                        "3a. performance (seed steady, source)", env_base))
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
-                        "--workers", "4", "--seed-dir", str(ROOT / "ci_sample"),
+                        "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
                         "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG),
