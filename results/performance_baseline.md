@@ -891,4 +891,19 @@ Measured on realistic ~500-image datasets per format, strictly cutting out all s
 
 *Note: In the 500-image scale, JPG steady-state throughput (84.94 img/s) reaches 104% of standalone decode supply capacity via the zero-bubble continuous sliding-window pipeline, proving that compute and decode overheads are fully overlapped.*
 
+#### 5. Decode Micro-Optimizations (2026-08-27, KEPT `4958177`)
+
+1. **Zero-Copy ImageIO RGBA->RGB via C-level cv2.cvtColor**:
+   - Replaced Python-level `np.frombuffer(bytes(out)) + [:,:,:3].copy()` with direct view `np.frombuffer(out)` + `cv2.cvtColor(raw_view, cv2.COLOR_RGBA2RGB)`.
+   - Saves **2.44 ms/frame** on JPG extraction (3.17 -> 0.73 ms).
+   - JPG 4-thread supply capacity increased from **81.6 -> 85.4 img/s**.
+2. **RAW / JPG fallback: BGR-first resize before cvtColor**:
+   - Interchanged resize and color conversion operations: `resize(BGR)` first shrinks the 3504x2336 buffer 7.5x down to 1280x853 before running `cvtColor(BGR2RGB)`.
+   - Saves **0.68 ms/frame** on RAW decoding (8.27 -> 7.59 ms).
+   - ARW 4-thread supply capacity increased from **51.1 -> 57.5 img/s**.
+3. **Parity**:
+   - Both optimizations satisfy mathematical algebraic identities (`max diff = 0, mean diff = 0.0000`).
+   - Precision gates: **7/7 passed (0 flips, 0 drift)**.
+
+
 
