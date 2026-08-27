@@ -150,6 +150,11 @@ def _command(tmp: Path, workers: int) -> list[str]:
             "--workers", str(workers), "--force", "--dry-run"]
 
 
+RUN_TIMEOUT = 600  # per engine call; local gate runs in ~3 min per format,
+                   # CI VMs are slower — 10 min is a generous hard ceiling so a
+                   # hung engine fails loudly instead of stalling the gate
+
+
 def measure(fmt: str, workers: int, count: int,
             seed_dir: Path | None = None) -> tuple[float, float]:
     """Return (steady_ips, setup_s) for one run on ~*count* files."""
@@ -161,8 +166,13 @@ def measure(fmt: str, workers: int, count: int,
         raise RuntimeError(f"{fmt}: only {n} files (need {count})")
     t0 = time.perf_counter()
     wall_epoch0 = time.time()
-    proc = subprocess.run(_command(dataset, workers), capture_output=True,
-                          text=True, timeout=1800)
+    try:
+        proc = subprocess.run(_command(dataset, workers), capture_output=True,
+                              text=True, timeout=RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"{fmt} TIMED OUT after {RUN_TIMEOUT}s — engine hung "
+            f"(workers={workers}, files={n})")
     wall = time.perf_counter() - t0
     if proc.returncode != 0:
         raise RuntimeError(f"{fmt} failed rc={proc.returncode}: {(proc.stderr or '')[-400:]}")
@@ -246,13 +256,18 @@ def main() -> int:
             (500 if args.seed_dir else DATASETS[fmt][2] * DATASETS[fmt][3]))
         # interleaved samples, median aggregates (drift-resistant)
         samples = []
-        for _ in range(args.samples):
+        for s in range(1, args.samples + 1):
+            print(f"[measure] {fmt} sample {s}/{args.samples} "
+                  f"(workers={args.workers}, ~{n_target} files) ... ", end="",
+                  flush=True)
             try:
                 steady, setup = measure(fmt, args.workers, n_target, args.seed_dir)
             except RuntimeError as e:
+                print("FAILED")
                 print(f"[ERR] {fmt}: {e}")
                 failures.append((fmt, 0.0, 0.0))
                 continue
+            print(f"steady {steady:.1f} img/s, setup {setup:.1f}s")
             samples.append((steady, setup))
             time.sleep(2)
         if not samples:
