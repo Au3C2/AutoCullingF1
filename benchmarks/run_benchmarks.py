@@ -301,13 +301,14 @@ def main() -> int:
         print("NOTE: over the 5-minute budget — lower --count for quicker gates "
               "or re-check machine load.")
 
+    if args.no_guard:
+        # calibration mode: measure and report only, never assert baselines
+        print("\nNo guard asserted (--no-guard calibration run).")
+        return 0
     if failures:
         print("\nREGRESSION — " + ", ".join(
             f"{f} {v:.2f}<{t:.2f}" for f, v, t in failures))
         return 1
-    if args.no_guard:
-        print("\nNo guard asserted (--no-guard calibration run).")
-        return 0
     print("\nAll formats within baseline tolerance. Pass.")
     return 0
 
