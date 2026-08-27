@@ -43,7 +43,7 @@ def test_env(tmp_path):
     return tmp_path
 
 
-def run_cull(input_dir: Path, backend: str, csv_path: Path | None = None):
+def run_cull(input_dir: Path, backend: str, csv_path: Path | None = None, workers: int = 4):
     """Helper to run the cull_photos script."""
     env = os.environ.copy()
     env["CULL_BACKEND"] = backend
@@ -52,7 +52,7 @@ def run_cull(input_dir: Path, backend: str, csv_path: Path | None = None):
     cmd = [
         sys.executable, "cull_photos.py",
         "--input-dir", str(input_dir),
-        "--workers", "4",
+        "--workers", str(workers),
         "--force"
     ]
     if csv_path is not None:
@@ -97,12 +97,14 @@ def test_labels_correctness(test_env):
         f"kept images must come from the 14th: {kept}"
 
 
-def test_rating_precision_matches_baseline(test_env):
-    """Compare per-image ratings against the golden baseline (v0.1 logic)."""
-    csv_path = test_env / "scores.csv"
-    run_cull(test_env, "onnx", csv_path)
+@pytest.mark.parametrize("workers", [1, 4, 6])
+def test_rating_precision_matches_baseline(test_env, workers):
+    """Compare per-image ratings against golden baseline across worker thread counts (1, 4, 6)."""
+    csv_path = test_env / f"scores_w{workers}.csv"
+    proc = run_cull(test_env, "onnx", csv_path, workers=workers)
+    assert proc.returncode == 0, f"Script failed with stderr: {proc.stderr}"
     actual = read_scores_csv(csv_path)
 
     for name, expected in BASELINE.items():
         assert actual.get(name) == expected, \
-            f"{name}: expected rating {expected}, got {actual.get(name)}"
+            f"{name} (workers={workers}): expected rating {expected}, got {actual.get(name)}"

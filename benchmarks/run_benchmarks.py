@@ -27,17 +27,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SYS = sys.executable
 
-# (dataset dir, glob, source files to take, workers, min img/s)
-# Gate thresholds are locked against THIS script's sample sizes (60 JPG via
-# 10x replication / 24 HEIF / 20 ARW / 20 NEF), which run slower than the
-# 100-image baselines in results/performance_baseline.md because fixed
-# per-job overhead (model load, EXIF, process spawn) is amortized over fewer
-# frames. Locked 2026-08-22 after the initial run.
+# (dataset dir, glob, source files to take, default workers, default threshold)
+# Thresholds are locked per platform.
+# Windows (legacy CUDA 4070 Ti baseline locked 2026-08-22): JPG 4.2 / HEIF 3.0 / ARW 2.3 / NEF 1.9 img/s
+# macOS (Apple Silicon M4 dedicated baseline locked 2026-08-27):
+#   - JPG  : 14.0 img/s (measured 17.6 - 18.3, ~20% safety margin against system load)
+#   - HEIF :  6.0 img/s (measured  7.6 -  7.9)
+#   - ARW  :  5.0 img/s (measured  6.7 -  6.9)
+#   - NEF  :  5.5 img/s (measured  7.1 -  7.3)
+DARWIN_THRESHOLDS = {
+    "tests/test_img": 14.0,
+    "test_import":     6.0,
+    "test_arw":        5.0,
+    "test_nef":        5.5,
+}
+
+WIN_THRESHOLDS = {
+    "tests/test_img": 4.2,
+    "test_import":    3.0,
+    "test_arw":       2.3,
+    "test_nef":       1.9,
+}
+
 DATASETS = [
-    ("tests/test_img", "*.jpg", 6, 4, 4.2),    # measured 5.26 (60 imgs via 10x)
-    ("test_import",    "*.heif", 24, 4, 3.0),  # measured 3.76
-    ("test_arw",       "*.ARW", 20, 4, 2.3),   # measured 2.86
-    ("test_nef",       "*.nef", 20, 4, 1.9),   # measured 2.39
+    ("tests/test_img", "*.jpg", 6,  4),
+    ("test_import",    "*.heif", 24, 4),
+    ("test_arw",       "*.ARW", 20, 4),
+    ("test_nef",       "*.nef", 20, 4),
 ]
 
 
@@ -103,25 +119,32 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
 
+    thresholds_map = DARWIN_THRESHOLDS if sys.platform == "darwin" else WIN_THRESHOLDS
+    platform_name = "macOS Apple Silicon (Dedicated High-Precision Baseline)" if sys.platform == "darwin" else "Windows / Linux (Generic Baseline)"
+    print(f"Running Performance Gate on {platform_name} (workers={args.workers})...\n")
+
     failures = []
-    for subdir, glob, count, workers, threshold in DATASETS:
+    for subdir, glob, count, default_w in DATASETS:
         files = _available(subdir, glob, count)
         if files is None:
             print(f"[skip] {subdir}: dataset not available")
             continue
+        threshold = thresholds_map.get(subdir, 2.0)
+        workers = args.workers
         if subdir == "tests/test_img":
             ips = bench_jpg(files, workers)
         else:
             ips = bench_copies(files, workers)
         flag = "OK " if ips >= threshold else "FAIL"
-        print(f"[{flag}] {subdir}: {ips:.2f} img/s (min {threshold})")
+        margin = (ips - threshold) / threshold * 100
+        print(f"[{flag}] {subdir:<15}: {ips:5.2f} img/s (threshold: {threshold:4.1f}, margin: {margin:+5.1f}%)")
         if ips < threshold:
             failures.append((subdir, ips, threshold))
 
     if failures:
         print("\nREGRESSION — " + ", ".join(f"{d} {i:.2f}<{t}" for d, i, t in failures))
         return 1
-    print("\nAll available datasets within baseline. Pass.")
+    print("\nAll available datasets within performance baseline. Pass.")
     return 0
 
 
