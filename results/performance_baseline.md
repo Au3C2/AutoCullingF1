@@ -747,3 +747,19 @@ MB but the JPEG slice is ~6 MB): -4~5 ms/frame ARW, 1-2 days.
 Artifacts: /tmp/vt_ctypes_probe.py, /tmp/vt_session_bench.py and a patched
 benchmark script (ImageIO) exist locally; pyobjc-framework-VideoToolbox
 was installed to the venv as a probe artifact and may be removed.
+
+#### Re-trial 2026-08-27 — RAW ImageIO in-memory path (TRY 1, REVERTED)
+
+Integrated as `decode_jpeg_bytes_imageio()` in `cull/loader.py` (darwin-only,
+memory-source `CGImageSourceCreateWithData` -> thumbnail `1280`, own
+colorspace) and wired into the RAW branch before `cv2.imdecode`. No
+filesystem/tempfile round-trip — a strict improvement over the prior
+JPG file-path ImageIO attempts.
+
+Result on 2026-08-27 re-trial: RAW gates fail (`NEF 480.nef raw 2.172 vs
+2.166`, `ARW` likewise) — same `chroma upsample + YCbCr fixed-point`
+drift as path B above (max ~54). Single-thread ARW 51.7 ms vs gate 49.3
+ms in quick test but variance dominates; no reliable E2E gain worth a
+platform fork. **Reverted per sequence protocol**; code retained as a
+reference implementation behind `sys.platform != "darwin"` (no-op).
+Re-try only if YCC alignment becomes configurable.
