@@ -237,3 +237,12 @@ results/performance_baseline.md hard-decode section.
 2026-08-27 TRY 3/4: non-darwin JPG/HEIF HWAccel probing scaffolds landed in
 cull/loader.py (ffmpeg -hwaccels / pyav HWAccel), dead code on darwin (7/7
 gates pass); performance must be proven on the non-darwin runner.
+
+2026-08-27 Deep Dive & Sliding Window Pipeline (KEPT db9fa0e):
+- Mathematical throughput gap root-caused: (1) Fixed setup tax (2.2s CoreML
+  compile) limits 60-file wall to 27.3 img/s; (2) Group boundary prefetch stalls
+  on small bursts; (3) Concurrency inflation (8.9ms clean -> 15.3ms in-engine).
+- Fix: continuous sliding-window pipeline with global in-flight queue depth
+  max(8, min(16, workers*3)).
+- Result: ARW +24.6% (14.3->17.8 img/s, decode_wait -46%), HEIF +9.6%
+  (18.1->19.8 img/s), JPG +7.4% (43.2->46.4 img/s). Gates: 7/7 passed.

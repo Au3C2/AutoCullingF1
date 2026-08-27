@@ -800,3 +800,48 @@ performance claim can be made — prior teaching on `4:2:2 10-bit Rext` is
 that `NVDEC` often fails and falls back at `+110 ms`, so `+5%` and `0`
 drift must be proven there, not here. **Kept as probing scaffolds** for
 the next platform pass; memory updated per sequence protocol.
+
+### Deep Dive: Why Module Sum != End-to-End Throughput & Continuous Sliding Window Pipeline (2026-08-27, KEPT)
+
+#### 1. The Mathematical Throughput Gap & 3 Root Causes
+
+In a theoretical dual-stage pipeline:
+- **Pure Decode Supply**: 4 workers on JPG = **81.42 img/s** (12.28 ms/frame).
+- **Clean Scoring Chain**: Isolated serial latency = **8.92 ms/frame** (**112.1 fps**).
+- **Theoretical E2E Limit**: $\min(\text{supply}, \text{scoring}) = \min(81.4, 112.1) = \mathbf{81.4\text{ img/s}}$.
+
+However, measured E2E on 60 JPGs was only **18.8 img/s**, and on 300 JPGs was **43.2 img/s**. Thorough instrumentation isolated three root causes:
+
+1. **Fixed Setup Tax (2200 ms fixed denominator)**:
+   - `scan()` = 91.7 ms, `load_models()` = 2108.3 ms (CoreML compile & ANE topology graph warmup).
+   - Fixed tax = 2.20 s. For small sample sizes, this acts as a hard mathematical speed ceiling:
+     - 60 frames: $60 / 2.20\text{s} = \mathbf{27.3\text{ img/s}}$ maximum possible even if frame processing cost 0 ms.
+     - 300 frames: $300 / (2.20 + 300 \times 0.015) \approx \mathbf{44.7\text{ img/s}}$ maximum possible.
+     - 3000 frames: fixed tax amortizes to 0.7 ms/frame (negligible).
+
+2. **Pipeline Stalls at Group Boundaries**:
+   - The prior `next_futs` coarse prefetch submitted only the *next burst group*.
+   - When a burst group had few frames (1-2 isolated frames), the consumer finished in 15 ms while the next 20-frame group had only just started decoding (45 ms single decode), forcing the consumer thread to block hard on `futs[0].result()`.
+
+3. **Concurrency Inflation & GIL/Cache Competition (+71.5%)**:
+   - Standalone clean scoring = 8.92 ms/frame. In-engine scoring = 15.30 ms/frame.
+   - 4 decode threads concurrently allocating/freeing 3.2 MB numpy arrays evicted L1/L2 caches and contended for memory bandwidth and Python GIL during Future synchronization.
+
+#### 2. Solution: Continuous Sliding Window Pipeline (`db9fa0e`)
+
+Replaced coarse per-group prefetch with a continuous sliding window across the entire flattened sequence of frames:
+- An in-flight Queue of depth $\max(8, \min(16, \text{workers} \times 3))$ is continuously kept full.
+- As each frame is popped and scored by `_process_group_internal`, the next frame is immediately submitted.
+- Group boundaries no longer induce pipeline bubbles; decode workers remain 100% saturated.
+
+#### 3. Measured Results Across Datasets (workers=4, dry-run)
+
+| Dataset / Scale | Before (`839ad11`) | After Sliding Window (`db9fa0e`) | Speedup / Decode-Wait Impact |
+|---|---|---|---|
+| **ARW (80 files)** | 14.28 img/s | **17.79 img/s** | **+24.6%** (decode_wait 4904 -> 2655 ms, -46%) |
+| **HEIF (72 files)** | 18.06 img/s | **19.79 img/s** | **+9.6%** (decode_wait 3166 -> 1993 ms, -37%) |
+| **JPG (300 files)** | 43.19 img/s | **46.37 img/s** | **+7.4%** (steady-state 54.5 img/s excluding setup) |
+| **NEF (80 files)** | 22.38 img/s | **22.48 img/s** | (decode_wait 2764 -> 1968 ms, -29%) |
+| **Gate Protocol (JPG/HEIF/ARW/NEF)** | 15.35 / 7.04 / 6.02 / 6.99 | **18.08 / 7.86 / 6.74 / 7.15** | All above min thresholds (4.2 / 3.0 / 2.3 / 1.9) |
+| **Precision Gates** | 7/7 passed | **7/7 passed (0 flips, 0 drift)** | 100% Bit-identical |
+
