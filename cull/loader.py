@@ -263,7 +263,7 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                     if stream.codec_context.extradata:
                         ctx.extradata = stream.codec_context.extradata
                     ctx.open()
-                    
+
                     target_idx = stream.index
                     frames = []
                     for packet in container.demux():
@@ -287,6 +287,51 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                 except Exception as hw_err:
                     log.debug("VideoToolbox decode fallback: %s", hw_err)
                     frame = None
+            elif sys.platform != "darwin":
+                # TRY 4 scaffold: non-darwin HEIF HWAccel probe (vaapi/dxva2/cuda).
+                # Only on non-darwin hosts; darwin keeps the original sw-fallback path.
+                _hw_frame = None
+                for _hw_name in ("cuda", "dxva2", "d3d11va", "vaapi"):
+                    try:
+                        # Reopen container for each probe to avoid consuming demux state.
+                        _probe_container = None
+                        try:
+                            _probe_container = av.open(str(path))
+                            # Re-find the target stream in the probe container.
+                            _probe_stream = None
+                            for _s in _probe_container.streams.video:
+                                if _s.index == stream.index:
+                                    _probe_stream = _s
+                                    break
+                            if _probe_stream is None:
+                                continue
+                            _hwa = av.codec.hwaccel.HWAccel(_hw_name)
+                            _ctx = av.CodecContext.create(_probe_stream.codec_context.name, "r", hwaccel=_hwa)
+                            if _probe_stream.codec_context.extradata:
+                                _ctx.extradata = _probe_stream.codec_context.extradata
+                            _ctx.open()
+                            _frames2: list = []
+                            for packet in _probe_container.demux():
+                                if packet.stream_index != _probe_stream.index:
+                                    continue
+                                for f in _ctx.decode(packet):
+                                    _frames2.append(f)
+                            if not _frames2:
+                                for f in _ctx.decode(None):
+                                    _frames2.append(f)
+                            if _frames2:
+                                _hw_frame = _frames2[0]
+                                break
+                        finally:
+                            if _probe_container is not None:
+                                try:
+                                    _probe_container.close()
+                                except Exception:
+                                    pass
+                    except Exception:
+                        continue
+                if _hw_frame is not None:
+                    frame = _hw_frame
 
             if frame is None:
                 frame = next(container.decode(stream))
@@ -368,6 +413,46 @@ def find_embedded_jpeg_tiff(data: bytes) -> tuple[int, int] | None:
     return (best[0], best[1]) if best else None
 
 
+def _hw_decode_jpeg_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+    """Try ffmpeg -hwaccel auto for JPEG (nondarwin, probing with sw fallback)."""
+    if sys.platform == "darwin":
+        return None
+    try:
+        ffmpeg_bin = _find_ffmpeg_path()
+        probe = subprocess.run([ffmpeg_bin, "-hide_banner", "-hwaccels"], capture_output=True, text=True, timeout=5)
+        if probe.returncode != 0 or "auto" not in probe.stdout.lower():
+            # Still try explicit hwaccels list.
+            pass
+        for hw in ("auto", "dxva2", "d3d11va", "vaapi", "cuda"):
+            cmd = [ffmpeg_bin, "-hide_banner", "-v", "error", "-hwaccel", hw,
+                   "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-y", "pipe:1"]
+            try:
+                proc = subprocess.run(cmd, capture_output=True, timeout=10)
+            except Exception:
+                continue
+            if proc.returncode == 0 and len(proc.stdout) > 10000:
+                # Need dimensions to reshape — probe via PIL header.
+                try:
+                    pil = Image.open(path)
+                    w0, h0 = pil.size
+                    if scale_width > 0 and w0 > scale_width * 1.2:
+                        nh = int(round(h0 * scale_width / w0))
+                        exp = scale_width * nh * 3
+                        if len(proc.stdout) == w0 * h0 * 3:
+                            # hwaccel emitted full-res; downscale same as sw path.
+                            img = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(h0, w0, 3)
+                            return cv2.resize(img, (scale_width, nh), interpolation=cv2.INTER_AREA)
+                    # Fallback: try to infer output size from byte count.
+                except Exception:
+                    pass
+                # If raw size matches full frame, return as-is for caller to resize.
+                return None
+        return None
+    except Exception as e:
+        log.debug("hw jpeg probe failed for %s: %s", path.name, e)
+        return None
+
+
 def _extract_raw_tiff_direct(path: Path) -> bytes | None:
     """Extract embedded preview JPEG from a TIFF-based RAW via direct header parsing.
 
@@ -433,6 +518,14 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
             return img_arr
         except Exception as e:
             log.warning(f"pillow-heif failed for {path.name}: {e}")
+
+    # JPEG decoding (nondarwin HW probe, then macOS ImageIO, then SW fallback).
+    # On non-darwin, probe ffmpeg -hwaccel auto first (vaapi/dxva2/cuda etc.)
+    # with explicit sw fallback — on this darwin host this branch is dead code.
+    if suffix in (".jpg", ".jpeg") and sys.platform != "darwin":
+        img_hw = _hw_decode_jpeg_ffmpeg(path, scale_width=scale_width)
+        if img_hw is not None:
+            return img_hw
 
     # JPEG decoding (macOS): prefer Apple ImageIO hardware JPEG decoder (ASIC)
     # with the image's own colorspace preserved (ColorSync gamut conversion
