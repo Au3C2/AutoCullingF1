@@ -905,5 +905,20 @@ Measured on realistic ~500-image datasets per format, strictly cutting out all s
    - Both optimizations satisfy mathematical algebraic identities (`max diff = 0, mean diff = 0.0000`).
    - Precision gates: **7/7 passed (0 flips, 0 drift)**.
 
+#### 6. Concurrency Scaling: workers=4 vs workers=6 on Apple M4 10-Core (2026-08-27)
+
+Tested on ~500 images per format to measure the effect of matching M4's 6 E-Cores (marked `QOS_CLASS_UTILITY`)
+with `workers=6` while consumer runs on P-Cores:
+
+| Format | File Count | Steady E2E (workers=4) | **Steady E2E (workers=6)** | **Steady Gain %** | Total E2E (w=4 -> w=6) |
+|---|---|---|---|---|---|
+| **ARW** | **500** | 47.24 img/s (21.17 ms) | **55.06 img/s (18.16 ms)** | **+16.6%** | 28.1 -> **30.6 img/s** |
+| **JPG** | **504** | 83.74 img/s (11.94 ms) | **87.42 img/s (11.44 ms)** | **+4.4%** | 42.8 -> **45.6 img/s** |
+| **HEIF** | **504** | 67.32 img/s (14.86 ms) | **69.58 img/s (14.37 ms)** | **+3.4%** | 40.3 -> **40.5 img/s** |
+| **NEF** | **500** | 70.42 img/s (14.20 ms) | **70.38 img/s (14.21 ms)** | **-0.0%** | 39.3 -> **39.4 img/s** |
+
+Conclusion: For decode-bound formats (especially 33MP ARW), `workers=6` fully unlocks M4's 6 efficiency cores, boosting pure steady-state throughput by **+16.6%** with zero regression on other formats. All 7/7 precision gates remain bit-identical.
+
+
 
 
