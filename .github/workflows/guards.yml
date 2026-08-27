@@ -45,15 +45,20 @@ jobs:
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
-      - name: Measure seed performance baselines
-        timeout-minutes: 30
+      - name: Calibrate source seed performance
+        timeout-minutes: 40
         run: |
           mkdir -p build
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --count ${{ inputs.count }} \
             --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_source.json --no-prewarm
-          .venv/bin/python packaging/build.py --onedir
+      - name: Build onedir
+        timeout-minutes: 10
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Calibrate packaged seed performance
+        timeout-minutes: 40
+        run: |
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --count ${{ inputs.count }} \
