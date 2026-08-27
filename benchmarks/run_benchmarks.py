@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
-"""benchmarks/run_benchmarks.py — performance gate (regression gate for optimizations).
+"""benchmarks/run_benchmarks.py — performance regression gate (macOS).
 
-Runs the 4-dataset protocol (JPG ×60 / HEIF ×24 / ARW ×20 / NEF ×20) at
-``--workers 4 --dry-run`` and asserts end-to-end throughput stays above the
-locked baselines. Exit code 0 = pass, 1 = regression.
+Splits the gate into two independent measurements per format:
 
-Baselines locked 2026-08-22 (master@CUDA, RTX 4070 Ti): JPG 5.9, HEIF 6.4,
-ARW 4.4, NEF 3.3 img/s. Thresholds leave noise headroom (~25% below).
+  - **setup tax**: wall time from process start to ``[90%] Analyzing
+    images...`` (binary startup, code-signature verification on first run,
+    imports, model loading, EXIF scan + burst grouping). Reported and
+    guarded with a wide ceiling (2x baseline) — it is machine/platform
+    state, not pipeline throughput.
+  - **format steady-state E2E**: files / (t[95%] Saving metadata — t[90%]),
+    i.e. the pure processing window with all setup excluded. This is the
+    guarded metric, locked at ``baseline x 0.9`` (10% downward tolerance).
+
+Protocol (locked 2026-08-27 on Apple M4): ~500 files per format built by
+hard-linking the real-camera sources, ``--dry-run --force --workers N``,
+two measurements per (format, workers) interleaved, baselines taken from
+idle-machine interleaved runs. Packaged (onedir) runs prewarm once so the
+kernel code-signature cache is warm (the first-run tax is a platform
+property, not a regression signal).
 
 Usage:
-    python benchmarks/run_benchmarks.py            # all available datasets
-    python benchmarks/run_benchmarks.py --verbose  # print per-dataset details
+    python benchmarks/run_benchmarks.py                # source CLI, workers=4
+    CULL_EXE=dist/.../auto_cull_v0.1_macos_arm64 \
+        python benchmarks/run_benchmarks.py --workers 6
+    python benchmarks/run_benchmarks.py --count 100    # quick smoke (stable
+                                                       # numbers need ~500)
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -22,129 +37,263 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SYS = sys.executable
 
-# (dataset dir, glob, source files to take, default workers, default threshold)
-# Thresholds are locked per platform.
-# Windows (legacy CUDA 4070 Ti baseline locked 2026-08-22): JPG 4.2 / HEIF 3.0 / ARW 2.3 / NEF 1.9 img/s
-# macOS (Apple Silicon M4 dedicated baseline locked 2026-08-27):
-#   - JPG  : 14.0 img/s (measured 17.6 - 18.3, ~20% safety margin against system load)
-#   - HEIF :  6.0 img/s (measured  7.6 -  7.9)
-#   - ARW  :  5.0 img/s (measured  6.7 -  6.9)
-#   - NEF  :  5.5 img/s (measured  7.1 -  7.3)
-DARWIN_THRESHOLDS = {
-    "tests/test_img": 14.0,
-    "test_import":     6.0,
-    "test_arw":        5.0,
-    "test_nef":        5.5,
+# (src_dir, glob, n_sources, copies) — 500-file scale per format.
+DATASETS = {
+    "JPG":  ("tests/test_img", "*.jpg", 6, 84),   # 504
+    "HEIF": ("test_import", "*.heif", 24, 21),    # 504
+    "ARW":  ("test_arw", "*.ARW", 20, 25),        # 500
+    "NEF":  ("test_nef", "*.nef", 20, 25),        # 500
 }
 
-WIN_THRESHOLDS = {
-    "tests/test_img": 4.2,
-    "test_import":    3.0,
-    "test_arw":       2.3,
-    "test_nef":       1.9,
+# Steady-state baselines (img/s) locked 2026-08-27 on Apple M4, workers=4,
+# idle-machine interleaved protocol (see run_benchmarks results in
+# results/performance_baseline.md "500-Image Production Steady-State Matrix"
+# and the packaging section of AGENTS.md). Gate = baseline * 0.9.
+STEADY_BASELINES = {
+    "source": {"JPG": 83.5, "HEIF": 65.5, "ARW": 49.9, "NEF": 70.0},
+    "onedir": {"JPG": 82.4, "HEIF": 62.6, "ARW": 48.7, "NEF": 67.9},
 }
 
-DATASETS = [
-    ("tests/test_img", "*.jpg", 6,  4),
-    ("test_import",    "*.heif", 24, 4),
-    ("test_arw",       "*.ARW", 20, 4),
-    ("test_nef",       "*.nef", 20, 4),
-]
+# Setup-tax ceilings (seconds): generous 2x of the locked baseline — guards
+# gross regressions (e.g. a 30s import) without flagging platform noise.
+SETUP_CEILINGS = {
+    "source": {"JPG": 8.0, "HEIF": 8.0, "ARW": 8.0, "NEF": 8.0},
+    "onedir": {"JPG": 12.0, "HEIF": 12.0, "ARW": 12.0, "NEF": 12.0},
+}
+
+TOLERANCE = 0.90  # steady-state floor (local default; CI may widen via --tolerance)
 
 
-def _available(subdir: str, glob: str, count: int) -> list[Path] | None:
-    base = ROOT / subdir
-    if not base.is_dir():
-        return None
-    files = sorted(base.glob(glob))[:count]
-    if len(files) < count:
-        return None
-    return files
+def _load_baselines(path: Path | None) -> dict[str, dict[str, float]]:
+    """Return a {pipeline: {fmt: baseline}} map.
+
+    Without *path*, the built-in local baselines (multi-source protocol) are
+    used. A JSON file with the shape {"JPG": {...}, ...} replaces the whole
+    table — the CI workflow calibrates its own runner-specific baselines on
+    the seed protocol and pins them here.
+    """
+    if path is None:
+        return dict(STEADY_BASELINES)
+    data = json.loads(path.read_text())
+    out = {}
+    for pipe in ("source", "onedir"):
+        out[pipe] = {str(f): float(data[pipe][f]) for f in data.get(pipe, {})}
+    return out
 
 
-def bench_jpg(files: list[Path], workers: int) -> float:
-    """160/120-file JPG bench via 10x copy (matches precision-gate throughput)."""
-    tmp = Path(tempfile.mkdtemp(prefix="bench_jpg_"))
+def _exe_name() -> str:
+    exe = os.environ.get("CULL_EXE")
+    return "onedir" if exe else "source"
+
+
+TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\s")
+PCT_RE = re.compile(r"\[(\d+)%\]\s+(.*)$")
+
+
+def _parse_log(log_path: Path) -> dict[int, float]:
+    marks: dict[int, float] = {}
+    for line in log_path.read_text(errors="replace").splitlines():
+        m = TS_RE.match(line)
+        if not m:
+            continue
+        pm = PCT_RE.search(line)
+        if pm:
+            ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S,%f")
+            marks[int(pm.group(1))] = ts.timestamp()
+    return marks
+
+
+def build_dataset(fmt: str, count: int, seed_dir: Path | None = None) -> Path:
+    """Stage a (hard-)linked dataset of ~*count* files.
+
+    Sources come from the repo datasets (full 6/24/20/20-source sets) unless
+    *seed_dir* is given — the CI protocol ships ONE seed file per format and
+    replicates it (``copies = count``) on the runner, so datasets stay out of
+    the git repo.
+    """
+    subdir, glob, n_src, _copies = DATASETS[fmt]
+    if seed_dir is not None:
+        n_src = 1
+        copies = count
+    else:
+        copies = max(1, -(-count // n_src))  # ceil
+    n_total = n_src * copies
+    tag = f"{fmt}_{n_total}" + (f"_seed" if seed_dir is not None else "")
+    stage = ROOT / "build" / "bench_datasets" / tag
+    if stage.is_dir() and len(list(stage.iterdir())) >= n_total:
+        return stage
+    stage.mkdir(parents=True, exist_ok=True)
+    src_base = seed_dir if seed_dir is not None else ROOT / subdir
+    srcs = sorted(src_base.glob(glob))[:n_src]
+    if len(srcs) < n_src:
+        raise RuntimeError(f"{fmt}: found {len(srcs)} seed files in {src_base}")
+    for s in srcs:
+        for i in range(copies):
+            tgt = stage / f"{s.stem}_{i:03d}{s.suffix}"
+            if not tgt.exists() and not tgt.is_symlink():
+                os.link(s, tgt)
+    return stage
+
+
+def _command(tmp: Path, workers: int) -> list[str]:
+    exe = os.environ.get("CULL_EXE")
+    if exe:
+        return [exe, "--input-dir", str(tmp), "--workers", str(workers),
+                "--force", "--dry-run"]
+    return [SYS, str(ROOT / "cull_photos.py"), "--input-dir", str(tmp),
+            "--workers", str(workers), "--force", "--dry-run"]
+
+
+def measure(fmt: str, workers: int, count: int,
+            seed_dir: Path | None = None) -> tuple[float, float]:
+    """Return (steady_ips, setup_s) for one run on ~*count* files."""
+    dataset = build_dataset(fmt, count, seed_dir)
+    files = sorted(dataset.glob(DATASETS[fmt][1]))
+    n = len(files)
+    if n < count:
+        # dataset used by the earlier step may not have enough unique copies
+        raise RuntimeError(f"{fmt}: only {n} files (need {count})")
+    t0 = time.perf_counter()
+    wall_epoch0 = time.time()
+    proc = subprocess.run(_command(dataset, workers), capture_output=True,
+                          text=True, timeout=1800)
+    wall = time.perf_counter() - t0
+    if proc.returncode != 0:
+        raise RuntimeError(f"{fmt} failed rc={proc.returncode}: {(proc.stderr or '')[-400:]}")
+    logs = sorted((dataset / "logs").glob("cull_*.log"),
+                  key=lambda p: p.stat().st_mtime)
+    marks = _parse_log(logs[-1]) if logs else {}
+    if 90 not in marks or 95 not in marks:
+        raise RuntimeError(f"{fmt}: no [90%]/[95%] marks (log files={len(logs)})")
+    steady = n / (marks[95] - marks[90])
+    return steady, marks[90] - wall_epoch0
+
+
+def _prewarm(workers: int, seed_dir: Path | None = None) -> None:
+    exe = os.environ.get("CULL_EXE")
+    if not exe:
+        return
+    picks = [sorted(build_dataset(fmt, DATASETS[fmt][2] * DATASETS[fmt][3], seed_dir)
+                    .glob(DATASETS[fmt][1]))[0]
+             for fmt in DATASETS]
+    tmp = Path(tempfile.mkdtemp(prefix="bench_prewarm_"))
     try:
-        for i in range(10):
-            for p in files:
-                shutil.copy(p, tmp / f"{p.stem}_{i:02d}{p.suffix}")
-        n = len(list(tmp.iterdir()))
-        t0 = time.perf_counter()
-        proc = subprocess.run(
-            [SYS, str(ROOT / "cull_photos.py"), "--input-dir", str(tmp),
-             "--workers", str(workers), "--force", "--dry-run"],
-            capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT)},
-            timeout=600,
-        )
-        dt = time.perf_counter() - t0
-        if proc.returncode != 0:
-            raise RuntimeError((proc.stderr or "")[-400:])
-        return n / dt
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def bench_copies(files: list[Path], workers: int) -> float:
-    """Direct-dir bench for RAW/HEIF sets (copy subset, no replication)."""
-    tmp = Path(tempfile.mkdtemp(prefix="bench_raw_"))
-    try:
-        for p in files:
+        for p in picks[:4]:
             shutil.copy(p, tmp / p.name)
-        n = len(list(tmp.iterdir()))
-        t0 = time.perf_counter()
-        proc = subprocess.run(
-            [SYS, str(ROOT / "cull_photos.py"), "--input-dir", str(tmp),
-             "--workers", str(workers), "--force", "--dry-run"],
-            capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT)},
-            timeout=600,
-        )
-        dt = time.perf_counter() - t0
-        if proc.returncode != 0:
-            raise RuntimeError((proc.stderr or "")[-400:])
-        return n / dt
+        subprocess.run([exe, "--input-dir", str(tmp), "--workers", str(workers),
+                        "--force", "--dry-run"], capture_output=True, text=True,
+                       env={**os.environ, "PYTHONPATH": str(ROOT)}, timeout=600)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--workers", type=int, default=4)
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--count", type=int, default=None,
+                    help="files per dataset (default: full 500-file scale)")
+    ap.add_argument("--format", choices=list(DATASETS) + ["ALL"], default="ALL")
+    ap.add_argument("--no-prewarm", action="store_true",
+                    help="skip packaged-binary dylib/codesign warm-up")
+    ap.add_argument("--cooldown", type=int, default=20,
+                    help="seconds of idle between formats (thermal drift guard; "
+                         "keeps the full 4-format gate under ~5 minutes)")
+    ap.add_argument("--samples", type=int, default=3,
+                    help="interleaved measurements per format; median is used "
+                         "(thermal-drift resistant; CI uses 3-5)")
+    ap.add_argument("--seed-dir", type=Path, default=None,
+                    help="CI protocol: replicate ONE file per format from this "
+                         "directory instead of the full local datasets")
+    ap.add_argument("--tolerance", type=float, default=TOLERANCE,
+                    help="steady-state floor as a fraction of baseline "
+                         "(CI runners may need 0.80)")
+    ap.add_argument("--baseline-file", type=Path, default=None,
+                    help="JSON calibrating per-pipeline baselines on this runner "
+                         "(produced by the CI baseline-calibration job)")
+    ap.add_argument("--no-guard", action="store_true",
+                    help="measure and print values only — do not assert against "
+                         "baselines (used by the CI calibration job)")
+    ap.add_argument("--json", type=Path, default=None, dest="json_out",
+                    help="write measured values to a JSON file")
+    args = ap.parse_args()
 
-    thresholds_map = DARWIN_THRESHOLDS if sys.platform == "darwin" else WIN_THRESHOLDS
-    platform_name = "macOS Apple Silicon (Dedicated High-Precision Baseline)" if sys.platform == "darwin" else "Windows / Linux (Generic Baseline)"
-    print(f"Running Performance Gate on {platform_name} (workers={args.workers})...\n")
+    who = _exe_name()
+    if who == "onedir" and not args.no_prewarm:
+        _prewarm(args.workers, args.seed_dir)
 
+    base_table = _load_baselines(args.baseline_file)
+    base = base_table[who]
+    ceilings = SETUP_CEILINGS[who]
+    fmt_list = [args.format] if args.format != "ALL" else list(DATASETS)
     failures = []
-    for subdir, glob, count, default_w in DATASETS:
-        files = _available(subdir, glob, count)
-        if files is None:
-            print(f"[skip] {subdir}: dataset not available")
+    results = {}
+
+    print(f"Performance gate — {who} pipeline, workers={args.workers} "
+          f"(steady floor {int(args.tolerance*100)}% of baseline, "
+          f"{args.samples} samples/format, median)\n")
+    t_gate0 = time.perf_counter()
+    for idx, fmt in enumerate(fmt_list):
+        if idx:
+            time.sleep(args.cooldown)
+        n_target = args.count or (
+            (500 if args.seed_dir else DATASETS[fmt][2] * DATASETS[fmt][3]))
+        # interleaved samples, median aggregates (drift-resistant)
+        samples = []
+        for _ in range(args.samples):
+            try:
+                steady, setup = measure(fmt, args.workers, n_target, args.seed_dir)
+            except RuntimeError as e:
+                print(f"[ERR] {fmt}: {e}")
+                failures.append((fmt, 0.0, 0.0))
+                continue
+            samples.append((steady, setup))
+            time.sleep(2)
+        if not samples:
             continue
-        threshold = thresholds_map.get(subdir, 2.0)
-        workers = args.workers
-        if subdir == "tests/test_img":
-            ips = bench_jpg(files, workers)
-        else:
-            ips = bench_copies(files, workers)
-        flag = "OK " if ips >= threshold else "FAIL"
-        margin = (ips - threshold) / threshold * 100
-        print(f"[{flag}] {subdir:<15}: {ips:5.2f} img/s (threshold: {threshold:4.1f}, margin: {margin:+5.1f}%)")
-        if ips < threshold:
-            failures.append((subdir, ips, threshold))
+        samples.sort()
+        steady, setup = samples[len(samples) // 2]
+        results[fmt] = {"steady": round(steady, 2), "setup": round(setup, 2),
+                        "samples": [round(s, 2) for s, _ in samples]}
+        floor = base[fmt] * args.tolerance
+        flag = "OK " if steady >= floor else "FAIL"
+        if steady < floor:
+            failures.append((fmt, steady, floor))
+        print(f"[{flag}] {fmt:<4} steady {steady:6.2f} img/s "
+              f"(floor {floor:5.2f}) | setup {setup:6.2f}s "
+              f"(ceiling {ceilings[fmt]:.1f}s)")
+        if setup > ceilings[fmt]:
+            failures.append((fmt, -setup, -ceilings[fmt]))
+            print(f"      setup tax above ceiling!")
+
+    if args.json_out:
+        args.json_out.write_text(json.dumps(
+            {"pipeline": who, "workers": args.workers,
+             "count": args.count or (500 if args.seed_dir else
+                                max(DATASETS[f][2]*DATASETS[f][3] for f in DATASETS)),
+             "wall_s": round(time.perf_counter() - t_gate0, 1),
+             "results": results}, indent=2))
+
+    gate_s = time.perf_counter() - t_gate0
+    print(f"\nGate wall time: {gate_s:.0f}s ({gate_s/60:.1f} min)")
+    if gate_s > 300:
+        print("NOTE: over the 5-minute budget — lower --count for quicker gates "
+              "or re-check machine load.")
 
     if failures:
-        print("\nREGRESSION — " + ", ".join(f"{d} {i:.2f}<{t}" for d, i, t in failures))
+        print("\nREGRESSION — " + ", ".join(
+            f"{f} {v:.2f}<{t:.2f}" for f, v, t in failures))
         return 1
-    print("\nAll available datasets within performance baseline. Pass.")
+    if args.no_guard:
+        print("\nNo guard asserted (--no-guard calibration run).")
+        return 0
+    print("\nAll formats within baseline tolerance. Pass.")
     return 0
 
 

@@ -28,7 +28,14 @@ _p4_classifier = None
 
 class P4Classifier:
     def __init__(self, model_path: str = "models/p4_car_model.onnx"):
-        self.model_path = Path(model_path)
+        base = Path(model_path)
+        if not base.exists():
+            # Packaged single-file binaries resolve model files from the
+            # PyInstaller bundle (_MEIPASS); source runs keep the CWD path.
+            bundled = get_resource_path(model_path)
+            if bundled.exists():
+                base = bundled
+        self.model_path = base
         try:
             import onnxruntime as ort
             import os as _os
@@ -43,8 +50,14 @@ class P4Classifier:
             # the CPU EP path.
             use_ane = _os.environ.get("CULL_P4_NATIVE", "1") != "0"
             if sys.platform == "darwin":
+                from cull.detector import _has_concrete_input_shape as _frozen
                 static_ane = self.model_path.with_name(self.model_path.stem + "_static_ane.onnx")
-                if use_ane and static_ane.exists():
+                if use_ane and not static_ane.exists():
+                    # Packaged binaries ship the frozen graph under the base
+                    # name; treat it as the ANE graph when its input dims are
+                    # concrete (shape probe, not the CoreML partition count).
+                    static_ane = self.model_path if _frozen(self.model_path, ort.SessionOptions()) else None
+                if use_ane and static_ane is not None and static_ane.exists():
                     # Single-partition graph (HardSigmoid/HardSwish unfolded to
                     # Clip/Mul/Add — exact identities): ALL 216/216 nodes run in
                     # ONE CoreML partition on the ANE, 0.4-1.2 ms standalone vs

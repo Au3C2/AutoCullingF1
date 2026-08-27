@@ -18,6 +18,23 @@ import csv
 sys.path.append(os.getcwd())
 
 
+def _cull_command(tmp: str, csv_path: str, workers: int) -> list[str]:
+    """Command line for the culling pipeline.
+
+    Honors the CULL_EXE env var (packaged single-file binary from
+    packaging/build.py); without it the source CLI under the current
+    interpreter is used. Source runs keep PYTHONPATH so the ``cull`` package
+    resolves from the repo.
+    """
+    exe = os.environ.get("CULL_EXE")
+    if exe:
+        return [exe, "--input-dir", tmp, "--workers", str(workers), "--force",
+                "--dry-run", "--dump-scores", str(csv_path)]
+    return [sys.executable, "cull_photos.py",
+            "--input-dir", tmp, "--workers", str(workers), "--force",
+            "--dry-run", "--dump-scores", str(csv_path)]
+
+
 def run_cull_on_copies(src_files: list[Path], workers: int = 4) -> dict[str, tuple[int, float]]:
     """Copy *src_files* to a temp dir, run the CLI, return filename -> (rating, raw_score).
 
@@ -38,9 +55,7 @@ def run_cull_on_copies(src_files: list[Path], workers: int = 4) -> dict[str, tup
         env = os.environ.copy()
         env["PYTHONPATH"] = os.getcwd()
         proc = subprocess.run(
-            [sys.executable, "cull_photos.py",
-             "--input-dir", tmp, "--workers", str(workers), "--force",
-             "--dry-run", "--dump-scores", str(csv_path)],
+            _cull_command(tmp, str(csv_path), workers),
             capture_output=True, text=True, env=env, timeout=600,
         )
         if proc.returncode != 0:

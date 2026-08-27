@@ -244,3 +244,82 @@ gates pass); performance must be proven on the non-darwin runner.
 - tests/test_cull.py parameterized across workers=(1, 4, 6) for concurrency determinism.
 - All 9/9 precision gates and 4/4 performance gates strictly green.
 
+2026-08-27 perf gate REWORK: split into setup tax + per-format steady-state —
+- run_benchmarks.py now measures, per format on the ~500-file protocol
+  (JPG 504 / HEIF 504 / ARW 500 / NEF 500, hard-linked, --dry-run):
+  - setup tax (process start -> [90%] Analyzing, guarded by a wide ceiling),
+  - steady E2E (files / [90%]->[95%] window, guarded at baseline x 0.90).
+  Baselines locked 2026-08-27 on Apple M4 (idle, interleaved, cooldown 20s
+  between formats; full 4-format gate ~3.1 min):
+  source: JPG 83.5 / HEIF 65.5 / ARW 49.9 / NEF 70.0 img/s;
+  onedir: JPG 82.4 / HEIF 62.6 / ARW 48.7 / NEF 67.9 img/s.
+  Setup ceilings: source 8.0s, onedir 12.0s (2x headroom).
+- Heat/thermal drift is real on this fanless M4 (continuous full-load runs
+  drop steady by 10-30%: measured JPG 82->61, NEF 68->58). ALWAYS interleave
+  and cooldown; never trust a serial long batch for baselines.
+- Unified guard entrypoint: `python packaging/guards.py` runs 5 guards —
+  source precision (9 gates) -> source perf -> packaging build (onedir) ->
+  packaged precision (4 gates) -> packaged perf. Full suite ~12-15 min.
+  Requires the ~1.3 GB camera datasets (test_import/test_arw/test_nef) present.
+
+
+## Packaging (single-file PyInstaller, macOS-first)
+
+- Pipeline: `python packaging/build.py` (onefile, copies to root) / additional
+  `--onedir` (directory form). One cross-platform spec `cull_photos.spec`
+  branches on the platform: darwin ships the FROZEN onnxsim graphs
+  (f1_yolov8n_static 640 / yolov8n_static 640 / p4_car_model_static_ane 224)
+  UNDER THE BASE NAMES → the packaged runtime needs no `*_static` sibling;
+  Windows keeps dynamic exports + self-contained exiftool.exe. Exiftool on
+  macOS runs the bundled perl script via system perl (`/usr/bin/perl` ships
+  with macOS); bundled `external/exiftool/lib` in the archive.
+- Source changes required for standalone resolution (both zero-drift in the
+  source pipeline; 9/9 source gates stay green):
+  1. `cull/detector.py` `_has_concrete_input_shape()` — LiteYOLO darwin
+     branch falls back to a shape probe (fully-concrete input dims) when no
+     `*_static` sibling exists, so the packaged frozen models get the same
+     pinned CoreML options (RequireStaticInputShapes=1, CPUAndNeuralEngine).
+  2. `cull/p4_classifier.py` — model path falls back to `_MEIPASS` via
+     `get_resource_path`; same shape probe substitutes the `_static_ane`
+     detection for packed (single-file) bundles.
+- Test harness: `CULL_EXE=<binary>` makes `tests/test_package.py`,
+  `tests/score_gate.py` (HEIF/ARW/NEF gates) and `benchmarks/run_benchmarks.py`
+  run the packaged executable instead of the source CLI. `run_benchmarks.py`
+  prewarms the binary's dylib closure (`--no-prewarm` to disable).
+- macOS cold-start signature tax: the kernel verifies the adhoc code
+  signature of EVERY bundled Mach-O on first load (inode-keyed cache).
+  The onefile form extracts to a fresh temp dir per run → ~15-25 s tax
+  per launch (JPG gate 60 imgs → ~2.5 img/s measured). The onedir form has
+  stable inodes → tax paid once per boot, then source-identical throughput.
+  Perf gate verification runs against the onedir artifact with prewarm:
+  JPG 17.6 / HEIF 7.7 / ARW 6.7 / NEF 6.9 img/s (4/4 green, 2026-08-27).
+- Packaged-binary precision gates: 4/4 green on BOTH forms (JPG 6 + HEIF 24
+  + ARW 20 + NEF 20, ratings and raw_score ±0.005 identical to baseline).
+  Binary size: onefile 160.9 MiB (zlib CArchive): cv2 48 + models 33 +
+  av 18 + onnxruntime 16 + exiftool 14 + scipy 12 + rest ≈ 11 MiB.
+  scipy.fft is NOT excludable (its __init__ hard-imports _fftlog →
+  scipy.special → scipy.linalg); reverting to cv2.dft would cost ~8.7x the
+  per-frame FFT time (0.34 → 2.95 ms on M4) for ~12 MiB — rejected.
+- cv2 MUST stay opencv-python 5.0.0.93 (full): the headless build flips the
+  knife-edge file IMG_20260314_160318_240.jpg (3→-1 at workers=4/6) — keep
+  the .venv untouched by pip swaps; a mixed cv2 directory also flips it.
+
+## CI (GitHub Actions, macOS) — three guarded concerns
+
+- workflow `.github/workflows/guards.yml`; entry `packaging/ci_guard.py`.
+  Seeds: ci_sample/ = ONE file per format (~70MB total, .gitignore
+  carve-out), replicated to ~500 files at runtime — no camera datasets in
+  the repo.
+- Precision (no calibration): `ci_seed_precision.py --compare` scores the
+  same replicated dataset with source + packaged binary and asserts
+  per-file raw_score equality (±0.002 tolerance — source alone jitters
+  ±0.0004 run-to-run from ANE/P4) and rating-multiset equality. Per-copy
+  ratings are NOT uniform (identical EXIF → one burst → Top-N downgrades),
+  which is why the gate is consistency-based.
+- Packaging flow: `build.py --onedir` + artifact check (always runs).
+- Performance: `run_benchmarks.py --seed-dir ci_sample
+  --baseline-file ci_config.json --tolerance 0.85`. GitHub-hosted macOS
+  runners have NO ANE + different silicon → baselines MUST be measured on
+  the runner via the manual `perf-calibrate` workflow and committed to
+  ci_config.json; skipped until then. Local seed-protocol reference
+  (Apple M4, source, w4): JPG 84.5 / HEIF 42.6 / ARW 48.7 / NEF 69.9.
