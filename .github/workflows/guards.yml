@@ -1,15 +1,11 @@
 name: culling-guards
 
-# Three guarded concerns (precision / packaging / performance) against the
-# seed protocol on macOS:
-#   - seed files (ONE per format, tests/ci/sample/) are replicated to ~500 files at
-#     runtime — no camera datasets in the repo;
-#   - precision + performance steps read tests/ci/ci_config.json, which is produced by
-#     the perf-calibrate workflow (manual, per runner type). Until calibrated
-#     they are SKIPPED and only the packaging flow runs: GitHub-hosted
-#     runners have no ANE and different silicon than the local M4, so both the
-#     seed ratings and the steady-state baselines MUST be measured on the
-#     runner type that will gate them.
+# macOS guards (original three + CPU deterministic).
+# Platform: macos-14 (Apple Silicon).  Two artifact tiers:
+#   - deterministic.json: cross-platform truth (CULL_DETERMINISTIC=1,
+#     CPU-only ORT, software decode) — committed once, runs everywhere.
+#   - seed tests/ci/sample/: one file per format, local mutation only.
+# Perf baselines are runner-calibrated via perf-calibrate (manual).
 
 on:
   push:
@@ -25,6 +21,10 @@ on:
         description: "interleaved samples per format"
         type: number
         default: 3
+
+concurrency:
+  group: guards-macos-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
@@ -88,12 +88,13 @@ jobs:
           echo "Download ci_config.json and commit it to tests/ci/ci_config.json to "
           echo "enable the guarded steps on this runner type."
 
-  # ---- automatic: three guarded concerns on every push/PR ----
-  # Three parallel jobs so the wall clock ~ 1 perf gate (~7 min at count=120,
-  # samples=2 on this VM) + build + precision, not their sum.
-  # workers=4 stalls on the macOS VM runner — always workers=2 (matches the
-  # calibrated baselines). Baseline table from tests/ci/ci_config.json (perf jobs
-  # skip it if baselines.source is empty, e.g. an uncalibrated runner).
+  # ------------------------------------------------------------------
+  # Automatic guards on every push/PR — four parallel jobs so wall
+  # clock ~ 1 perf gate (~7 min at count=120, samples=2 on this VM)
+  # + build + precision + deterministic, not their sum.  workers=2 is
+  # mandated on the macOS VM runner (workers=4 stalls there).
+  # ------------------------------------------------------------------
+
   precision:
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
@@ -188,3 +189,37 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 \
             --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --json build/ci_onedir.json
+
+  # NEW: CPU deterministic truth (macOS copy).  Same repo, same gate count
+  # and timeout as the Windows copies so the suite stays platform-symmetric.
+  # Deterministic mode is CPU-only + software decode, so this runner exercises
+  # the truth without requiring the full 70-file datasets (seed protocol is
+  # enough to lock cross-platform equality).
+  deterministic-cpu:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+      - name: Deterministic truth — seed replication vs committed baseline
+        run: |
+          .venv/bin/python -m pytest tests/test_deterministic_baseline.py -v \
+            -k "test_deterministic_matches_baseline"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-deterministic-cpu
+          path: build/perf_*.json
+          if-no-files-found: ignore

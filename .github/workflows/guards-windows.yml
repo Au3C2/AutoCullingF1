@@ -1,0 +1,75 @@
+name: culling-guards-windows
+
+# Windows guards — mirrors the macOS guards workflow but on
+# windows-latest and gated by the deterministic truth + GPU alignment.
+#
+# Two parallel jobs keep the wall clock inside the 10 min budget:
+#   deterministic-cpu — CULL_DETERMINISTIC=1 vs tests/baselines/deterministic.json (strict)
+#   gpu-alignment     — default CUDA path vs same truth (rating strict + raw 0.03)
+#
+# Both use the shared 70-file deterministic artifact (no seed replication)
+# so they are calibration-free and do not read tests/ci/ci_config.json.
+# Packaging/perf seed gates stay on macOS (guards.yml) per plan order.
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: guards-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/Scripts/python `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+      - name: Deterministic truth — 70-file gate (strict)
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_deterministic_matches_baseline"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-deterministic-cpu
+          path: build/perf_*.json
+          if-no-files-found: ignore
+
+  gpu-alignment:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/Scripts/python `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+      - name: GPU alignment — default CUDA vs deterministic truth
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_backends_align_to_deterministic"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gpu-alignment
+          path: build/perf_*.json
+          if-no-files-found: ignore

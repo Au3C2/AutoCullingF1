@@ -60,6 +60,10 @@ p4_data/
 fence_label/
 vehicle_orientation_labels/
 
+# Keep build/perf_*.json artifacts locally; the committed truth is
+# tests/baselines/deterministic.json + tests/ci/ci_config.json
+build/perf_*.json
+
 # Model checkpoints (large binary, regenerate via training scripts)
 fence_classifier_checkpoints/*.pth
 p4_model_checkpoints/*.pt

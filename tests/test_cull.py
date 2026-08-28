@@ -1,9 +1,9 @@
 """
 tests/test_cull.py — pytest suite for F1 photo culling pipeline.
 
-The engine writes ratings directly into standalone JPG metadata and no
-longer emits XMP sidecars, so these tests verify the --dump-scores CSV
-against the golden baseline (v0.1 logic), shared with test_package.py.
+The truth lives in tests/baselines/deterministic.json (CULL_DETERMINISTIC=1,
+CPU-only, software decode).  Rating expectations are derived from the jpg
+section there so this gate and the deterministic gate cannot diverge.
 """
 
 import os
@@ -14,24 +14,9 @@ from pathlib import Path
 import csv
 import pytest
 
-# Add project root to sys.path for any direct module imports in tests
 sys.path.append(os.getcwd())
 
-# Golden baseline generated from tests/test_img on the CURRENT pipeline
-# (ImageIO HW JPEG decode + scipy.fft sharpness + P4 v2 model on the
-# single-partition ANE graph by default on macOS). IMG_20260314_160318_240.jpg
-# was re-locked -1 -> 3 on 2026-08-25: the ANE P4 path moves its orientation
-# argmax rear -> rear_angle (logit diff <= 0.016, knife-edge), disabling the
-# low-confidence rear veto. Stable across consecutive runs. Shared with
-# test_package.py so the CLI and the packaged binary are validated identically.
-BASELINE = {
-    "IMG_20260314_151744_020.jpg": 3,
-    "IMG_20260314_160317_680.jpg": 3,
-    "IMG_20260314_160318_240.jpg": 3,
-    "IMG_20260314_160343_870.jpg": 3,
-    "IMG_20260314_160344_380.jpg": 3,
-    "IMG_20260315_150404_550.jpg": -1,
-}
+from conftest import baseline_jpg_ratings  # noqa: E402
 
 
 @pytest.fixture
@@ -97,14 +82,22 @@ def test_labels_correctness(test_env):
         f"kept images must come from the 14th: {kept}"
 
 
+@pytest.mark.precision
 @pytest.mark.parametrize("workers", [1, 4, 6])
-def test_rating_precision_matches_baseline(test_env, workers):
-    """Compare per-image ratings against golden baseline across worker thread counts (1, 4, 6)."""
+def test_rating_precision_matches_baseline(test_env, workers, deterministic_env):
+    """Compare per-image ratings against deterministic truth across worker counts (1, 4, 6).
+
+    Runs under CULL_DETERMINISTIC=1 so the expectation is the committed
+    truth in tests/baselines/deterministic.json (jpg section).  The
+    determinism guarantee is cross-platform (macOS ANE / Windows differ
+    otherwise — IMG_20260314_160318_240.jpg is a 0.016-logit knife-edge).
+    """
+    baseline = baseline_jpg_ratings()
     csv_path = test_env / f"scores_w{workers}.csv"
     proc = run_cull(test_env, "onnx", csv_path, workers=workers)
     assert proc.returncode == 0, f"Script failed with stderr: {proc.stderr}"
     actual = read_scores_csv(csv_path)
 
-    for name, expected in BASELINE.items():
+    for name, expected in baseline.items():
         assert actual.get(name) == expected, \
             f"{name} (workers={workers}): expected rating {expected}, got {actual.get(name)}"
