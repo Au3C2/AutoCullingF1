@@ -306,8 +306,8 @@ gates pass); performance must be proven on the non-darwin runner.
 
 ## CI (GitHub Actions, macOS) — three guarded concerns
 
-- workflow `.github/workflows/guards.yml`; entry `packaging/ci_guard.py`.
-  Seeds: ci_sample/ = ONE file per format (~70MB total, .gitignore
+- workflow `.github/workflows/guards.yml`; entry `tests/ci/guard.py`.
+  Seeds: tests/ci/sample/ = ONE file per format (~70MB total, .gitignore
   carve-out), replicated to ~500 files at runtime — no camera datasets in
   the repo.
 - Precision (no calibration): `ci_seed_precision.py --compare` scores the
@@ -317,9 +317,9 @@ gates pass); performance must be proven on the non-darwin runner.
   ratings are NOT uniform (identical EXIF → one burst → Top-N downgrades),
   which is why the gate is consistency-based.
 - Packaging flow: `build.py --onedir` + artifact check (always runs).
-- Performance: `run_benchmarks.py --seed-dir ci_sample
-  --baseline-file ci_config.json --tolerance 0.85`. GitHub-hosted macOS
+- Performance: `run_benchmarks.py --seed-dir tests/ci/sample
+  --baseline-file tests/ci/ci_config.json --tolerance 0.85`. GitHub-hosted macOS
   runners have NO ANE + different silicon → baselines MUST be measured on
   the runner via the manual `perf-calibrate` workflow and committed to
-  ci_config.json; skipped until then. Local seed-protocol reference
+  tests/ci/ci_config.json; skipped until then. Local seed-protocol reference
   (Apple M4, source, w4): JPG 84.5 / HEIF 42.6 / ARW 48.7 / NEF 69.9.

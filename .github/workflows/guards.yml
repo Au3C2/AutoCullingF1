@@ -2,9 +2,9 @@ name: culling-guards
 
 # Three guarded concerns (precision / packaging / performance) against the
 # seed protocol on macOS:
-#   - seed files (ONE per format, ci_sample/) are replicated to ~500 files at
+#   - seed files (ONE per format, tests/ci/sample/) are replicated to ~500 files at
 #     runtime — no camera datasets in the repo;
-#   - precision + performance steps read ci_config.json, which is produced by
+#   - precision + performance steps read tests/ci/ci_config.json, which is produced by
 #     the perf-calibrate workflow (manual, per runner type). Until calibrated
 #     they are SKIPPED and only the packaging flow runs: GitHub-hosted
 #     runners have no ANE and different silicon than the local M4, so both the
@@ -27,7 +27,7 @@ on:
         default: 3
 
 jobs:
-  # ---- manual: measure runner baselines, commit result as ci_config.json ----
+  # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
   perf-calibrate:
     runs-on: macos-14
     if: github.event_name == 'workflow_dispatch'
@@ -50,7 +50,7 @@ jobs:
         run: |
           mkdir -p build
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --count ${{ inputs.count }} \
+            --seed-dir tests/ci/sample --count ${{ inputs.count }} \
             --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_source.json --no-prewarm
       - name: Build onedir
@@ -61,14 +61,14 @@ jobs:
         run: |
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --count ${{ inputs.count }} \
+            --seed-dir tests/ci/sample --count ${{ inputs.count }} \
             --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_onedir.json
-      - name: Merge into ci_config.json
+      - name: Merge into tests/ci/ci_config.json
         run: |
           python - <<'EOF'
           import json, pathlib
-          base = json.loads(pathlib.Path("ci_config.json").read_text())
+          base = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
           src = json.loads(pathlib.Path("build/calib_source.json").read_text())["results"]
           od  = json.loads(pathlib.Path("build/calib_onedir.json").read_text())["results"]
           base["baselines"] = {
@@ -85,14 +85,14 @@ jobs:
           path: build/ci_config.json
       - name: Next step
         run: |
-          echo "Download ci_config.json and commit it to the repo root to "
+          echo "Download ci_config.json and commit it to tests/ci/ci_config.json to "
           echo "enable the guarded steps on this runner type."
 
   # ---- automatic: three guarded concerns on every push/PR ----
   # Three parallel jobs so the wall clock ~ 1 perf gate (~7 min at count=120,
   # samples=2 on this VM) + build + precision, not their sum.
   # workers=4 stalls on the macOS VM runner — always workers=2 (matches the
-  # calibrated baselines). Baseline table from ci_config.json (perf jobs
+  # calibrated baselines). Baseline table from tests/ci/ci_config.json (perf jobs
   # skip it if baselines.source is empty, e.g. an uncalibrated runner).
   precision:
     runs-on: macos-14
@@ -114,7 +114,7 @@ jobs:
       - name: Build onedir (needed by the precision comparison)
         run: .venv/bin/python packaging/build.py --onedir
       - name: Precision — packaged vs source consistency
-        run: .venv/bin/python benchmarks/ci_seed_precision.py --compare
+        run: .venv/bin/python tests/ci/seed_precision.py --compare
 
   perf-source:
     runs-on: macos-14
@@ -137,18 +137,18 @@ jobs:
         run: |
           .venv/bin/python - <<'PY'
           import json, pathlib, sys
-          d = json.loads(pathlib.Path("ci_config.json").read_text())
+          d = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
           if d.get("baselines", {}).get("source"):
               print("calibrated")
           else:
-              print("skip: ci_config.json baselines empty (run perf-calibrate on this runner type)")
+              print("skip: tests/ci/ci_config.json baselines empty (run perf-calibrate on this runner type)")
           PY
       - name: Performance — seed steady state (source CLI)
         timeout-minutes: 25
         run: |
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --count 120 --samples 2 \
-            --tolerance 0.75 --baseline-file ci_config.json \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --no-prewarm --json build/ci_source.json
 
   perf-packaged:
@@ -174,17 +174,17 @@ jobs:
         run: |
           .venv/bin/python - <<'PY'
           import json, pathlib
-          d = json.loads(pathlib.Path("ci_config.json").read_text())
+          d = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
           if d.get("baselines", {}).get("source"):
               print("calibrated")
           else:
-              print("skip: ci_config.json baselines empty (run perf-calibrate on this runner type)")
+              print("skip: tests/ci/ci_config.json baselines empty (run perf-calibrate on this runner type)")
           PY
       - name: Performance — seed steady state (packaged binary)
         timeout-minutes: 25
         run: |
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
-            --seed-dir ci_sample --count 120 --samples 2 \
-            --tolerance 0.75 --baseline-file ci_config.json \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --json build/ci_onedir.json

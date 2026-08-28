@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""benchmarks/ci_seed_precision.py — CI seed-based precision gate.
+"""tests/ci/seed_precision.py — CI seed-based precision gate.
 
-The GitHub Actions runner ships ONE file per format (ci_sample/) and the
+The GitHub Actions runner ships ONE file per format (tests/ci/sample/) and the
 20-copy replicated dataset is scored by BOTH the source CLI and the
 packaged binary. The gate asserts that every file receives the SAME rating
 from both pipelines.
@@ -13,11 +13,11 @@ source-vs-packaged equality is what guards the packaged pipeline against
 drift, and it needs no runner-specific calibration.
 
 Usage:
-    python benchmarks/ci_seed_precision.py                    # source only
+    python tests/ci/seed_precision.py                    # source only
     CULL_EXE=dist/.../auto_cull_v0.1_macos_arm64 \
-        python benchmarks/ci_seed_precision.py                # packaged only
-    python benchmarks/ci_seed_precision.py --compare          # both, assert equal
-    python benchmarks/ci_seed_precision.py --calibrate        # print per-format
+        python tests/ci/seed_precision.py                # packaged only
+    python tests/ci/seed_precision.py --compare          # both, assert equal
+    python tests/ci/seed_precision.py --calibrate        # print per-format
                                                               # single-copy ratings
 """
 from __future__ import annotations
@@ -32,8 +32,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SEED_DIR = ROOT / "ci_sample"
+ROOT = Path(__file__).resolve().parents[2]  # repo root (tests/ci/) 
+SEED_DIR = ROOT / "tests" / "ci" / "sample"
 COPIES = 20
 
 SEEDS = [
