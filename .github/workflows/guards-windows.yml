@@ -48,7 +48,7 @@ jobs:
       - name: Install runtime deps into .venv
         run: |
           uv venv .venv --python 3.10
-          uv pip install --python .venv/Scripts/python `
+          uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
       - name: Deterministic truth — 70-file gate (strict)
@@ -74,7 +74,7 @@ jobs:
       - name: Install runtime deps into .venv
         run: |
           uv venv .venv --python 3.10
-          uv pip install --python .venv/Scripts/python `
+          uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
       - name: GPU alignment — default CUDA vs deterministic truth
@@ -100,7 +100,7 @@ jobs:
       - name: Install runtime deps into .venv
         run: |
           uv venv .venv --python 3.10
-          uv pip install --python .venv/Scripts/python `
+          uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
       - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
