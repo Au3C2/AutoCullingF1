@@ -50,6 +50,7 @@ class EngineConfig:
     dump_scores: Path | None = None
     label_check: bool = False
     label_check_dir: Path | None = None
+    deterministic: bool = False
 
 class CullingEngine:
     """

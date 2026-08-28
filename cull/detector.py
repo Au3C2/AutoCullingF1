@@ -132,12 +132,28 @@ class LiteYOLO:
         self.model_path = model_path
         try:
             import onnxruntime as ort
+            from cull.deterministic import is_deterministic
+            deterministic = is_deterministic()
             ensure_nvidia_runtime_on_path()
             available = ort.get_available_providers()
             opts = ort.SessionOptions()
             opts.log_severity_level = 3  # Suppress non-fatal fallback warnings (e.g. CUDA -> CPU)
+            if deterministic:
+                # Cross-platform bit-identical path: CPU only, single-threaded,
+                # deterministic kernels when the ORT build exposes the flag.
+                opts.intra_op_num_threads = 1
+                opts.inter_op_num_threads = 1
+                try:
+                    opts.use_deterministic_compute = True  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                providers = ["CPUExecutionProvider"]
+            else:
+                providers = None  # filled per-branch below
             model_file = model_path
-            if sys.platform == "darwin" and 'CoreMLExecutionProvider' in available:
+            if deterministic:
+                pass  # CPU path already pinned above; no platform-specific tuning.
+            elif sys.platform == "darwin" and 'CoreMLExecutionProvider' in available:
                 # Prefer the batch=1 static graph (onnxsim constant-folded):
                 # RequireStaticInputShapes qualifies 227/231 nodes in 3
                 # partitions vs 7/233-of-318 for the dynamic export — full
@@ -174,7 +190,7 @@ class LiteYOLO:
                 else:
                     providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
                     providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
-            else:
+            elif not deterministic:
                 providers = ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
                 providers = [p for p in providers if p in available] or ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(model_file), sess_options=opts, providers=providers)

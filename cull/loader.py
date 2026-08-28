@@ -222,12 +222,15 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
 
     Spawning ffmpeg per file costs ~80-110 ms (process startup) on top of the
     HEVC decode; pyav keeps libav resident in the worker.
-    
+
     On macOS (darwin), in-process VideoToolbox hardware decoding is used by
     default (12.4 ms vs 21.8 ms soft decode), with JPEG full-range color
     metadata alignment to guarantee 100% bit-identical RGB output (0 drift).
     Falls back gracefully to software decode if hardware decode fails.
-    
+
+    In deterministic mode (``CULL_DETERMINISTIC=1``) hardware decoders are
+    disabled so macOS and Windows share the same software HEVC path.
+
     Returns None when pyav is unavailable or decoding fails, falling back to
     the ffmpeg spawn path."""
     try:
@@ -256,8 +259,17 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
             
             stream = best[1]
             frame = None
-            
-            if sys.platform == "darwin":
+
+            # Deterministic gate: bypass all hardware decoders (VideoToolbox /
+            # vaapi/dxva2/cuda) so macOS and Windows share the same libav
+            # software HEVC path. Only active when CULL_DETERMINISTIC=1.
+            try:
+                from cull.deterministic import is_deterministic as _is_det
+                _det = _is_det()
+            except Exception:
+                _det = False
+
+            if not _det and sys.platform == "darwin":
                 try:
                     hwa = av.codec.hwaccel.HWAccel("videotoolbox")
                     ctx = av.CodecContext.create(stream.codec_context.name, "r", hwaccel=hwa)
@@ -288,7 +300,7 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                 except Exception as hw_err:
                     log.debug("VideoToolbox decode fallback: %s", hw_err)
                     frame = None
-            elif sys.platform != "darwin":
+            elif not _det and sys.platform != "darwin":
                 # TRY 4 scaffold: non-darwin HEIF HWAccel probe (vaapi/dxva2/cuda).
                 # Only on non-darwin hosts; darwin keeps the original sw-fallback path.
                 _hw_frame = None
@@ -415,7 +427,17 @@ def find_embedded_jpeg_tiff(data: bytes) -> tuple[int, int] | None:
 
 
 def _hw_decode_jpeg_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
-    """Try ffmpeg -hwaccel auto for JPEG (nondarwin, probing with sw fallback)."""
+    """Try ffmpeg -hwaccel auto for JPEG (nondarwin, probing with sw fallback).
+
+    Disabled by default: the ffmpeg hw path uses a full-res decode + resize
+    vs cv2's reduced DCT decode, giving ~1M sum difference on 6048x4032 JPGs
+    and 0.02-0.09 raw_score drift from the deterministic truth (measured
+    0.089 on IMG_20260314_160318_240.jpg).  It is also 5x slower (0.59s vs
+    0.11s).  Enable explicitly with CULL_HW_JPEG=1 if needed.
+    """
+    import os as _os
+    if _os.environ.get("CULL_HW_JPEG", "0") not in ("1", "true", "True", "TRUE"):
+        return None
     if sys.platform == "darwin":
         return None
     try:
@@ -539,10 +561,19 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
         except Exception as e:
             log.warning(f"pillow-heif failed for {path.name}: {e}")
 
+    # Deterministic gate: skip all hardware JPEG probes (ImageIO /
+    # ffmpeg -hwaccel) and share the same cv2 software path on macOS
+    # and Windows.
+    try:
+        from cull.deterministic import is_deterministic as _is_det2
+        _det2 = _is_det2()
+    except Exception:
+        _det2 = False
+
     # JPEG decoding (nondarwin HW probe, then macOS ImageIO, then SW fallback).
     # On non-darwin, probe ffmpeg -hwaccel auto first (vaapi/dxva2/cuda etc.)
     # with explicit sw fallback — on this darwin host this branch is dead code.
-    if suffix in (".jpg", ".jpeg") and sys.platform != "darwin":
+    if not _det2 and suffix in (".jpg", ".jpeg") and sys.platform != "darwin":
         img_hw = _hw_decode_jpeg_ffmpeg(path, scale_width=scale_width)
         if img_hw is not None:
             return img_hw
@@ -550,7 +581,7 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     # JPEG decoding (macOS): prefer Apple ImageIO hardware JPEG decoder (ASIC)
     # with the image's own colorspace preserved (ColorSync gamut conversion
     # disabled) — 41.5 ms vs 54 ms cv2 NEON. Falls back to C++ OpenCV NEON.
-    if suffix in (".jpg", ".jpeg") and sys.platform == "darwin":
+    if not _det2 and suffix in (".jpg", ".jpeg") and sys.platform == "darwin":
         img_io = decode_jpeg_imageio(path, scale_width=scale_width)
         if img_io is not None:
             return img_io

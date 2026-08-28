@@ -152,6 +152,18 @@ Run the integration test suite to verify backend execution and XMP accuracy:
 pytest tests/test_cull.py
 ```
 
+Deterministic precision (cross-platform truth, CPU-only, software decode):
+
+```bash
+# Regenerate the committed truth after intentional scoring changes
+CULL_DETERMINISTIC=1 python scripts/generate_deterministic_baseline.py
+# Verify: deterministic == truth (strict), other backends align to it
+pytest tests/test_deterministic_baseline.py -v
+# Or force deterministic on any run
+python cull_photos.py --deterministic --input-dir /path/to/photos
+CULL_DETERMINISTIC=1 pytest tests/test_deterministic_baseline.py -k deterministic
+```
+
 ---
 
 ## 📜 License
