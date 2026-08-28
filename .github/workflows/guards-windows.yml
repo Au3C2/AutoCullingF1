@@ -53,7 +53,7 @@ jobs:
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
       - name: Deterministic truth — 70-file gate (strict)
-        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_deterministic_matches_baseline"
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
       - name: Upload perf artifact (if any)
         if: always()
         uses: actions/upload-artifact@v4
@@ -80,7 +80,7 @@ jobs:
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
       - name: GPU alignment — default CUDA vs deterministic truth
-        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_backends_align_to_deterministic"
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "alignment"
       - name: Upload perf artifact (if any)
         if: always()
         uses: actions/upload-artifact@v4

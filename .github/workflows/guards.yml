@@ -211,11 +211,12 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pytest"
       - name: Deterministic truth — seed replication vs committed baseline
         run: |
           .venv/bin/python -m pytest tests/test_deterministic_baseline.py -v \
-            -k "test_deterministic_matches_baseline"
+            -m "deterministic"
       - name: Upload perf artifact (if any)
         if: always()
         uses: actions/upload-artifact@v4
