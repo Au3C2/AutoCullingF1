@@ -110,7 +110,7 @@ jobs:
         run: |
           .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
             --seed-dir tests/ci/sample --count ${{ inputs.count || 120 }} `
-            --samples ${{ inputs.samples || 2 }} --tolerance 0.75 `
+            --samples ${{ inputs.samples || 2 }} --tolerance 0.65 `
             --baseline-file tests/ci/ci_config.json --no-prewarm `
             --json build/ci_windows_perf.json
       - name: Upload perf result
