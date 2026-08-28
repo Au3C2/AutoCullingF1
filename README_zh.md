@@ -140,21 +140,21 @@ python packaging/guards.py --skip-build   # 复用已有 dist 产物（精度第
 
 ## 🤖 GitHub Actions CI（精度 / 打包 / 性能三层）
 
-仓库内 `ci_sample/` 每种格式只存 1 张种子（约 70MB），CI 运行时复制成
+仓库内 `tests/ci/sample/` 每种格式只存 1 张种子（约 70MB），CI 运行时复制成
 约 500 张数据集，无需把 1.3GB 相机数据集入库。
 
-- **精度门**（无需校准）：`benchmarks/ci_seed_precision.py --compare` 用
+- **精度门**（无需校准）：`tests/ci/seed_precision.py --compare` 用
   源码与打包产物分别评分同一批种子副本，逐文件断言 raw_score（±0.002 容差，
   吸收 ANE 每次运行的 ±0.0004 抖动）与 rating 多重集一致。同源复制会进入
   同一 burst 并被 Top-N 降级，因此只看"打包 vs 源码"的一致性而非绝对评级。
 - **打包流程门**：`build.py --onedir` + 产物存在性检查。
-- **性能门**（需校准）：`run_benchmarks.py --seed-dir ci_sample
-  --baseline-file ci_config.json --tolerance 0.85`。CI 托管的 macOS runner
+- **性能门**（需校准）：`run_benchmarks.py --seed-dir tests/ci/sample
+  --baseline-file tests/ci/ci_config.json --tolerance 0.85`。CI 托管的 macOS runner
   无 ANE、硅片与本地 M4 不同，**基线必须在目标 runner 上实测**：手动触发
-  `perf-calibrate` workflow → 下载产物 → 把 baselines 提交进 `ci_config.json`。
+  `perf-calibrate` workflow → 下载产物 → 把 baselines 提交进 `tests/ci/ci_config.json`。
   校准前性能门自动跳过（精度与打包门始终运行）。
 
-workflow 见 `.github/workflows/guards.yml`；CI 统一入口 `packaging/ci_guard.py`。
+workflow 见 `.github/workflows/guards.yml`；CI 统一入口 `tests/ci/guard.py`。
 本地 seed 协议参考值（Apple M4，源码，workers=4）：JPG 84.5 / HEIF 42.6 /
 ARW 48.7 / NEF 69.9 img/s——HEIF 单张代表性差（DSC00827 走 COCO 回退），
 CI 基线必须以实测为准。

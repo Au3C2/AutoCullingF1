@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""packaging/ci_guard.py — CI guards entrypoint (GitHub Actions, macOS).
+"""tests/ci/guard.py — CI guards entrypoint (GitHub Actions, macOS).
 
-Runs the three guarded concerns on the seed protocol (ci_sample/):
+Runs the three guarded concerns on the seed protocol (tests/ci/sample/):
    1. precision  — ci_seed_precision.py --compare: packaged-vs-source
                    per-file raw_score equality + rating-multiset equality.
                    Deterministic, needs NO runner calibration.
@@ -13,7 +13,7 @@ Runs the three guarded concerns on the seed protocol (ci_sample/):
                    workflow has produced the baselines.
 
 Usage:
-    python packaging/ci_guard.py [--tolerance 0.85] [--samples 3]
+    python tests/ci/guard.py [--tolerance 0.85] [--samples 3]
 """
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (tests/ci/) 
 PY = ROOT / ".venv" / "bin" / "python" if (ROOT / ".venv").exists() else "python"
 ONEDIR = ROOT / "dist" / "auto_cull_v0.1_macos_arm64" / "auto_cull_v0.1_macos_arm64"
-CONFIG = ROOT / "ci_config.json"
+CONFIG = ROOT / "tests" / "ci" / "ci_config.json"
 
 
 def run(cmd: list[str], label: str, env: dict | None = None) -> int:
@@ -70,7 +70,7 @@ def main() -> int:
         return 1
 
     # 2. precision — packaged == source (calibration-free)
-    rcs.append(run([str(PY), "benchmarks/ci_seed_precision.py", "--compare"],
+    rcs.append(run([str(PY), "tests/ci/seed_precision.py", "--compare"],
                    "2. precision (seed consistency, packaged vs source)",
                    env_base))
 
@@ -79,14 +79,14 @@ def main() -> int:
         workers = os.environ.get("CULL_WORKERS", str(args.workers))
         env_pkg = {**env_base, "CULL_EXE": str(ONEDIR)}
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
-                        "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
+                        "--workers", workers, "--seed-dir", str(ROOT / "tests" / "ci" / "sample"),
                         "--count", "200", "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG), "--no-prewarm",
                         "--json", str(ROOT / "build" / "ci_source.json")],
                        "3a. performance (seed steady, source)", env_base))
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",
-                        "--workers", workers, "--seed-dir", str(ROOT / "ci_sample"),
+                        "--workers", workers, "--seed-dir", str(ROOT / "tests" / "ci" / "sample"),
                         "--count", "200", "--samples", str(args.samples),
                         "--tolerance", str(args.tolerance),
                         "--baseline-file", str(CONFIG),
