@@ -110,12 +110,18 @@ def _load_baselines(path: Path | None) -> dict[str, dict[str, float]]:
     {"baselines": {"source": {...}, "onedir": {...}}} replaces the whole
     table — the CI workflow calibrates its own runner-specific baselines
     through ci_config.json.
+
+    When the file also carries a per-platform block
+    {"platforms": {"win32": {"baselines": {...}}}}, the entry matching
+    ``_platform_key()`` wins. This lets macOS and Windows CI gates share
+    one ci_config.json without their calibrations clobbering each other.
     """
     if path is None:
         plat = _platform_key()
         return dict(STEADY_BASELINES_BY_PLATFORM.get(plat, STEADY_BASELINES))
     data = json.loads(path.read_text())
-    entries = data.get("baselines", data)
+    plat_block = (data.get("platforms") or {}).get(_platform_key()) or {}
+    entries = plat_block.get("baselines") or data.get("baselines", data)
     out = {}
     for pipe in ("source", "onedir"):
         out[pipe] = {str(f): float(v)
@@ -173,7 +179,12 @@ def build_dataset(fmt: str, count: int, seed_dir: Path | None = None) -> Path:
         for i in range(copies):
             tgt = stage / f"{s.stem}_{i:03d}{s.suffix}"
             if not tgt.exists() and not tgt.is_symlink():
-                os.link(s, tgt)
+                try:
+                    os.link(s, tgt)
+                except OSError:
+                    # Windows cross-volume or CI filesystems without hardlink
+                    # support — copy fallback (identical bytes).
+                    shutil.copy2(s, tgt)
     return stage
 
 
