@@ -50,7 +50,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
       - name: Deterministic truth — 70-file gate (strict)
         run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_deterministic_matches_baseline"
       - name: Upload perf artifact (if any)
@@ -76,7 +76,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
       - name: GPU alignment — default CUDA vs deterministic truth
         run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -k "test_backends_align_to_deterministic"
       - name: Upload perf artifact (if any)
@@ -102,12 +102,12 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv `
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15"
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
       - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
         run: |
           .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
-            --seed-dir tests/ci/sample --count ${{ inputs.count }} `
-            --samples ${{ inputs.samples }} --tolerance 0.75 `
+            --seed-dir tests/ci/sample --count ${{ inputs.count || 120 }} `
+            --samples ${{ inputs.samples || 2 }} --tolerance 0.75 `
             --baseline-file tests/ci/ci_config.json --no-prewarm `
             --json build/ci_windows_perf.json
       - name: Upload perf result
