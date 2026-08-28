@@ -7,9 +7,9 @@
   },
   "platforms": {
     "win32": {
-      "note": "windows-latest seed protocol (4 seeds replicated count=120, workers=4, samples=2 median). Local win32 dev-box calibration 2026-08-28; seed files differ from the 500-file multi-source set (HEIF seed is the COCO-fallback frame, NEF seed slower), so these are lower than the win32 500-file baselines.",
+      "note": "windows-2025 runner seed protocol (4 seeds replicated count=120, workers=4, samples=2 median). Calibrated 2026-08-28 from runner run 33184724010 (JPG 7.4/7.1, HEIF 0.7/0.7, ARW 6.8/7.2, NEF 5.8/6.4 img/s across 2 samples): the 2-core shared VM is 3-10x slower than the local win32 dev box (HEIF software HEVC suffers most), mirroring the 10x macos-14 vs M4 gap. Baselines = measured median / 0.65 + ~15% headroom; gate runs with tolerance 0.65.",
       "baselines": {
-        "source": {"JPG": 23.3, "HEIF": 6.9, "ARW": 24.0, "NEF": 27.5}
+        "source": {"JPG": 9.8, "HEIF": 1.0, "ARW": 9.6, "NEF": 8.4}
       }
     }
   }
