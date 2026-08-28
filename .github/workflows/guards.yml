@@ -89,7 +89,12 @@ jobs:
           echo "enable the guarded steps on this runner type."
 
   # ---- automatic: three guarded concerns on every push/PR ----
-  guards:
+  # Three parallel jobs so the wall clock ~ 1 perf gate (~7 min at count=120,
+  # samples=2 on this VM) + build + precision, not their sum.
+  # workers=4 stalls on the macOS VM runner — always workers=2 (matches the
+  # calibrated baselines). Baseline table from ci_config.json (perf jobs
+  # skip it if baselines.source is empty, e.g. an uncalibrated runner).
+  precision:
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
     steps:
@@ -106,13 +111,80 @@ jobs:
             "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller"
-      - name: Run CI guards (precision / packaging / performance)
-        timeout-minutes: 40
-        run: .venv/bin/python packaging/ci_guard.py --tolerance 0.85 --samples 3
-        env:
-          # workers=4 ProcessPoolExecutor deadlocks on the macOS VM runner
-          # (observed 2x on perf calibration, >25 min stuck in measure);
-          # workers=2 completes (guards precision gate measured 61 s). The
-          # CI baselines below are therefore measured at workers=2 too, so
-          # gate and baseline stay consistent.
-          CULL_WORKERS: 2
+      - name: Build onedir (needed by the precision comparison)
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Precision — packaged vs source consistency
+        run: .venv/bin/python benchmarks/ci_seed_precision.py --compare
+
+  perf-source:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Skip unless runner calibrated
+        run: |
+          .venv/bin/python - <<'PY'
+          import json, pathlib, sys
+          d = json.loads(pathlib.Path("ci_config.json").read_text())
+          if d.get("baselines", {}).get("source"):
+              print("calibrated")
+          else:
+              print("skip: ci_config.json baselines empty (run perf-calibrate on this runner type)")
+          PY
+      - name: Performance — seed steady state (source CLI)
+        timeout-minutes: 25
+        run: |
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir ci_sample --count 120 --samples 2 \
+            --tolerance 0.85 --baseline-file ci_config.json \
+            --no-prewarm --json build/ci_source.json
+
+  perf-packaged:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Build onedir
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Skip unless runner calibrated
+        run: |
+          .venv/bin/python - <<'PY'
+          import json, pathlib
+          d = json.loads(pathlib.Path("ci_config.json").read_text())
+          if d.get("baselines", {}).get("source"):
+              print("calibrated")
+          else:
+              print("skip: ci_config.json baselines empty (run perf-calibrate on this runner type)")
+          PY
+      - name: Performance — seed steady state (packaged binary)
+        timeout-minutes: 25
+        run: |
+          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
+            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir ci_sample --count 120 --samples 2 \
+            --tolerance 0.85 --baseline-file ci_config.json \
+            --json build/ci_onedir.json
