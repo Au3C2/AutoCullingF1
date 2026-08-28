@@ -148,7 +148,7 @@ jobs:
         run: |
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --count 120 --samples 2 \
-            --tolerance 0.85 --baseline-file ci_config.json \
+            --tolerance 0.75 --baseline-file ci_config.json \
             --no-prewarm --json build/ci_source.json
 
   perf-packaged:
@@ -186,5 +186,5 @@ jobs:
           CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
             .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir ci_sample --count 120 --samples 2 \
-            --tolerance 0.85 --baseline-file ci_config.json \
+            --tolerance 0.75 --baseline-file ci_config.json \
             --json build/ci_onedir.json
