@@ -51,35 +51,69 @@ DATASETS = {
     "NEF":  ("test_nef", "*.nef", 20, 25),        # 500
 }
 
-# Steady-state baselines (img/s) locked 2026-08-27 on Apple M4, workers=4,
-# idle-machine interleaved protocol (see run_benchmarks results in
-# results/performance_baseline.md "500-Image Production Steady-State Matrix"
-# and the packaging section of AGENTS.md). Gate = baseline * 0.9.
-STEADY_BASELINES = {
-    "source": {"JPG": 83.5, "HEIF": 65.5, "ARW": 49.9, "NEF": 70.0},
-    "onedir": {"JPG": 82.4, "HEIF": 62.6, "ARW": 48.7, "NEF": 67.9},
+# Steady-state baselines (img/s) — per platform, workers=4, 500-file
+# protocol (interleaved, idle, --dry-run --force). Gate = baseline * 0.9.
+# Tables are selected by sys.platform (darwin vs win32/linux).  macOS
+# entries locked 2026-08-27 on Apple M4; Windows entries locked 2026-08-28
+# on the win32 dev box (auto_culling, workers=4, 2-sample median).
+# See results/performance_baseline.md "500-Image Production Steady-State Matrix".
+STEADY_BASELINES_BY_PLATFORM: dict[str, dict[str, dict[str, float]]] = {
+    "darwin": {
+        "source": {"JPG": 83.5, "HEIF": 65.5, "ARW": 49.9, "NEF": 70.0},
+        "onedir": {"JPG": 82.4, "HEIF": 62.6, "ARW": 48.7, "NEF": 67.9},
+    },
+    "win32": {
+        "source": {"JPG": 21.4, "HEIF": 8.0, "ARW": 23.4, "NEF": 31.6},
+        # onedir not yet built/measured on win32 — falls back to source
+    },
+    "linux": {
+        "source": {"JPG": 21.4, "HEIF": 8.0, "ARW": 23.4, "NEF": 31.6},
+    },
 }
+# Compat alias: the default table (macOS) for callers that reference the old name.
+STEADY_BASELINES = STEADY_BASELINES_BY_PLATFORM["darwin"]
 
-# Setup-tax ceilings (seconds): generous 2x of the locked baseline — guards
-# gross regressions (e.g. a 30s import) without flagging platform noise.
-SETUP_CEILINGS = {
-    "source": {"JPG": 8.0, "HEIF": 8.0, "ARW": 8.0, "NEF": 8.0},
-    "onedir": {"JPG": 12.0, "HEIF": 12.0, "ARW": 12.0, "NEF": 12.0},
+# Setup-tax ceilings (seconds): per platform, generous 2x — guards gross
+# regressions without flagging platform noise.
+SETUP_CEILINGS_BY_PLATFORM: dict[str, dict[str, dict[str, float]]] = {
+    "darwin": {
+        "source": {"JPG": 8.0, "HEIF": 8.0, "ARW": 8.0, "NEF": 8.0},
+        "onedir": {"JPG": 12.0, "HEIF": 12.0, "ARW": 12.0, "NEF": 12.0},
+    },
+    "win32": {
+        "source": {"JPG": 16.0, "HEIF": 16.0, "ARW": 20.0, "NEF": 16.0},
+        "onedir": {"JPG": 16.0, "HEIF": 16.0, "ARW": 20.0, "NEF": 16.0},
+    },
+    "linux": {
+        "source": {"JPG": 16.0, "HEIF": 16.0, "ARW": 20.0, "NEF": 16.0},
+        "onedir": {"JPG": 16.0, "HEIF": 16.0, "ARW": 20.0, "NEF": 16.0},
+    },
 }
+SETUP_CEILINGS = SETUP_CEILINGS_BY_PLATFORM["darwin"]
 
 TOLERANCE = 0.90  # steady-state floor (local default; CI may widen via --tolerance)
+
+
+def _platform_key() -> str:
+    if sys.platform == "darwin":
+        return "darwin"
+    if sys.platform == "win32":
+        return "win32"
+    return "linux"
 
 
 def _load_baselines(path: Path | None) -> dict[str, dict[str, float]]:
     """Return a {pipeline: {fmt: baseline}} map.
 
-    Without *path*, the built-in local baselines (multi-source protocol) are
-    used. A JSON file with the shape {"baselines": {"source": {...},
-    "onedir": {...}}} replaces the whole table — the CI workflow calibrates
-    its own runner-specific baselines through ci_config.json.
+    Without *path*, the per-platform built-in baselines are used (selected
+    by sys.platform — darwin vs win32/linux). A JSON file with the shape
+    {"baselines": {"source": {...}, "onedir": {...}}} replaces the whole
+    table — the CI workflow calibrates its own runner-specific baselines
+    through ci_config.json.
     """
     if path is None:
-        return dict(STEADY_BASELINES)
+        plat = _platform_key()
+        return dict(STEADY_BASELINES_BY_PLATFORM.get(plat, STEADY_BASELINES))
     data = json.loads(path.read_text())
     entries = data.get("baselines", data)
     out = {}
@@ -241,8 +275,10 @@ def main() -> int:
         _prewarm(args.workers, args.seed_dir)
 
     base_table = _load_baselines(args.baseline_file)
+    if who not in base_table:
+        who = "source"
     base = base_table[who]
-    ceilings = SETUP_CEILINGS[who]
+    ceilings = SETUP_CEILINGS_BY_PLATFORM.get(_platform_key(), SETUP_CEILINGS)[who]
     fmt_list = [args.format] if args.format != "ALL" else list(DATASETS)
     failures = []
     results = {}
@@ -289,13 +325,25 @@ def main() -> int:
             failures.append((fmt, -setup, -ceilings[fmt]))
             print(f"      setup tax above ceiling!")
 
+    payload = {"pipeline": who, "workers": args.workers,
+               "count": args.count or (500 if args.seed_dir else
+                                  max(DATASETS[f][2]*DATASETS[f][3] for f in DATASETS)),
+               "wall_s": round(time.perf_counter() - t_gate0, 1),
+               "platform": sys.platform,
+               "results": results}
     if args.json_out:
-        args.json_out.write_text(json.dumps(
-            {"pipeline": who, "workers": args.workers,
-             "count": args.count or (500 if args.seed_dir else
-                                max(DATASETS[f][2]*DATASETS[f][3] for f in DATASETS)),
-             "wall_s": round(time.perf_counter() - t_gate0, 1),
-             "results": results}, indent=2))
+        args.json_out.write_text(json.dumps(payload, indent=2))
+    else:
+        # Always leave a timestamped artifact for trend tracking (non-guarded
+        # --count 100 runs too).  Mirrors the requested explicit --json path.
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            auto_path = ROOT / "build" / f"perf_{ts}_{who}.json"
+            auto_path.parent.mkdir(parents=True, exist_ok=True)
+            auto_path.write_text(json.dumps(payload, indent=2))
+            print(f"(artifact: {auto_path.relative_to(ROOT)})")
+        except Exception:
+            pass
 
     gate_s = time.perf_counter() - t_gate0
     print(f"\nGate wall time: {gate_s:.0f}s ({gate_s/60:.1f} min)")

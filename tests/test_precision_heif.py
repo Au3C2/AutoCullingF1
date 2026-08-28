@@ -1,10 +1,12 @@
 """
 tests/test_precision_heif.py — HEIF score-precision gate.
 
-Locks per-file rating/raw_score for 24 real Sony HEIF stills from test_import.
-Guards optimization #1 (ffmpeg `-vf scale` / decode-path changes): any pixel
-change that alters scoring must fail here. Skipped when the source dataset is
-absent (e.g. CI without test_import).
+Now reads its expectation (24 HEIF stills) from the deterministic truth
+(tests/baselines/deterministic.json, heif section) so it cannot diverge
+from the cross-platform gate.  Kept as a focused wrapper around the
+shared (jpg/heif/arw/nef) deterministic gate for `pytest -k heif`
+selectivity.  Guards optimization #1 (ffmpeg -vf scale / decode-path
+changes). Skipped when the source dataset is absent.
 """
 import sys
 from pathlib import Path
@@ -13,64 +15,36 @@ import pytest
 sys.path.append(str(Path(__file__).parent))
 
 from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
+from conftest import baseline_section, SOURCE_DIRS  # noqa: E402
 
-HEIF_DIR = Path("test_import")
-
-# Baseline locked 2026-08-25 on macOS (Apple Silicon, pyav 17.1.0/libav 61,
-# exiftool 13.50) with the YOLO detector on the batch=1 STATIC graph
-# (models/f1_yolov8n_static.onnx: onnxsim constant-folded, CoreML
-# RequireStaticInputShapes, 3 partitions) pinned to CPUAndNeuralEngine.
-# Pinning removes the runtime's silent ANE<->GPU switching, which flipped
-# the rating-boundary file DSC00849 (1<->2 stars, both keep) across
-# system-load states. All ratings identical to the Windows lock; raw_score
-# drifts within ±0.035 of it from platform decode LSB differences.
-# Pipeline: libjpeg draft decode + cv2.INTER_AREA resize + cv2
-# letterbox/cv2 P4-ROI + cv2.dft sharpness + P4 v2 model on CPU EP.
-BASELINE = {
-    "DSC00827.heif": (-1, 1.204),
-    "DSC00845.heif": (-1, 2.838),
-    "DSC00849.heif": (2, 3.11),
-    "DSC00851.heif": (2, 3.381),
-    "DSC00879.heif": (-1, 1.924),
-    "DSC00880.heif": (-1, 1.399),
-    "DSC00886.heif": (-1, 1.818),
-    "DSC00887.heif": (-1, 2.005),
-    "DSC00888.heif": (-1, 2.497),
-    "DSC00890.heif": (-1, 1.726),
-    "DSC00892.heif": (-1, 0.923),
-    "DSC00893.heif": (-1, 2.436),
-    "DSC00894.heif": (-1, 0.77),
-    "DSC00895.heif": (-1, 1.694),
-    "DSC00896.heif": (-1, 2.974),
-    "DSC00897.heif": (-1, 2.108),
-    "DSC00942.heif": (-1, 2.123),
-    "DSC00951.heif": (-1, 1.306),
-    "DSC00952.heif": (-1, 2.048),
-    "DSC00958.heif": (-1, 1.09),
-    "DSC00959.heif": (-1, 1.117),
-    "DSC00960.heif": (-1, 2.278),
-    "DSC00961.heif": (-1, 1.755),
-    "DSC00962.heif": (-1, 1.503),
-}
+HEIF_DIR = SOURCE_DIRS["heif"]
 
 
 def _src_files() -> list[Path]:
     if not HEIF_DIR.is_dir():
         return []
-    return [HEIF_DIR / name for name in BASELINE if (HEIF_DIR / name).exists()]
+    # Dict insertion order of deterministic.json heif section matches gate order
+    from conftest import load_deterministic_baseline  # noqa: E402
+    bl = load_deterministic_baseline()
+    return [HEIF_DIR / name for name in bl.get("heif", {}) if (HEIF_DIR / name).exists()]
 
 
 def _verify_srcs(files: list[Path]) -> list[Path]:
     if not files:
         pytest.skip("test_import dataset not present")
-    if len(files) < len(BASELINE):
-        pytest.skip(f"test_import incomplete: {len(files)}/{len(BASELINE)} files")
+    from conftest import load_deterministic_baseline  # noqa: E402
+    bl = load_deterministic_baseline()
+    if len(files) < len(bl.get("heif", {})):
+        pytest.skip(f"test_import incomplete: {len(files)}/{len(bl.get('heif', {}))} files")
     return files
 
 
-def test_heif_rating_precision_matches_baseline():
-    """24 HEIF stills must keep their per-file rating and raw_score."""
+@pytest.mark.precision
+@pytest.mark.deterministic
+def test_heif_rating_precision_matches_baseline(deterministic_env):
+    """24 HEIF stills must match deterministic truth (rating exact, raw ±0.005)."""
     files = _verify_srcs(_src_files())
-    run_files = files[: len(BASELINE)]  # keep deterministic order subset
+    run_files = files  # already in deterministic order
     actual = run_cull_on_copies(run_files)
-    assert_scores_match(actual, BASELINE, "heif")
+    baseline = baseline_section("heif")
+    assert_scores_match(actual, baseline, "heif")
