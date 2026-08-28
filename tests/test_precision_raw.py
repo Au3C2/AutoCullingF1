@@ -14,7 +14,7 @@ import pytest
 sys.path.append(str(Path(__file__).parent))
 
 from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
-from conftest import baseline_section, SOURCE_DIRS  # noqa: E402
+from conftest import DET_RAW_TOL, PLATFORM, baseline_section, SOURCE_DIRS  # noqa: E402
 
 ARW_DIR = SOURCE_DIRS["arw"]
 NEF_DIR = SOURCE_DIRS["nef"]
@@ -30,7 +30,7 @@ def test_arw_precision_matches_baseline(deterministic_env):
     if any(not p.exists() for p in src):
         pytest.skip("test_arw incomplete")
     actual = run_cull_on_copies(src)
-    assert_scores_match(actual, baseline, "arw")
+    assert_scores_match(actual, baseline, "arw", raw_tol=DET_RAW_TOL[PLATFORM])
 
 
 @pytest.mark.precision
@@ -42,4 +42,4 @@ def test_nef_precision_matches_baseline(deterministic_env):
     if any(not p.exists() for p in src):
         pytest.skip("test_nef incomplete")
     actual = run_cull_on_copies(src)
-    assert_scores_match(actual, baseline_section("nef"), "nef")
+    assert_scores_match(actual, baseline_section("nef"), "nef", raw_tol=DET_RAW_TOL[PLATFORM])

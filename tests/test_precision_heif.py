@@ -15,7 +15,7 @@ import pytest
 sys.path.append(str(Path(__file__).parent))
 
 from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
-from conftest import baseline_section, SOURCE_DIRS  # noqa: E402
+from conftest import DET_RAW_TOL, PLATFORM, baseline_section, SOURCE_DIRS  # noqa: E402
 
 HEIF_DIR = SOURCE_DIRS["heif"]
 
@@ -47,4 +47,4 @@ def test_heif_rating_precision_matches_baseline(deterministic_env):
     run_files = files  # already in deterministic order
     actual = run_cull_on_copies(run_files)
     baseline = baseline_section("heif")
-    assert_scores_match(actual, baseline, "heif")
+    assert_scores_match(actual, baseline, "heif", raw_tol=DET_RAW_TOL[PLATFORM])

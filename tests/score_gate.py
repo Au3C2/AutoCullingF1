@@ -74,13 +74,21 @@ def run_cull_on_copies(src_files: list[Path], workers: int = 4) -> dict[str, tup
 
 def assert_scores_match(actual: dict[str, tuple[int, float]],
                         baseline: dict[str, tuple[int, float]],
-                        what: str) -> None:
-    """Assert per-file rating equality and raw_score within 3-decimal tolerance."""
+                        what: str,
+                        raw_tol: float = 0.005) -> None:
+    """Assert per-file rating equality and raw_score within *raw_tol*.
+
+    Rating is always strict. The raw window is per caller: the deterministic
+    cross-platform gate passes the platform window (mac ±0.05 / win ±0.005 —
+    ARM-vs-x86 decode SIMD cannot be bit-identical), local regression gates
+    keep the default 0.005.
+    """
     assert set(actual) == set(baseline), \
         f"{what}: file sets differ — missing={set(baseline)-set(actual)} extra={set(actual)-set(baseline)}"
     for name, (exp_rating, exp_raw, *_) in baseline.items():
         act_rating, act_raw, veto, ndet = actual[name]
         assert act_rating == exp_rating, \
             f"{what}::{name}: rating {act_rating} != baseline {exp_rating} (raw {act_raw} vs {exp_raw}, veto={veto!r}, n_det={ndet})"
-        assert abs(act_raw - exp_raw) <= 0.005, \
-            f"{what}::{name}: raw_score {act_raw} drifted from baseline {exp_raw}"
+        assert abs(act_raw - exp_raw) <= raw_tol, \
+            f"{what}::{name}: raw_score {act_raw} drifted from baseline {exp_raw} " \
+            f"by {abs(act_raw-exp_raw):.4f} > {raw_tol}"

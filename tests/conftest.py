@@ -6,11 +6,23 @@ single truth. Old per-file BASELINE dicts in test_cull / HEIF / RAW have
 been removed; every precision gate reads through the helpers here so the
 old and new gates cannot diverge. Markers keep the fast/expensive axes
 selectable without memorizing file paths.
+
+Strictness model (measured mac-vs-win 2026-08-28):
+
+  RATING — the product-level contract: identical star/reject outcome on
+      any platform/backend. The deterministic backend achieves 70/70
+      (macOS vs the Windows-generated truth), so rating gates are STRICT
+      everywhere.
+  RAW — decode SIMD (NEON vs AVX) makes bit-identical raw_score across
+      platforms impossible (JPG aligns; HEIF/ARW/NEF drift 0.013–0.039).
+      Raw is asserted only as a PLATFORM-INTERNAL regression window
+      around the truth, never as a cross-platform equality.
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -27,11 +39,43 @@ def pytest_configure(config: pytest.Config) -> None:
 
 BASELINE_PATH = Path(__file__).parent / "baselines" / "deterministic.json"
 
+PLATFORM = "mac" if sys.platform == "darwin" else "win"
+
+# Raw regression windows for the DETERMINISTIC backend around the truth.
+#   win: the truth platform — bit-aligned decode (±0.005).
+#   mac: ARM libav/RAW decode differs from x86 by 0.013–0.050 (measured
+#        2026-08-28, ratings still 70/70) — window ±0.06.
+DET_RAW_TOL = {"win": 0.005, "mac": 0.06}
+
+# Raw alignment windows for the DEFAULT (accelerated) backends vs the
+# deterministic truth:
+#   win: ±0.03 (CUDA-vs-CPU measured envelope)
+#   mac: ±0.06 (CoreML/ImageIO vs CPU: ARW max drift 0.057)
+ALIGN_RAW_TOL = {"win": 0.03, "mac": 0.06}
+
+# Files whose RATING is known to sit on a hardware decision boundary
+# (ANE-vs-CPU logit delta ≤0.016 flips them; see performance_baseline.md).
+# Backend-alignment gates skip the rating assert for these; the
+# deterministic cross-platform gate does NOT skip (70/70 verified
+# 2026-08-28 — these files only diverge on accelerated backends).
+KNOWN_RATING_DIVERGENCE = {
+    ("jpg", "IMG_20260314_160318_240.jpg"),
+    ("heif", "DSC00849.heif"),
+}
+
+# Files where the P4 cut decision flips between CPU and accelerated
+# backends — raw delta ≈ P4_CUT_PENALTY (0.6), rating unaffected. Raw
+# alignment skips them; rating stays strict.
+KNOWN_CUT_BOUNDARY = {
+    ("heif", "DSC00942.heif"),
+    ("nef", "IMG_20260315_164133_810.nef"),
+}
+
 # Backwards-compat: default backends (CUDA, CoreML, etc.) align to the
-# deterministic truth with this raw tolerance on top of the strict 0.005
-# that the deterministic truth itself is held to. Value comes from the
-# measured CPU-vs-CUDA / decode-LSB envelope (see test_deterministic_baseline.py).
-ALIGN_RAW_TOL = 0.03
+# deterministic truth with this raw tolerance on top of the strict
+# deterministic window. Value comes from the measured CPU-vs-CUDA /
+# decode-LSB envelope (see test_deterministic_baseline.py).
+ALIGN_RAW_TOL_SCALAR = ALIGN_RAW_TOL[PLATFORM]
 
 # Source locations for each baseline section (kept in one place so
 # test_cull / HEIF / RAW do not re-declare them).
