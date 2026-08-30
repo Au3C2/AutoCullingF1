@@ -105,3 +105,6 @@ external/*
 !external/exiftool/
 
 auto_cull
+
+# Rust/Tauri build artifacts
+src-tauri/target/

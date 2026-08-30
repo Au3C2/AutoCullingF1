@@ -47,37 +47,48 @@
 | 索尼 ARW | 31.9 img/s | 35 img/s |
 | 尼康 NEF | 45.0 img/s | 46 img/s |
 
-推理跑在 **DirectML**（onnxruntime-directml；评分链 6.8 ms/帧，CUDA EP 为 12.6 ms）。消费级 NVIDIA GPU 没有 HEVC 4:2:2 与 JPEG 硬件解码器，解码走 libjpeg-turbo / libav 软解（实测与论证见 [`docs/win_optimization_plan.md`](docs/win_optimization_plan.md)）。
+推理跑在 **DirectML**（onnxruntime-directml；评分链 6.8 ms/帧，CUDA EP 为 12.6 ms）。消费级 NVIDIA GPU 没有 HEVC 4:2:2 与 JPEG 硬件解码器，解码走 libjpeg-turbo / libav 软解（实测与论证见 [`results/performance_baseline.md`](results/performance_baseline.md)）。
 
 > 单帧成本中，JPEG/RAW 以解码为主（24MP 约 115 ms——Huffman 熵解码与分辨率无关），HEIF/NEF 以推理链为主。`--workers` 控制解码并行度；星级与 worker 数无关。
 
 ## 快速开始
 
-### 1. 前置条件
+### 方式一：运行可执行文件（无需 Python）
 
-- **Python 3.10+**
-- **ffmpeg**：HEIF/RAW 内嵌预览解码必需（macOS：`brew install ffmpeg`；Windows：本仓库 `external/ffmpeg/` 已内置，或自行安装并加入 PATH）
+从 GitHub Releases 获取预编译二进制（或自行构建，见[打包](#打包独立可执行文件)）：
+
+- Windows：`auto_cull_v0.1_win_x64.exe`
+- macOS（Apple Silicon）：`auto_cull_v0.1_macos_arm64`
+
+```powershell
+# Windows
+.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+```
+
+```bash
+# macOS
+./auto_cull_v0.1_macos_arm64 --input-dir /path/to/photos --recursive --force
+```
+
+省略 `--input-dir` 会弹出文件夹选择器。[常用参数](#常用参数)与源码 CLI 完全一致。二进制已内置 ONNX 模型、exiftool 与 ffmpeg 运行时组件，无需额外安装。
+
+### 方式二：从源码运行
+
+前置条件：
+
+- **Python 3.10+**，推荐用 [uv](https://github.com/astral-sh/uv) 管理依赖
+- **ffmpeg** 在 PATH 中（macOS：`brew install ffmpeg`；Windows：`external/ffmpeg/` 已内置）
 - **exiftool**：已内置于 `external/exiftool/`（macOS 使用系统自带 perl）；Windows CI 通过 `choco install exiftool` 安装
 - GPU 可选：NVIDIA（DirectML/CUDA EP）或 Apple Silicon（CoreML）加速推理；全部自动回退 CPU。
-
-### 2. 安装
 
 ```bash
 uv sync
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
+python cull_photos.py --input-dir /path/to/photos --recursive --force
 ```
 
-### 3. 运行
-
-```bash
-# 省略 --input-dir 时弹出文件夹选择器；扫描、评分并写入 XMP/元数据
-python cull_photos.py --input-dir /path/to/photos
-
-# 典型批量运行
-python cull_photos.py --input-dir /path/to/photos --recursive --workers 8 --force
-```
-
-常用参数：
+#### 常用参数
 
 | 参数 | 说明 |
 | :--- | :--- |

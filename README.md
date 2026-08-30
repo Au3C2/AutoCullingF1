@@ -66,7 +66,7 @@ static graphs, sharded exiftool EXIF scan. Serial scoring chain ≈ 37.5 fps.
 Inference runs on **DirectML** (onnxruntime-directml; scores the chain at 6.8 ms/frame vs
 12.6 ms on the CUDA EP). HEVC 4:2:2 and JPEG have no hardware decoders on consumer NVIDIA
 GPUs, so decode is libjpeg-turbo / libav software (measured and documented in
-[`docs/win_optimization_plan.md`](docs/win_optimization_plan.md)).
+[`results/performance_baseline.md`](results/performance_baseline.md)).
 
 > Per-frame cost is dominated by decode for JPEG/RAW (~115 ms for a 24 MP frame — Huffman
 > entropy coding is resolution-independent) and by the inference chain for HEIF/NEF.
@@ -74,35 +74,47 @@ GPUs, so decode is libjpeg-turbo / libav software (measured and documented in
 
 ## Quick Start
 
-### 1. Prerequisites
+### Option 1 — Standalone executable (no Python required)
 
-- **Python 3.10+**
-- **ffmpeg** — required for HEIF/RAW embedded-preview decoding
-  (macOS: `brew install ffmpeg`; Windows: bundled in `external/ffmpeg/` on this setup, or
-  install and add to `PATH`)
-- **exiftool** — bundled under `external/exiftool/` (macOS needs system perl, which ships
-  with macOS); the Windows CI installs it via `choco install exiftool`
+Grab the prebuilt binary from the GitHub releases (or build it yourself — see
+[Packaging](#packaging-standalone-binary)):
+
+- Windows: `auto_cull_v0.1_win_x64.exe`
+- macOS (Apple Silicon): `auto_cull_v0.1_macos_arm64`
+
+```powershell
+# Windows
+.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+```
+
+```bash
+# macOS
+./auto_cull_v0.1_macos_arm64 --input-dir /path/to/photos --recursive --force
+```
+
+Omit `--input-dir` to open a folder picker. All [options](#useful-options) work the same
+as the source CLI. The binary bundles the ONNX models, exiftool and ffmpeg runtime pieces —
+nothing else needs to be installed.
+
+### Option 2 — Run from source
+
+Prerequisites:
+
+- **Python 3.10+** with [uv](https://github.com/astral-sh/uv)
+- **ffmpeg** on PATH (macOS: `brew install ffmpeg`; Windows: bundled in `external/ffmpeg/`)
+- **exiftool** — bundled under `external/exiftool/` (macOS uses the system perl that ships
+  with macOS); Windows CI installs it via `choco install exiftool`
 - GPU optional: NVIDIA (DirectML/CUDA EP) or Apple Silicon (CoreML) accelerate inference;
   everything falls back to CPU automatically.
-
-### 2. Installation
 
 ```bash
 uv sync
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
+python cull_photos.py --input-dir /path/to/photos --recursive --force
 ```
 
-### 3. Run
-
-```bash
-# Folder picker GUI if --input-dir is omitted; scans, scores, writes XMP/metadata
-python cull_photos.py --input-dir /path/to/photos
-
-# Typical batch run
-python cull_photos.py --input-dir /path/to/photos --recursive --workers 8 --force
-```
-
-Useful options:
+#### Useful options
 
 | Option | Meaning |
 | :--- | :--- |
