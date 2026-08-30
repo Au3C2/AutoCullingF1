@@ -95,11 +95,19 @@ class P4Classifier:
                         providers = ['CPUExecutionProvider']
                 else:
                     providers = []
-                    for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']:
+                    for p in ['CoreMLExecutionProvider', 'CUDAExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']:
                         if p in available: providers.append(p)
                     if not providers: providers = ['CPUExecutionProvider']
-            self.session = ort.InferenceSession(str(model_file), providers=providers,
-                                                sess_options=sess_opts if deterministic else opts_for_session)
+            try:
+                self.session = ort.InferenceSession(str(model_file), providers=providers,
+                                                    sess_options=sess_opts if deterministic else opts_for_session)
+            except Exception:
+                # GPU EP (CUDA/DML) unusable on this box (no device/driver) —
+                # fall back to CPU so CI and GPU-less machines still score.
+                if "CPUExecutionProvider" in [p if isinstance(p, str) else p[0] for p in providers]:
+                    raise
+                self.session = ort.InferenceSession(str(model_file), providers=["CPUExecutionProvider"],
+                                                    sess_options=sess_opts if deterministic else opts_for_session)
             
             dummy = np.zeros((1, 3, 224, 224), dtype=np.float32)
             self.session.run(None, {'input': dummy})

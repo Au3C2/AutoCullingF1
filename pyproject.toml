@@ -9,7 +9,10 @@ dependencies = [
     "pillow-heif>=0.18.0",
     "pillow-avif-plugin>=1.5.5",
     "opencv-python-headless>=4.10.0",
-    "onnxruntime==1.23.2",
+    # Windows: DirectML build (measured ~2x faster scoring-chain inference
+    # than the CUDA EP on RTX 4070 Ti, 2026-08-30; CUDA build kept elsewhere).
+    "onnxruntime-directml==1.23.0; sys_platform == 'win32'",
+    "onnxruntime==1.23.2; sys_platform != 'win32'",
     "onnx>=1.17.0",
     "numpy>=1.26.0",
     "pillow>=10.0.0",
