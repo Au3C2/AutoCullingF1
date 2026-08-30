@@ -36,7 +36,8 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PYINSTALLER = ROOT / ".venv" / "bin" / "pyinstaller"
+_PYI = "pyinstaller.exe" if sys.platform == "win32" else "pyinstaller"
+PYINSTALLER = ROOT / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / _PYI
 
 EXE_NAMES = {
     "Darwin": "auto_cull_v0.1_macos_arm64",
@@ -108,7 +109,10 @@ def main() -> int:
 
     exe_name = EXE_NAMES.get(platform.system(), "auto_cull")
     if args.onedir:
-        artifact_dir = ROOT / "dist" / exe_name
+        # PyInstaller names the onedir folder after the spec name, which has
+        # no ".exe" suffix on Windows, while the binary inside keeps it.
+        dir_name = exe_name[:-4] if sys.platform == "win32" and exe_name.endswith(".exe") else exe_name
+        artifact_dir = ROOT / "dist" / dir_name
         artifact = artifact_dir / exe_name
         if not artifact.exists():
             print(f"ERROR: expected artifact {artifact} missing", file=sys.stderr)

@@ -70,11 +70,19 @@ def _stage_models() -> list[tuple[str, str]]:
 
 
 def _exiftool_datas() -> list[tuple[str, str]]:
-    """Bundled exiftool. macOS: perl script + lib (system perl executes it).
-    Windows: self-contained exiftool.exe only (the lib tree would make
-    cull/exif_reader.py route the .exe through a nonexistent perl)."""
+    """Bundled exiftool. Both platforms ship the perl-script form
+    (perl.exe + exiftool.pl + lib on Windows; script + lib with system
+    perl on macOS) — `_find_exiftool_path` priority 1 resolves it and the
+    stay_open batch sessions (RAW extract + metadata write) work through
+    the same proven invocation. The standalone exiftool.exe on this tree
+    is NOT self-contained (it wants exiftool_files\\perl5*.dll) and dies
+    at spawn, killing the batch metadata writer (measured 2026-08-30)."""
     if is_win:
-        return [("external/exiftool/exiftool.exe", "external/exiftool")]
+        base = "external/exiftool"
+        files = ["perl.exe", "perl532.dll", "exiftool.pl",
+                 "libgcc_s_seh-1.dll", "liblzma-5__.dll",
+                 "libstdc++-6.dll", "libwinpthread-1.dll"]
+        return [(f"{base}/{f}", base) for f in files] + [(f"{base}/lib", f"{base}/lib")]
     return [
         ("external/exiftool/exiftool", "external/exiftool"),
         ("external/exiftool/lib", "external/exiftool/lib"),

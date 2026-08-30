@@ -30,8 +30,12 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PY = ROOT / ".venv" / "bin" / "python"
-ONEDIR = ROOT / "dist" / "auto_cull_v0.1_macos_arm64" / "auto_cull_v0.1_macos_arm64"
+if sys.platform == "win32":
+    PY = ROOT / ".venv" / "Scripts" / "python.exe"
+    ONEDIR = ROOT / "dist" / "auto_cull_v0.1_win_x64" / "auto_cull_v0.1_win_x64.exe"
+else:
+    PY = ROOT / ".venv" / "bin" / "python"
+    ONEDIR = ROOT / "dist" / "auto_cull_v0.1_macos_arm64" / "auto_cull_v0.1_macos_arm64"
 
 PRECISION_TESTS = [
     "tests/test_cull.py",
