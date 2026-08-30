@@ -1,171 +1,203 @@
 # Auto-Culling (F1 Exclusive) 🏎️📸
 
-[中文版](README_zh.md) | **English**
+**English** | [中文版](README_zh.md)
 
-An automated photo culling tool for F1 & motorsport photography. It systematically processes thousands of burst-shot images (HIF/RAW), identifies the best shots using deep learning and heuristic rules, and generates Lightroom-compatible XMP sidecars with ratings and auto-crops.
+An automated photo culling tool for F1 & motorsport photography. It processes thousands of
+burst-shot images (HEIF/RAW/JPEG), groups them into bursts, scores every frame with a
+multi-stage AI pipeline, keeps the best shots per burst, and writes Lightroom-compatible
+ratings (stars / reject flags) plus auto-crops — no manual triage required.
 
----
-
-## 🌟 Key Features
-
-- **Burst Grouping**: Automatically groups rapid-fire sequences based on EXIF timestamps.
-- **Multi-Stage Scoring Pipeline**:
-  - **P0 Sharpness**: High-frequency detail analysis (HF Ratio) to filter out-of-focus shots.
-  - **P1 Composition**: YOLO-based object detection (F1 specific + COCO) to evaluate subject size and centering.
-  - **P4 Orientation & Integrity**: MobileNetV3 multi-task model to classify car orientation (rejecting rear shots) and detect cut/occluded subjects.
-- **Top-N Selection**: Intelligently selects the best $N$ frames from each burst sequence.
-- **Auto-Cropping**: Automatically calculates and writes optimal crops to XMP based on subject position and target aspect ratio (3:2/2:3).
-- **Lightroom Integration**: Generates `.xmp` files that Lightroom Classic reads instantly for ratings (1-5 stars) and flags.
-- **Lite & Portable**: Completely removed heavy dependencies (Torch, OpenCV). The entire engine is now powered by **ONNX Runtime** and **Pillow**, enabling a <50MB compressed distribution.
+- **Input**: a folder straight off the camera (Sony ARW, Nikon NEF, Canon CR2/CR3, Fuji RAF,
+  Olympus ORF, Panasonic RW2, Canon/Sony HEIF `.hif/.heif/.heic`, JPEG, PNG, TIFF)
+- **Output**: Lightroom `.xmp` sidecars (RAW/HEIF) or in-file XMP metadata (JPEG/HIF) with
+  star ratings, reject flags and crop parameters
+- **Runtime**: pure ONNX Runtime inference — no PyTorch required at runtime
 
 ---
 
-## 🚀 End-to-End Performance
+## Key Features
 
-Measured on a sample of 1000 HEIF images (1280px decode scale). **"End-to-End"** throughput represents the entire workflow: file loading, decoding, multi-stage AI inference, and XMP generation.
+- **Burst grouping** from EXIF timestamps (with gap-based fallback).
+- **Multi-stage scoring pipeline**:
+  - **P0 Sharpness** — high-frequency energy ratio (FFT-based) with subject-ROI weighting;
+    out-of-focus frames are vetoed.
+  - **P1 Composition** — YOLO detection (F1-specific 14-class model at 640 px, with a COCO
+    `yolov8n` cascade fallback when the F1 model misses) scores subject size, placement and
+    lead room across the burst.
+  - **P4 Orientation & Integrity** — MobileNetV3 multi-task classifier (224 px) rejects
+    rear-view shots and penalizes cut / occluded subjects.
+  - **P3 Fence veto** — optional fence classifier (disabled by default).
+- **Top-N selection** — keeps the best *N* frames (default 11) per burst by raw score.
+- **Auto-cropping** — computes a Lightroom crop around the detected subject (3:2 / 2:3)
+  and writes `crs:` crop parameters.
+- **Lightroom integration** — ratings appear instantly on import; already-rated files are
+  skipped unless `--force`.
+- **Deterministic mode** — `--deterministic` (or `CULL_DETERMINISTIC=1`) pins CPU-only ONNX
+  + software decode for bit-identical results across macOS / Windows / Linux; this is the
+  platform-independent truth all precision gates are locked against.
 
-### macOS (Apple Silicon M4 Pro)
-Optimized for the Apple Neural Engine (ANE) using CoreML.
+## End-to-End Performance
 
-| Backend | Hardware | End-to-End Throughput |
-| :--- | :--- | :--- |
-| **ONNX Runtime** | M-Series CPU | ~13.8 img/s |
-| **CoreML** | **Neural Engine (ANE)** | **~18.6 img/s (+35%)** |
+Gate protocol: ~500-file per-format sets, `--dry-run`, steady-state throughput measured on
+real camera files (decode + burst grouping + AI inference + metadata write). Baselines and
+methodology: [`results/performance_baseline.md`](results/performance_baseline.md).
 
-### Windows (Intel i9 + RTX 4070 Ti)
-Leverages CUDA acceleration and massively parallel prefetching.
+### macOS — Apple M4 (10 cores), workers = 4
 
-| Backend | Hardware | End-to-End Throughput |
-| :--- | :--- | :--- |
-| **CUDA** | **NVIDIA RTX 4070 Ti** | **~35.0 img/s** |
-| **CUDA** | **NVIDIA RTX 4090** | **~52.0+ img/s** |
+| Format | Throughput |
+| :--- | ---: |
+| JPEG | 83.5 img/s |
+| HEIF | 65.5 img/s |
+| Sony ARW | 49.9 img/s |
+| Nikon NEF | 70.0 img/s |
 
----
+Hardware acceleration: VideoToolbox HEIF decode, ImageIO JPEG decode, CoreML (+ANE) YOLO
+static graphs, sharded exiftool EXIF scan. Serial scoring chain ≈ 37.5 fps.
 
-## 🛠️ Quick Start
+### Windows — Ryzen 7 5700X + RTX 4070 Ti, workers = 4 (default 8)
+
+| Format | workers = 4 | workers = 8 (default) |
+| :--- | ---: | ---: |
+| JPEG | 28.1 img/s | 40–42 img/s |
+| HEIF | 38.0 img/s | 38.5 img/s |
+| Sony ARW | 31.9 img/s | 35 img/s |
+| Nikon NEF | 45.0 img/s | 46 img/s |
+
+Inference runs on **DirectML** (onnxruntime-directml; scores the chain at 6.8 ms/frame vs
+12.6 ms on the CUDA EP). HEVC 4:2:2 and JPEG have no hardware decoders on consumer NVIDIA
+GPUs, so decode is libjpeg-turbo / libav software (measured and documented in
+[`docs/win_optimization_plan.md`](docs/win_optimization_plan.md)).
+
+> Per-frame cost is dominated by decode for JPEG/RAW (~115 ms for a 24 MP frame — Huffman
+> entropy coding is resolution-independent) and by the inference chain for HEIF/NEF.
+> `--workers` scales decode parallelism; ratings are identical across worker counts.
+
+## Quick Start
 
 ### 1. Prerequisites
 
 - **Python 3.10+**
-- **FFmpeg**: Required for high-speed HIF decoding.
-  - **macOS**: `brew install ffmpeg`
-  - **Windows**: [Download](https://ffmpeg.org/download.html) and add to `PATH`.
+- **ffmpeg** — required for HEIF/RAW embedded-preview decoding
+  (macOS: `brew install ffmpeg`; Windows: bundled in `external/ffmpeg/` on this setup, or
+  install and add to `PATH`)
+- **exiftool** — bundled under `external/exiftool/` (macOS needs system perl, which ships
+  with macOS); the Windows CI installs it via `choco install exiftool`
+- GPU optional: NVIDIA (DirectML/CUDA EP) or Apple Silicon (CoreML) accelerate inference;
+  everything falls back to CPU automatically.
 
 ### 2. Installation
 
-We recommend using [uv](https://github.com/astral-sh/uv) for fast and reliable dependency management.
-
-**macOS / Linux:**
 ```bash
 uv sync
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 ```
 
-**Windows (PowerShell):**
-```powershell
-uv sync
-.venv\Scripts\activate.ps1
-```
+### 3. Run
 
-### 3. Basic Usage
-
-Analyze a directory of images and generate XMP sidecars:
-
-**macOS:**
 ```bash
-python cull_photos.py --input-dir /path/to/photos --workers 8 --scale-width 1280
+# Folder picker GUI if --input-dir is omitted; scans, scores, writes XMP/metadata
+python cull_photos.py --input-dir /path/to/photos
+
+# Typical batch run
+python cull_photos.py --input-dir /path/to/photos --recursive --workers 8 --force
 ```
 
-**Windows:**
-```powershell
-python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
-```
+Useful options:
 
-**Common Options:**
-- `--workers N`: Number of parallel prefetch workers.
-- `--scale-width 1280`: Downscale images during decode for faster processing.
-- `--top-n 11`: Max keepers per burst group.
-- `--force`: Re-analyze even if XMP/Ratings already exist.
+| Option | Meaning |
+| :--- | :--- |
+| `--workers N` | Decode-pool size (default 8; ratings are worker-invariant) |
+| `--top-n 11` | Max keepers per burst group |
+| `--scale-width 1280` | Decode resolution for the scoring chain |
+| `--p4-policy` | `always` (default) / `never` / `auto` (only for F1/GP folders) |
+| `--crop-off` | Disable auto-crop writing |
+| `--dry-run` | Score and report without writing any metadata |
+| `--dump-scores FILE` | Export per-image CSV (sharp/comp/raw/rating) |
+| `--force` | Re-analyze files that already carry ratings |
+| `--deterministic` | Bit-identical cross-platform CPU path (slower) |
 
----
+There is also a small **customtkinter GUI** (`cull/gui`) when `--input-dir` is omitted.
 
-## 📦 Binary Distribution (LITE)
+## Packaging (standalone binary)
 
-The **LITE version** is a standalone executable that does not require Python or any heavy AI frameworks installed on your system. It is optimized for speed and portability.
-
-### 1. Download & Use (Pre-compiled)
-1. Download the latest `cull_photos_lite.zip` from our releases.
-2. Unzip to any folder.
-3. Run the command directly:
-   - **macOS:** `./dist/cull_photos/cull_photos --input-dir /path/to/photos`
-   - **Windows:** `.\dist\cull_photos\cull_photos.exe --input-dir C:\Photos`
-
-### 2. Build Your Own (Packaging)
-If you want to compile the binary yourself using `pyinstaller`:
-
-**Step 1: Install PyInstaller**
 ```bash
 uv pip install pyinstaller
+
+python packaging/build.py            # onefile  -> dist/ + copy to repo root
+python packaging/build.py --onedir   # directory form (recommended: no per-launch
+                                     # extraction/signature tax)
 ```
 
-**Step 2: Build the Lite Binary**
-```bash
-# Using the provided spec file (optimized to exclude Torch/CV2)
-pyinstaller cull_photos.spec --noconfirm
-```
-The output will be available in `dist/cull_photos/`.
+Artifacts: `auto_cull_v0.1_win_x64.exe` (Windows, ~478 MiB onedir) and
+`auto_cull_v0.1_macos_arm64` (macOS, 161 MiB onefile). The spec bundles the frozen ONNX
+graphs, exiftool (perl form) and ffmpeg runtime pieces; no Python installation is needed on
+the target machine. Unified regression suite for packaging:
+`python packaging/guards.py` (precision → perf → build → packaged precision → packaged perf).
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 auto_culling/
-├── cull/                  # Core package (Sharpness, Composition, Detectors, Scorer)
-├── eval/                  # Evaluation & benchmarking scripts
-├── train/                 # Model training pipelines (YOLO, Classifiers)
-├── utils/                 # Utility scripts (Autocrop, EXIF tools, Model download)
-├── models/                # Model weights (Local ONNX/CoreML)
-├── results/               # Benchmark reports and experiment logs
-├── tests/                 # Automated test suite
-└── cull_photos.py         # Main entry point
+├── cull/                  # Core engine: loader (decode), detector (YOLO), sharpness,
+│                          # composition, scorer (P0-P4 + ratings), p4_classifier,
+│                          # fence_classifier, engine (process pool + consumer),
+│                          # exif_reader, xmp_writer, gui
+├── models/                # ONNX weights (f1_yolov8n, yolov8n, p4_car_model + static variants)
+├── train/                 # Training pipelines (YOLO fine-tune, P4 multi-task, fence, tuning)
+├── packaging/             # build.py + guards.py (PyInstaller, unified regression suite)
+├── benchmarks/            # run_benchmarks.py — per-format steady-state perf gate
+├── tests/                 # Precision gates + deterministic truth + CI harness
+├── scripts/               # Utilities (baseline generation, profilers, precision report)
+├── eval/                  # Offline evaluation tooling
+├── docs/                  # Optimization plans, labeling guides
+├── results/               # performance_baseline.md (authoritative numbers & history)
+├── external/              # Vendored exiftool (+ ffmpeg on Windows)
+└── cull_photos.py         # CLI entry point
 ```
 
----
+## Scoring Logic
 
-## 📊 Scoring Logic
+```
+raw_score = 1.5 × S_sharp + 2.5 × S_comp − 0.6 × [P4 integrity = cut/occluded]
 
-The final `raw_score` is calculated as:
-$$score = 1.5 \times S_{sharp} + 2.5 \times S_{comp} - Penalty_{cut}$$
-
-**Veto Rules (Automatic Rejection):**
-- No target detected.
-- Sharpness below threshold (0.05).
-- Car orientation is "Rear" (back view).
-- Low overall score (below 3.1).
-
----
-
-## 🧪 Testing
-
-Run the integration test suite to verify backend execution and XMP accuracy:
-
-```bash
-pytest tests/test_cull.py
+rating: raw < 3.11 → 1★, < 3.40 → 2★, < 3.80 → 3★, < 4.20 → 4★, else 5★
 ```
 
-Deterministic precision (cross-platform truth, CPU-only, software decode):
+Automatic rejection (veto, rating = −1):
+
+- No subject detected in the frame
+- Sharpness below threshold (0.05)
+- Car orientation classified as **rear**
+- Raw score below the minimum (3.1)
+
+After per-frame scoring, `select_best_n` keeps the top *N* frames per burst and adjusts
+star ratings within the group.
+
+## Testing & Gates
 
 ```bash
-# Regenerate the committed truth after intentional scoring changes
+# Precision: ratings + raw scores vs the committed deterministic truth (70 gate files)
+pytest tests/ -m deterministic                       # truth platform check (strict)
+pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
+
+# Performance: per-format steady-state gate (needs the ~1.3 GB camera datasets)
+python benchmarks/run_benchmarks.py
+
+# Everything (precision → perf → build → packaged gates): ~12-15 min
+python packaging/guards.py
+
+# Regenerate the deterministic truth after intentional scoring changes
 CULL_DETERMINISTIC=1 python scripts/generate_deterministic_baseline.py
-# Verify: deterministic == truth (strict), other backends align to it
-pytest tests/test_deterministic_baseline.py -v
-# Or force deterministic on any run
-python cull_photos.py --deterministic --input-dir /path/to/photos
-CULL_DETERMINISTIC=1 pytest tests/test_deterministic_baseline.py -k deterministic
 ```
 
----
+CI (`.github/workflows/`) runs the same gates on GitHub-hosted macOS/Windows runners using
+committed seed samples (`tests/ci/`). Precision is consistency-based: the packaged binary
+must match the source pipeline per-file (±0.002 raw tolerance), and ratings must be equal.
 
-## 📜 License
+Further reading: [`results/performance_baseline.md`](results/performance_baseline.md)
+(measured numbers, optimization history, platform baselines),
+[`docs/P4_LABELING.md`](docs/P4_LABELING.md) (P4 labeling guide).
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

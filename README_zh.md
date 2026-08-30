@@ -2,207 +2,170 @@
 
 **中文版** | [English](README.md)
 
-本工具专为 F1 及各类赛车摄影设计。利用深度学习与启发式规则，从连拍产生的数千张原片（HIF/RAW）中高效筛选出最值得保留的高质量照片，并同步生成可供 Lightroom 直接导入的 XMP 星级标注与自动裁剪信息。
+本工具专为 F1 及各类赛车摄影设计。面向相机直出的整个文件夹（HEIF/RAW/JPEG），自动完成连拍分组、逐帧多阶段 AI 评分、每组 Top-N 精选，并直接写入 Lightroom 兼容的星级/拒绝标记与自动裁剪参数——无需人工初筛。
+
+- **输入**：相机直出文件夹（索尼 ARW、尼康 NEF、佳能 CR2/CR3、富士 RAF、奥之心 ORF、松下 RW2、佳能/索尼 HEIF `.hif/.heif/.heic`、JPEG、PNG、TIFF）
+- **输出**：Lightroom `.xmp` 附属文件（RAW/HEIF）或文件内 XMP 元数据（JPEG/HIF），包含星级、拒绝标记与裁剪参数
+- **运行时**：纯 ONNX Runtime 推理——运行时不需要 PyTorch
 
 ---
 
-## 🌟 核心功能
+## 核心功能
 
-- **连拍分组**：基于 EXIF 时间戳自动将瞬时爆发的连拍序列智能编组。
+- **连拍分组**：基于 EXIF 时间戳（辅以时间间隔回退策略）自动编组。
 - **多阶段评分流水线**：
-  - **P0 锐度评估**：基于高频细节比率（HF Ratio）精准过滤失焦或模糊的照片。
-  - **P1 构图评分**：使用赛车专用 YOLO 目标检测模型，评估主体面积、位置居中度。
-  - **P4 朝向与完整性**：MobileNetV3 多任务模型自动识别车辆朝向（一票否决正后方视角）并检测主体是否被铁丝网等遮挡。
-- **Top-N 筛选策略**：在每一组连拍中自动挑选得分最高的 $N$ 张。
-- **自动裁剪**：基于车辆主体位置与目标纵横比（3:2/2:3）自动生成最佳裁剪方案。
-- **Lightroom 深度集成**：生成对应的 `.xmp` 附属文件，Lightroom Classic 导入时将自动识别星级评分 (1-5★) 与裁剪框。
-- **极简便携 (Lite)**：彻底移除了 Torch、OpenCV 等沉重依赖。全流程基于 **ONNX Runtime** 与 **Pillow**，压缩包大小仅约 50MB。
+  - **P0 锐度**：基于 FFT 的高频能量比，叠加主体 ROI 加权；失焦帧一票否决。
+  - **P1 构图**：YOLO 检测（F1 专用 14 类模型，640px；F1 未命中时级联 COCO `yolov8n` 兜底），评估主体面积、位置居中与画面留白。
+  - **P4 朝向与完整性**：MobileNetV3 多任务分类器（224px），否决正后方视角、惩罚切割/遮挡主体。
+  - **P3 铁丝网否决**：可选围栏分类器（默认关闭）。
+- **Top-N 筛选**：每组连拍按原始分保留最优 *N* 张（默认 11）。
+- **自动裁剪**：围绕检测主体生成 Lightroom 裁剪框（3:2 / 2:3）并写入 `crs:` 参数。
+- **Lightroom 深度集成**：导入即显示星级；已评分文件自动跳过（`--force` 强制重跑）。
+- **确定性模式**：`--deterministic`（或 `CULL_DETERMINISTIC=1`）强制纯 CPU ONNX + 软件解码，在 macOS / Windows / Linux 上输出位一致——这是所有精度门禁锁定的跨平台真值。
 
----
+## 端到端性能
 
-## 🚀 端到端性能基准 (End-to-End Performance)
+门协议：每格式约 500 张真实相机文件，`--dry-run`，测稳态吞吐（解码 + 连拍分组 + AI 推理 + 元数据写入）。基线与方法论见 [`results/performance_baseline.md`](results/performance_baseline.md)。
 
-测试基于 1000 张 HEIF 连拍原片（1280px 解码缩放）。**「端到端」** 吞吐量涵盖了完整的工作流：文件搜集、EXIF 读取、图像解码、多阶段 AI 推理以及 XMP 生成。
+### macOS — Apple M4（10 核），workers = 4
 
-### macOS (Apple Silicon M4 Pro)
-针对 Apple Neural Engine (ANE) 进行 CoreML 深度优化。
+| 格式 | 吞吐量 |
+| :--- | ---: |
+| JPEG | 83.5 img/s |
+| HEIF | 65.5 img/s |
+| 索尼 ARW | 49.9 img/s |
+| 尼康 NEF | 70.0 img/s |
 
-| 推理后端 | 硬件设备 | 端到端吞吐量 | 
-| :--- | :--- | :--- |
-| **ONNX Runtime** | M-Chip CPU | ~13.8 张/秒 |
-| **CoreML** | **ANE 神经网络引擎** | **~18.6 张/秒 (+35%)** |
+硬件加速：VideoToolbox HEIF 硬解、ImageIO JPEG 硬解、CoreML(+ANE) YOLO 静态图、exiftool 分片 EXIF 扫描。评分链串行 ≈ 37.5 fps。
 
-### Windows (Intel i9 + RTX 4070 Ti)
-得益于强大的 CUDA 核心加速与多线程预取技术。
+### Windows — Ryzen 7 5700X + RTX 4070 Ti，workers = 4（默认 8）
 
-| 推理后端 | 硬件设备 | 端到端吞吐量 | 
-| :--- | :--- | :--- |
-| **CUDA** | **NVIDIA RTX 4070 Ti** | **~35.0 张/秒** |
-| **CUDA** | **NVIDIA RTX 4090** | **~52.0+ 张/秒** |
+| 格式 | workers = 4 | workers = 8（默认） |
+| :--- | ---: | ---: |
+| JPEG | 28.1 img/s | 40–42 img/s |
+| HEIF | 38.0 img/s | 38.5 img/s |
+| 索尼 ARW | 31.9 img/s | 35 img/s |
+| 尼康 NEF | 45.0 img/s | 46 img/s |
 
----
+推理跑在 **DirectML**（onnxruntime-directml；评分链 6.8 ms/帧，CUDA EP 为 12.6 ms）。消费级 NVIDIA GPU 没有 HEVC 4:2:2 与 JPEG 硬件解码器，解码走 libjpeg-turbo / libav 软解（实测与论证见 [`docs/win_optimization_plan.md`](docs/win_optimization_plan.md)）。
 
-## 🛠️ 快速上手
+> 单帧成本中，JPEG/RAW 以解码为主（24MP 约 115 ms——Huffman 熵解码与分辨率无关），HEIF/NEF 以推理链为主。`--workers` 控制解码并行度；星级与 worker 数无关。
 
-### 1. 依赖环境
+## 快速开始
+
+### 1. 前置条件
 
 - **Python 3.10+**
-- **FFmpeg**: 用于高性能 HIF 视频预览流解码。
-  - **macOS**: `brew install ffmpeg`
-  - **Windows**: [官网下载](https://ffmpeg.org/download.html) 并添加到环境变量 `PATH`。
+- **ffmpeg**：HEIF/RAW 内嵌预览解码必需（macOS：`brew install ffmpeg`；Windows：本仓库 `external/ffmpeg/` 已内置，或自行安装并加入 PATH）
+- **exiftool**：已内置于 `external/exiftool/`（macOS 使用系统自带 perl）；Windows CI 通过 `choco install exiftool` 安装
+- GPU 可选：NVIDIA（DirectML/CUDA EP）或 Apple Silicon（CoreML）加速推理；全部自动回退 CPU。
 
-### 2. 安装与配置
+### 2. 安装
 
-推荐使用 [uv](https://github.com/astral-sh/uv) 进行高效依赖管理及虚拟环境创建：
-
-**macOS / Linux:**
 ```bash
 uv sync
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 ```
 
-**Windows (PowerShell):**
-```powershell
-uv sync
-.venv\Scripts\activate.ps1
-```
+### 3. 运行
 
-### 3. 使用示例
-
-扫描指定文件夹并生成 XMP 评分文件：
-
-**macOS:**
 ```bash
-python cull_photos.py --input-dir /你的/照片/路径 --workers 8 --scale-width 1280
+# 省略 --input-dir 时弹出文件夹选择器；扫描、评分并写入 XMP/元数据
+python cull_photos.py --input-dir /path/to/photos
+
+# 典型批量运行
+python cull_photos.py --input-dir /path/to/photos --recursive --workers 8 --force
 ```
 
-**Windows:**
-```powershell
-python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
-```
+常用参数：
 
-**常用参数说明:**
-- `--workers N`: 设置并行解码与预加载的 Worker 线程数。
-- `--scale-width 1280`: 解码时进行缩放处理，极大提升推理速度。
-- `--top-n 11`: 每组连拍保留的最大数量。
-- `--force`: 忽略已有 XMP 评分，强制全量重新检测。
+| 参数 | 说明 |
+| :--- | :--- |
+| `--workers N` | 解码进程池大小（默认 8；星级与 worker 数无关） |
+| `--top-n 11` | 每组连拍最多保留张数 |
+| `--scale-width 1280` | 评分链解码分辨率 |
+| `--p4-policy` | `always`（默认）/ `never` / `auto`（仅 F1/GP 目录启用 P4） |
+| `--crop-off` | 关闭自动裁剪写入 |
+| `--dry-run` | 只评分与报告，不写任何元数据 |
+| `--dump-scores FILE` | 导出逐图 CSV（锐度/构图/原始分/星级） |
+| `--force` | 强制重分析已评分文件 |
+| `--deterministic` | 跨平台位一致的 CPU 路径（较慢） |
 
----
+省略 `--input-dir` 时还有基于 **customtkinter** 的小型 GUI（`cull/gui`）。
 
-## 📦 极简发行版 (LITE)
+## 打包（独立可执行文件）
 
-**LITE 版本** 是一个独立的可执行文件，无需安装 Python 或任何复杂的 AI 框架即可在你的系统上直接运行。它针对便携性与极速分发进行了极致优化。
-
-### 1. 下载与使用 (预编译)
-1. 从 Release 页面下载最新的 `cull_photos_lite.zip`。
-2. 解压到任意文件夹。
-3. 直接运行命令（以管理员权限运行性能更好）：
-   - **macOS:** `./auto_cull_v0.1_macos_arm64 --input-dir /你的照片路径`
-   - **Windows:** `.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos`
-
-### 2. 自行打包 (Packaging)
-
-打包产物为单文件可执行，无需 Python、无需安装模型与 exiftool（全部内置）。
-支持 macOS（Apple Silicon）与 Windows 双平台（spec 按平台分支）。
-
-**第一步：安装 PyInstaller**
 ```bash
 uv pip install pyinstaller
+
+python packaging/build.py            # onefile -> dist/ 并复制到仓库根目录
+python packaging/build.py --onedir   # 目录形态（推荐：无每次启动的解压/签名税）
 ```
 
-**第二步：执行打包脚本**
-```bash
-python packaging/build.py                 # 单文件产物 → 项目根目录
-python packaging/build.py --onedir        # 目录形态（性能验证用，见下）
-```
-产物为 `auto_cull_v0.1_macos_arm64` / `auto_cull_v0.1_win_x64.exe`。
+产物：`auto_cull_v0.1_win_x64.exe`（Windows，onedir 约 478 MiB）、
+`auto_cull_v0.1_macos_arm64`（macOS，onefile 161 MiB）。spec 打包了冻结的 ONNX 图、
+exiftool（perl 形态）与 ffmpeg 运行时组件，目标机器无需安装 Python。
+打包回归统一入口：`python packaging/guards.py`（精度 → 性能 → 构建 → 打包精度 → 打包性能）。
 
-**在打包产物上跑现有测试脚本**（`CULL_EXE` 环境变量使精度/性能脚本指向二进制）：
-
-```bash
-# 精度门（JPG + 24 HEIF + 20 ARW + 20 NEF 逐文件比对基线）
-CULL_EXE=./auto_cull_v0.1_macos_arm64 pytest tests/test_package.py \
-    tests/test_precision_heif.py tests/test_precision_raw.py
-
-# 性能门（4 数据集吞吐，JPG 14.0 / HEIF 6.0 / ARW 5.0 / NEF 5.5 img/s）
-CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
-    python benchmarks/run_benchmarks.py
-```
-
-**打包策略**：性能与精度验证一律使用 **onedir（目录形态）**——单文件形态在 macOS 上每次运行都要重新支付代码签名验证税（约 15–25 秒，且稳态吞吐因冷页缓存下降 10–50%）。onedir 由 `build.py --onedir` 产出，zip 后可分发；`build.py`（默认）仍产出单文件形态用于简单分发。
-
-**统一回归看护**（覆盖源码精度/性能、打包流程、打包产物精度/性能）：
-```bash
-python packaging/guards.py                # 5 项全部，约 12-15 分钟
-python packaging/guards.py --perf-only    # 仅性能门（源码 + 打包，各约 3 分钟）
-python packaging/guards.py --skip-build   # 复用已有 dist 产物（精度第 2 次起）
-```
-
-## 🤖 GitHub Actions CI（精度 / 打包 / 性能三层）
-
-仓库内 `tests/ci/sample/` 每种格式只存 1 张种子（约 70MB），CI 运行时复制成
-约 500 张数据集，无需把 1.3GB 相机数据集入库。
-
-- **精度门**（无需校准）：`tests/ci/seed_precision.py --compare` 用
-  源码与打包产物分别评分同一批种子副本，逐文件断言 raw_score（±0.002 容差，
-  吸收 ANE 每次运行的 ±0.0004 抖动）与 rating 多重集一致。同源复制会进入
-  同一 burst 并被 Top-N 降级，因此只看"打包 vs 源码"的一致性而非绝对评级。
-- **打包流程门**：`build.py --onedir` + 产物存在性检查。
-- **性能门**（需校准）：`run_benchmarks.py --seed-dir tests/ci/sample
-  --baseline-file tests/ci/ci_config.json --tolerance 0.85`。CI 托管的 macOS runner
-  无 ANE、硅片与本地 M4 不同，**基线必须在目标 runner 上实测**：手动触发
-  `perf-calibrate` workflow → 下载产物 → 把 baselines 提交进 `tests/ci/ci_config.json`。
-  校准前性能门自动跳过（精度与打包门始终运行）。
-
-workflow 见 `.github/workflows/guards.yml`；CI 统一入口 `tests/ci/guard.py`。
-本地 seed 协议参考值（Apple M4，源码，workers=4）：JPG 84.5 / HEIF 42.6 /
-ARW 48.7 / NEF 69.9 img/s——HEIF 单张代表性差（DSC00827 走 COCO 回退），
-CI 基线必须以实测为准。
-
-**macOS 平台说明（冷启动签名验证税）**：macOS 内核对包内每个 Mach-O 的 adhoc
-签名做首次加载验证（按 inode 缓存）。单文件形态每次运行都解包到新临时目录，
-因此每次启动多付约 15–25 s（文件越多越慢）；目录形态（`--onedir`）只在每次
-开机后的首个进程付一次，之后吞吐与源码一致。
-
-## 📂 项目结构
+## 项目结构
 
 ```text
 auto_culling/
-├── cull/                  # 核心计算包（锐度、构图、检测器、综合打分）
-├── eval/                  # 评估与基准测试脚本
-├── train/                 # 模型训练模块（YOLO、各类分类器）
-├── utils/                 # 工具脚本（自动裁剪补全、EXIF 整理、模型下载）
-├── models/                # 模型权重文件（本地 ONNX/CoreML 模型）
-├── results/               # 评测结果与基准报告
-├── tests/                 # 自动化测试套件
-└── cull_photos.py         # 主程序入口
+├── cull/                  # 核心引擎：loader（解码）、detector（YOLO）、sharpness、
+│                          # composition、scorer（P0-P4 + 星级）、p4_classifier、
+│                          # fence_classifier、engine（解码池 + 单消费者）、
+│                          # exif_reader、xmp_writer、gui
+├── models/                # ONNX 权重（f1_yolov8n、yolov8n、p4_car_model 及静态图版本）
+├── train/                 # 训练流水线（YOLO 微调、P4 多任务、围栏分类器、调参）
+├── packaging/             # build.py + guards.py（PyInstaller，统一回归套件）
+├── benchmarks/            # run_benchmarks.py —— 分格式稳态性能门
+├── tests/                 # 精度门禁 + 确定性真值 + CI harness
+├── scripts/               # 工具脚本（基线生成、性能剖面、精度报告）
+├── eval/                  # 离线评估工具
+├── docs/                  # 优化计划、标注指南
+├── results/               # performance_baseline.md（权威数据与实验史）
+├── external/              # 内置 exiftool（Windows 另含 ffmpeg）
+└── cull_photos.py         # CLI 入口
 ```
 
----
+## 评分逻辑
 
-## 📊 评分逻辑说明
+```
+raw_score = 1.5 × S_sharp + 2.5 × S_comp − 0.6 × [P4 判定切割/遮挡]
 
-最终 `raw_score` 计算公式：
-$$score = 1.5 \times S_{锐度} + 2.5 \times S_{构图} - 惩罚_{截断/遮挡}$$
+星级：raw < 3.11 → 1★，< 3.40 → 2★，< 3.80 → 3★，< 4.20 → 4★，否则 5★
+```
 
-**否决项 (一票否决):**
-- 未检测到任何目标。
-- 锐度得分低于 0.05（严重模糊）。
-- 车辆朝向为 "Rear"（正尾部视角）。
-- 综合总分过低（低于 3.1）。
+一票否决（rating = −1）：
 
----
+- 画面中未检测到主体
+- 锐度低于阈值（0.05）
+- 车辆朝向为**正后方**
+- 原始分低于下限（3.1）
 
-## 🧪 自动化测试
+逐帧评分后由 `select_best_n` 在每组连拍内保留 Top-N 并微调组内星级。
 
-运行集成测试套件以验证后端推理准确性与 XMP 字段正确性：
+## 测试与门禁
 
 ```bash
-pytest tests/test_cull.py
+# 精度：70 张门文件的 rating + raw 对比已提交的确定性真值
+pytest tests/ -m deterministic                       # 真值平台检查（严格）
+pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
+
+# 性能：分格式稳态门（需约 1.3GB 相机数据集）
+python benchmarks/run_benchmarks.py
+
+# 全套（精度 → 性能 → 构建 → 打包门）：约 12-15 分钟
+python packaging/guards.py
+
+# 有意调整评分逻辑后重新生成确定性真值
+CULL_DETERMINISTIC=1 python scripts/generate_deterministic_baseline.py
 ```
 
----
+CI（`.github/workflows/`）在 GitHub 托管的 macOS/Windows runner 上用已提交的种子样本（`tests/ci/`）跑同一套门禁。精度采用一致性判定：打包二进制必须与源码流水线逐文件一致（raw ±0.002），rating 必须完全相同。
 
-## 📜 许可证
+延伸阅读：[`results/performance_baseline.md`](results/performance_baseline.md)（实测数据、优化史、各平台基线）、[`docs/P4_LABELING.md`](docs/P4_LABELING.md)（P4 标注指南）。
 
-本项目采用 [Apache License 2.0](LICENSE) 许可证。
+## 许可证
+
+[Apache License 2.0](LICENSE)。
