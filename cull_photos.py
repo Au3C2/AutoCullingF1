@@ -198,7 +198,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--label-check", action="store_true")
     parser.add_argument("--label-check-dir", type=Path, default=None)
     parser.add_argument("--scale-width", type=int, default=1280)
-    parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--workers", type=int, default=8,
+                        help="decode-pool size; 8 is the measured optimum on the "
+                             "8-core win32 dev box (JPG +30-50%% vs 4, +8-14%% vs 6; "
+                             "HEIF/NEF neutral, ARW consumer-bound — 2026-08-31 sweep)")
     parser.add_argument("--consumer-threads", type=int, default=1,
                         help="scoring threads; each owns its ONNX sessions (>=2 "
                              "processes different burst groups concurrently; "

@@ -63,8 +63,13 @@ STEADY_BASELINES_BY_PLATFORM: dict[str, dict[str, dict[str, float]]] = {
         "onedir": {"JPG": 82.4, "HEIF": 62.6, "ARW": 48.7, "NEF": 67.9},
     },
     "win32": {
-        "source": {"JPG": 21.4, "HEIF": 8.0, "ARW": 23.4, "NEF": 31.6},
-        # onedir not yet built/measured on win32 — falls back to source
+        # Re-locked 2026-08-30 on the win32 dev box (RTX 4070 Ti, workers=4,
+        # 500-file protocol, interleaved) AFTER: HEIF HWAccel per-file probe
+        # removal (+215% HEIF), win32 static-graph YOLO, DirectML EP
+        # (onnxruntime-directml 1.23.0). Session drift is ±10-15% — floors
+        # sit just below the worst observed sample.
+        "source": {"JPG": 26.0, "HEIF": 31.0, "ARW": 28.0, "NEF": 38.0},
+        "onedir": {"JPG": 26.0, "HEIF": 31.0, "ARW": 28.0, "NEF": 38.0},
     },
     "linux": {
         "source": {"JPG": 21.4, "HEIF": 8.0, "ARW": 23.4, "NEF": 31.6},
