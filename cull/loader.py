@@ -55,6 +55,21 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).parent.parent.resolve()
     return base_path / relative_path
 
+def _reduced_flag(scale_width: int) -> int:
+    """cv2 imread/imdecode flag for reduced-DCT JPEG decode.
+
+    CULL_JPEG_REDUCED=4 selects 1/4-size decode (fewer pixels through IDCT;
+    Huffman entropy decode — the dominant cost on 24 MP files — is
+    unaffected). Default 1/2 stays bit-identical to the Pillow draft path.
+    """
+    if scale_width <= 0:
+        return cv2.IMREAD_COLOR
+    import os as _os
+    if _os.environ.get("CULL_JPEG_REDUCED", "2").strip() == "4":
+        return cv2.IMREAD_REDUCED_COLOR_4
+    return cv2.IMREAD_REDUCED_COLOR_2
+
+
 def _find_exiftool_path() -> list[str]:
     """Return command list for exiftool (bundled or system-wide)."""
     # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
@@ -301,50 +316,16 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                     log.debug("VideoToolbox decode fallback: %s", hw_err)
                     frame = None
             elif not _det and sys.platform != "darwin":
-                # TRY 4 scaffold: non-darwin HEIF HWAccel probe (vaapi/dxva2/cuda).
-                # Only on non-darwin hosts; darwin keeps the original sw-fallback path.
-                _hw_frame = None
-                for _hw_name in ("cuda", "dxva2", "d3d11va", "vaapi"):
-                    try:
-                        # Reopen container for each probe to avoid consuming demux state.
-                        _probe_container = None
-                        try:
-                            _probe_container = av.open(str(path))
-                            # Re-find the target stream in the probe container.
-                            _probe_stream = None
-                            for _s in _probe_container.streams.video:
-                                if _s.index == stream.index:
-                                    _probe_stream = _s
-                                    break
-                            if _probe_stream is None:
-                                continue
-                            _hwa = av.codec.hwaccel.HWAccel(_hw_name)
-                            _ctx = av.CodecContext.create(_probe_stream.codec_context.name, "r", hwaccel=_hwa)
-                            if _probe_stream.codec_context.extradata:
-                                _ctx.extradata = _probe_stream.codec_context.extradata
-                            _ctx.open()
-                            _frames2: list = []
-                            for packet in _probe_container.demux():
-                                if packet.stream_index != _probe_stream.index:
-                                    continue
-                                for f in _ctx.decode(packet):
-                                    _frames2.append(f)
-                            if not _frames2:
-                                for f in _ctx.decode(None):
-                                    _frames2.append(f)
-                            if _frames2:
-                                _hw_frame = _frames2[0]
-                                break
-                        finally:
-                            if _probe_container is not None:
-                                try:
-                                    _probe_container.close()
-                                except Exception:
-                                    pass
-                    except Exception:
-                        continue
-                if _hw_frame is not None:
-                    frame = _hw_frame
+                # REJECTED (win32, measured 2026-08-30): pyav HWAccel probing for
+                # HEVC Rext 4:2:2 10-bit camera previews. Camera HEIF previews are
+                # Rext 4:2:2 10-bit, which consumer NVDEC cannot decode — the
+                # cuda/dxva2/d3d11va "decode" pays hw-device + transfer overhead on
+                # top of an in-libavcodec software fallback (122-167 ms/frame vs
+                # 42.5 ms pure software), and vaapi silently falls back to software
+                # (41.5 ms, no gain). The per-file probe itself cost ~80 ms/frame.
+                # Keep the darwin-only VideoToolbox branch above; non-darwin always
+                # uses the software path below.
+                pass
 
             if frame is None:
                 frame = next(container.decode(stream))
@@ -586,12 +567,15 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
         if img_io is not None:
             return img_io
 
-    # JPEG decoding fallback: C++ cv2.imread with IMREAD_REDUCED_COLOR_2
-    # (ARM NEON SIMD accelerated 1/2 DCT decode in libjpeg-turbo), followed by
-    # cv2.INTER_AREA. 100% bit-identical to Pillow draft (diff=0).
+    # JPEG decoding fallback: C++ cv2.imread with IMREAD_REDUCED_COLOR_N
+    # (SIMD accelerated reduced-DCT decode in libjpeg-turbo), followed by
+    # cv2.INTER_AREA. The 1/2 factor is 100% bit-identical to Pillow draft
+    # (diff=0). CULL_JPEG_REDUCED=4 switches to 1/4-size DCT decode (measured
+    # -24% decode time on 24 MP files; Huffman entropy decode is
+    # resolution-independent and sets the CPU floor).
     if suffix in (".jpg", ".jpeg"):
         try:
-            flag = cv2.IMREAD_REDUCED_COLOR_2 if scale_width > 0 else cv2.IMREAD_COLOR
+            flag = _reduced_flag(scale_width)
             img_bgr = cv2.imread(str(path), flag)
             if img_bgr is not None:
                 if scale_width > 0:
@@ -637,7 +621,7 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
                 data = None
         if data:
             try:
-                flag = cv2.IMREAD_REDUCED_COLOR_2 if scale_width > 0 else cv2.IMREAD_COLOR
+                flag = _reduced_flag(scale_width)
                 img_bgr = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), flag)
                 if img_bgr is not None:
                     # Mathematical identity: resize(cvtColor(I)) == cvtColor(resize(I))

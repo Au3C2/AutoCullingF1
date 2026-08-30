@@ -52,6 +52,11 @@ preview/
 scores_preview.csv
 test_import/
 
+# Tool state and root build artifacts
+.codegraph/
+.zcode/
+/auto_cull_v0.1_win_x64.exe
+
 # Error review analysis (separate from production code)
 error_review/
 
