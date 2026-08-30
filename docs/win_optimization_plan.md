@@ -91,3 +91,32 @@
 - RAW 批量提取：无像素安全路径（DROPPED #4）；
 - sharpness 移入 worker / 独立 sharpness pool：零收益或 ROI 耦合（#5/#7）；
 - EXIF stay_open 未验证版本：回退过一次（#8），本次务必带字节比对验证。
+
+---
+
+## 执行结果（2026-08-30，全部完成）
+
+逐项结论（验证方式与数据见 results/performance_baseline.md "Windows platform round"）：
+
+- Phase 0：起点门禁全绿（确定性 11/11 + 对齐 8/8）；win32 500 张基线校准并重新锁定
+  （JPG 26.0 / HEIF 31.0 / ARW 28.0 / NEF 38.0，看护门 4/4 绿）；workers 扫描 w2/4/6/8
+  → **6 最优**（w2 全面劣于 4；w8 ≈ w6），CLI 默认值 2 → 6。
+- Phase 1：六项 macOS 优化在 develop 均已同源生效，无需改码。RAW stay_open 逐文件
+  spawn 对比：字节一致，32 vs 239 ms/file。
+- Phase 2：
+  - HEIF 硬解：硬解本身 REJECTED（Rext 4:2:2 10-bit 超出 NVDEC 能力，探测"成功"实为
+    软解回退 + 硬件开销）；**移除逐文件探测脚手架 = 全场最大单项收益**，
+    HEIF 10.4 → 32.6 img/s（+215%）。
+  - JPEG 硬解：REJECTED（732 vs 108 ms/帧 + 像素漂移），维持 CULL_HW_JPEG=1 禁用。
+  - DirectML EP：**KEPT**（评分链 12.56 → 6.84 ms/帧；HEIF +15% / JPG +8% / NEF +9%
+    交错 E2E；精度门全绿）。pyproject 环境标记切换 + 无 GPU 机器 CPU 回退保护。
+- Phase 3：
+  - win32 静态图 YOLO：KEPT（位一致，YOLO 阶段 −9%）；cudnn 算法搜索维持 EXHAUSTIVE。
+  - 打包：onedir 构建通过；**修复 Windows 打包 exiftool 坏档**（exiftool.exe 非自包含
+    导致批量元数据写入崩溃）→ 打包 perl 形态，打包精度门 4/4、打包性能门全绿；
+    build.py/guards.py win32 路径修正。
+  - cv2：未动（venv 存在 opencv-python 与 headless 混装的既有状态，门禁绿；knife-edge
+    文件随每轮门禁复测通过）。
+
+起点 → 终点（workers=4，500 张协议）：JPG 23.7 → 28.1 / HEIF 10.4 → 38.0 /
+ARW 26.5 → 31.9 / NEF 33.3 → 45.0 img/s（同会话交错；HEIF +265%，其余 +10-35%）。

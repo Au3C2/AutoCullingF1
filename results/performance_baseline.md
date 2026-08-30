@@ -969,3 +969,37 @@ much idle-machine state matters: HEIF/NEF range 62-70/58-74 across the day.
 Unified guard entrypoint: `packaging/guards.py` (5 guards: source
 precision -> source perf -> onedir build -> packaged precision -> packaged
 perf; ~12-15 min). Requires the ~1.3 GB camera datasets present.
+
+## Windows platform round (2026-08-30) — win_optimization_plan.md executed
+
+Interleaved A/B + cooldown discipline; every kept change passed the
+deterministic rating gate (11/11) and the default-backend precision gates
+(8/8); packaged gates (4/4) re-locked after packaging changes.
+
+| # | Change | Verdict | Evidence |
+|---|---|---|---|
+| P1 | RAW persistent exiftool stay_open | already in develop | 40 gate files byte-identical, 32 vs 239 ms/file (7.5×) |
+| P1 | Range-I/O RAW direct extract | already in develop (primary RAW path) | — |
+| P1 | Vectorized YOLO postprocess / batch metadata write / BGR-first resize / decode pool + single consumer / P4 warm-up / psutil nice | already in develop | — |
+| P2 | HEIF pyav HWAccel (cuda/dxva2/d3d11va/vaapi) | REJECTED for decode; REMOVING the per-file probe = biggest single win (KEPT) | Rext 4:2:2 10-bit unsupported by NVDEC; "successful" probes are in-libavcodec sw fallback + hw overhead (122-167 ms vs 42.5 ms sw). HEIF E2E 10.4 → 32.6 img/s (+215%), 2× interleaved repeats |
+| P2 | JPEG ffmpeg -hwaccel | REJECTED (stays disabled behind CULL_HW_JPEG=1) | 732.5 vs cv2 107.8 ms/frame; known ~1M pixel-sum drift |
+| P2 | DirectML EP (onnxruntime-directml 1.23.0) | KEPT | scoring chain 12.56 → 6.84 ms/frame; interleaved E2E HEIF +15% (32.4→37.5), JPG +8%, NEF +9%; ARW apparent regression disproven on focused re-run (+7.6% DML). P4 logit Δ0.0042 / YOLO conf Δ0.0004 vs CUDA; gates green. pyproject: win32 → onnxruntime-directml, else onnxruntime==1.23.2; CPU fallback added for GPU-less machines |
+| P2 | cudnn_conv_algo_search | no change (EXHAUSTIVE already optimal) | EXHAUSTIVE 5.92 / HEURISTIC 5.95 / DEFAULT 8.01 ms |
+| P3 | win32 static-graph YOLO (`*_static.onnx`) | KEPT | f1 5.88 vs 6.45 ms, coco 6.55 vs 7.15 ms, outputs bitwise-equal |
+| P3 | Windows packaging: exiftool perl-form bundle | KEPT (fixes broken packaged gates) | bundled exiftool.exe was NOT self-contained (wants exiftool_files\perl5*.dll) → batch metadata writer died (Errno 22). Spec now bundles perl.exe + exiftool.pl + lib like macOS; packaged gates 4/4 |
+| P3 | `packaging/build.py` / `guards.py` win32 paths | KEPT | .venv/Scripts + onedir dir name without .exe |
+| — | CLI `--workers` default 2 → 6 | KEPT | sweep: w2 loss (JPG 15.3), w4 27.8, w6 36-38, w8 ≈ w6 |
+| — | cv2 | untouched (venv has opencv-python AND headless 4.10.0.84 mixed — pre-existing, gates green) | — |
+
+### Win32 500-image steady-state baselines re-locked (2026-08-30, workers=4)
+
+| Pipeline | JPG | HEIF | ARW | NEF | floor = ×0.90 |
+|---|---|---|---|---|---|
+| source | 26.0 | 31.0 | 28.0 | 38.0 | JPG 23.4 HEIF 27.9 ARW 25.2 NEF 34.2 |
+| onedir | 26.0 | 31.0 | 28.0 | 38.0 | same floors |
+
+Guarded gate verified after locking: 28.05 / 38.01 / 31.89 / 45.02 (4/4
+green). Packaged onedir measured 26.8 / 39.0 / 31.5 / 47.0. Machine-state
+drift ±10-15% between sessions on this box — interleave and cooldown, as
+on macOS. Setup ceilings unchanged (16/16/20/16 s; observed 8.3-12.5 s).
+Benchmark artifact: build/perf_20260830_*.json.
