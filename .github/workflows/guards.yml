@@ -59,7 +59,7 @@ jobs:
       - name: Calibrate packaged seed performance
         timeout-minutes: 40
         run: |
-          CULL_EXE=$(find dist -type f -perm +111 -not -name "*.zip" | head -1)
+          CULL_EXE=$(find dist -maxdepth 2 -type f -perm +111 -not -name "*.zip" -not -path "*/_internal/*" | head -1)
           echo "Using CULL_EXE: $CULL_EXE"
           CULL_EXE="$CULL_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count ${{ inputs.count }} \
@@ -185,7 +185,7 @@ jobs:
       - name: Performance — seed steady state (packaged binary)
         timeout-minutes: 25
         run: |
-          CULL_EXE=$(find dist -type f -perm +111 -not -name "*.zip" | head -1)
+          CULL_EXE=$(find dist -maxdepth 2 -type f -perm +111 -not -name "*.zip" -not -path "*/_internal/*" | head -1)
           echo "Using CULL_EXE: $CULL_EXE"
           CULL_EXE="$CULL_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count 120 --samples 2 \
