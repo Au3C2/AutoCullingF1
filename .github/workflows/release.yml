@@ -65,15 +65,21 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 \
             --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --no-prewarm --json build/ci_source.json
-      - name: Build onefile
-        run: .venv/bin/python packaging/build.py
-      - name: Zip onedir
+      - name: Build onefile then onedir (zip)
         run: |
           VER="${{ steps.ver.outputs.ver }}"
+          echo "Building onefile v$VER ..."
+          .venv/bin/python packaging/build.py
+          ls -lh "auto_cull_v${VER}_macos_arm64"
+          echo "Building onedir v$VER ..."
+          .venv/bin/python packaging/build.py --onedir
+          ls -lh "dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
           ONEDIR="dist/auto_cull_v${VER}_macos_arm64"
-          test -d "$ONEDIR" || { echo "missing onedir $ONEDIR"; ls -R dist | head -80; exit 1; }
           (cd dist && zip -r -q "auto_cull_v${VER}_macos_arm64_onedir.zip" "auto_cull_v${VER}_macos_arm64")
           ls -lh "dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
+          echo "Rebuilding onefile (onedir --clean wiped dist/) ..."
+          .venv/bin/python packaging/build.py
+          ls -lh "auto_cull_v${VER}_macos_arm64"
       - name: SHA256
         run: |
           VER="${{ steps.ver.outputs.ver }}"
@@ -146,16 +152,22 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 --tolerance 0.65 `
             --baseline-file tests/ci/ci_config.json --no-prewarm `
             --json build/ci_source.json
-      - name: Build onefile
-        run: .venv/Scripts/python.exe packaging/build.py
-      - name: Zip onedir
+      - name: Build onefile then onedir (zip)
         shell: bash
         run: |
           VER="${{ steps.ver.outputs.ver }}"
+          echo "Building onefile v$VER ..."
+          .venv/Scripts/python.exe packaging/build.py
+          ls -lh "auto_cull_v${VER}_win_x64.exe"
+          echo "Building onedir v$VER ..."
+          .venv/Scripts/python.exe packaging/build.py --onedir
+          ls -lh "dist/auto_cull_v${VER}_win_x64/auto_cull_v${VER}_win_x64.exe"
           ONEDIR="dist/auto_cull_v${VER}_win_x64"
-          test -d "$ONEDIR" || { echo "missing onedir $ONEDIR"; ls -R dist | head -80; exit 1; }
           (cd dist && zip -r -q "auto_cull_v${VER}_win_x64_onedir.zip" "auto_cull_v${VER}_win_x64")
           ls -lh "dist/auto_cull_v${VER}_win_x64_onedir.zip"
+          echo "Rebuilding onefile (onedir --clean wiped dist/) ..."
+          .venv/Scripts/python.exe packaging/build.py
+          ls -lh "auto_cull_v${VER}_win_x64.exe"
       - name: SHA256
         shell: bash
         run: |
