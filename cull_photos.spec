@@ -126,10 +126,29 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+def _spec_version() -> str:
+    # Mirrors packaging/build.py:_version — CULL_VERSION env > pyproject.toml > 0.1.
+    # The spec cannot import that module at analysis time, so the tiny parser
+    # is duplicated here; keep the regex in sync with packaging/build.py.
+    import re as _re
+    ver = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
+    if ver:
+        return ver
+    toml = Path("pyproject.toml")
+    if toml.exists():
+        for line in toml.read_text().splitlines():
+            if line.strip().startswith("version"):
+                m = _re.search(r'"([^"]+)"', line)
+                if m:
+                    return m.group(1).strip()
+    return "0.1"
+
+
+_VER = _spec_version()
 if is_win:
-    exe_name = "auto_cull_v0.1_win_x64"
+    exe_name = f"auto_cull_v{_VER}_win_x64"
 elif sys.platform == "darwin":
-    exe_name = "auto_cull_v0.1_macos_arm64"
+    exe_name = f"auto_cull_v{_VER}_macos_arm64"
 else:
     exe_name = "auto_cull"
 

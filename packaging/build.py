@@ -39,9 +39,31 @@ ROOT = Path(__file__).resolve().parent.parent
 _PYI = "pyinstaller.exe" if sys.platform == "win32" else "pyinstaller"
 PYINSTALLER = ROOT / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / _PYI
 
+def _version() -> str:
+    """Project version for artifact names.
+
+    Priority: CULL_VERSION env (injected by .github/workflows/release.yml from
+    the tag, e.g. ``v0.2`` → ``0.2``) > pyproject.toml ``project.version`` >
+    fallback ``0.1``. Override for manual runs: ``CULL_VERSION=0.99 python
+    packaging/build.py``.
+    """
+    env_ver = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
+    if env_ver:
+        return env_ver
+    toml = ROOT / "pyproject.toml"
+    if toml.exists():
+        for line in toml.read_text().splitlines():
+            if line.strip().startswith("version"):
+                # project.version = "0.2"
+                m = re.search(r'"([^"]+)"', line)
+                if m:
+                    return m.group(1).strip()
+    return "0.1"
+
+
 EXE_NAMES = {
-    "Darwin": "auto_cull_v0.1_macos_arm64",
-    "Windows": "auto_cull_v0.1_win_x64.exe",
+    "Darwin": f"auto_cull_v{_version()}_macos_arm64",
+    "Windows": f"auto_cull_v{_version()}_win_x64.exe",
     "Linux": "auto_cull",
 }
 

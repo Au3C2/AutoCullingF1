@@ -1,0 +1,254 @@
+name: release
+
+# Tag-triggered release: `git tag -a v0.2 && git push origin v0.2` → precision +
+# perf gates on both platforms, then cross-platform builds and a Draft Release
+# with the packaged artifacts plus a warm-start perf smoke. `workflow_dispatch`
+# lets you dry-run the whole chain with `version: v0.2` on the default branch
+# without pushing a tag (use branch filter in the Actions UI).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'override tag (e.g. v0.2); on tags this is github.ref_name'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    timeout-minutes: 50
+    env:
+      CULL_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller" "pytest"
+      - name: Resolve release version
+        id: ver
+        run: |
+          RAW="${{ env.CULL_VERSION }}"
+          RAW="${RAW:-$(grep -E '^\s*version\s*=' pyproject.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')}"
+          VER="${RAW#v}"; VER="${VER:-0.2}"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "CULL_VERSION=$VER" >> "$GITHUB_ENV"
+          echo "Release version: v$VER (source: CULL_VERSION=${{ env.CULL_VERSION }})"
+      - name: Precision gate
+        timeout-minutes: 10
+        run: |
+          .venv/bin/python packaging/build.py --onedir
+          .venv/bin/python -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+          .venv/bin/python tests/ci/seed_precision.py --compare
+      - name: Perf gate (seed steady state, source)
+        timeout-minutes: 25
+        run: |
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --no-prewarm --json build/ci_source.json
+      - name: Build onefile
+        run: .venv/bin/python packaging/build.py
+      - name: Zip onedir
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          ONEDIR="dist/auto_cull_v${VER}_macos_arm64"
+          test -d "$ONEDIR" || { echo "missing onedir $ONEDIR"; ls -R dist | head -80; exit 1; }
+          (cd dist && zip -r -q "auto_cull_v${VER}_macos_arm64_onedir.zip" "auto_cull_v${VER}_macos_arm64")
+          ls -lh "dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
+      - name: SHA256
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          ONEFILE="auto_cull_v${VER}_macos_arm64"
+          ONEDIR_ZIP="dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
+          (cd . && shasum -a 256 "$ONEFILE" | tee "dist/${ONEFILE}.sha256") || true
+          (cd dist && shasum -a 256 "$(basename "$ONEDIR_ZIP")" | tee "$(basename "$ONEDIR_ZIP").sha256")
+          cat "dist/${ONEFILE}.sha256" "dist/$(basename "$ONEDIR_ZIP").sha256"
+      - name: Smoke — warm-start perf (packaged binary)
+        timeout-minutes: 25
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          ONEDIR_EXE="dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
+          test -x "$ONEDIR_EXE" || { echo "missing executable $ONEDIR_EXE"; exit 1; }
+          CULL_EXE="$ONEDIR_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --json build/ci_onedir.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-v${{ steps.ver.outputs.ver }}
+          if-no-files-found: error
+          path: |
+            auto_cull_v${{ steps.ver.outputs.ver }}_macos_arm64
+            dist/auto_cull_v${{ steps.ver.outputs.ver }}_macos_arm64_onedir.zip
+            dist/*.sha256
+            build/ci_*.json
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      CULL_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" `
+            "pyinstaller" "pytest"
+      - name: Resolve release version
+        id: ver
+        shell: bash
+        run: |
+          RAW="${{ env.CULL_VERSION }}"
+          if [ -z "$RAW" ]; then RAW="$(grep -E '^\s*version\s*=' pyproject.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')"; fi
+          VER="${RAW#v}"; VER="${VER:-0.2}"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "CULL_VERSION=$VER" >> "$GITHUB_ENV"
+          echo "Release version: v$VER"
+      - name: Precision gate
+        timeout-minutes: 10
+        run: |
+          .venv/Scripts/python.exe packaging/build.py --onedir
+          .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+          .venv/Scripts/python.exe tests/ci/seed_precision.py --compare
+      - name: Perf gate (seed steady state, source)
+        timeout-minutes: 25
+        run: |
+          .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
+            --seed-dir tests/ci/sample --count 120 --samples 2 --tolerance 0.65 `
+            --baseline-file tests/ci/ci_config.json --no-prewarm `
+            --json build/ci_source.json
+      - name: Build onefile
+        run: .venv/Scripts/python.exe packaging/build.py
+      - name: Zip onedir
+        shell: bash
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          ONEDIR="dist/auto_cull_v${VER}_win_x64"
+          test -d "$ONEDIR" || { echo "missing onedir $ONEDIR"; ls -R dist | head -80; exit 1; }
+          (cd dist && zip -r -q "auto_cull_v${VER}_win_x64_onedir.zip" "auto_cull_v${VER}_win_x64")
+          ls -lh "dist/auto_cull_v${VER}_win_x64_onedir.zip"
+      - name: SHA256
+        shell: bash
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          ONEFILE="auto_cull_v${VER}_win_x64.exe"
+          ONEDIR_ZIP="dist/auto_cull_v${VER}_win_x64_onedir.zip"
+          (cd . && sha256sum "$ONEFILE" 2>/dev/null | tee "dist/${ONEFILE}.sha256") || (powershell -NoProfile -Command "Get-FileHash -Algorithm SHA256 '$ONEFILE' | ForEach-Object { \"\$(\$_.Hash.ToLower())  $ONEFILE\" } | Tee-Object -FilePath \"dist/${ONEFILE}.sha256\"")
+          (cd dist && sha256sum "$(basename "$ONEDIR_ZIP")" 2>/dev/null | tee "$(basename "$ONEDIR_ZIP").sha256") || (powershell -NoProfile -Command "Set-Location dist; Get-FileHash -Algorithm SHA256 '$(basename "$ONEDIR_ZIP")' | ForEach-Object { \"\$(\$_.Hash.ToLower())  $(basename "$ONEDIR_ZIP")\" } | Tee-Object -FilePath \"$(basename "$ONEDIR_ZIP").sha256")
+          cat "dist/${ONEFILE}.sha256" "dist/$(basename "$ONEDIR_ZIP").sha256"
+      - name: Smoke — warm-start perf (packaged binary)
+        timeout-minutes: 25
+        run: |
+          $ver = "${{ steps.ver.outputs.ver }}"
+          $exe = "dist/auto_cull_v${ver}_win_x64/auto_cull_v${ver}_win_x64.exe"
+          if (-not (Test-Path $exe)) { Write-Error "missing $exe"; exit 1 }
+          $env:CULL_EXE = (Resolve-Path $exe).Path
+          .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
+            --seed-dir tests/ci/sample --count 120 --samples 2 --tolerance 0.65 `
+            --baseline-file tests/ci/ci_config.json `
+            --json build/ci_onedir.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-v${{ steps.ver.outputs.ver }}
+          if-no-files-found: error
+          path: |
+            auto_cull_v${{ steps.ver.outputs.ver }}_win_x64.exe
+            dist/auto_cull_v${{ steps.ver.outputs.ver }}_win_x64_onedir.zip
+            dist/*.sha256
+            build/ci_*.json
+
+  create-draft-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Derive tag + inspect
+        id: tag
+        run: |
+          TAG="${{ inputs.version != '' && inputs.version || github.ref_name }}"
+          TAG="${TAG:-v0.2}"
+          [[ "$TAG" == v* ]] || TAG="v$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
+          find artifacts -type f | sort
+          du -sh artifacts/*/* 2>/dev/null | head -20
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/**/*
+          body: |
+            ## Auto-Culling ${{ steps.tag.outputs.tag }} — Draft
+
+            Automated culling for F1 & motorsport burst photography.
+
+            ### Download
+
+            | Platform | Onefile (quick start) | Onedir (stable inodes; recommended for benchmarks/daily use) |
+            | --- | --- | --- |
+            | macOS Apple Silicon | `auto_cull_v*-macos_arm64` | `auto_cull_v*-macos_arm64_onedir.zip` |
+            | Windows x64 | `auto_cull_v*-win_x64.exe` | `auto_cull_v*-win_x64_onedir.zip` |
+
+            Each artifact ships with a `.sha256` — verify with `shasum -a 256 <file>` / `Get-FileHash -Algorithm SHA256`.
+
+            ```powershell
+            # Windows
+            .\auto_cull_v*-win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+            ```
+
+            ```bash
+            # macOS
+            ./auto_cull_v*-macos_arm64 --input-dir /path/to/photos --recursive --force
+            ```
+
+            Omit `--input-dir` to open a folder picker. `--force` re-analyzes already-rated files.
+
+            ### What changed vs v0.1
+            See [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md) and the auto-generated notes below.
+
+            ### Performance
+            Gate protocol (~500 real files/format steady state; see [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md)). This tag was gated on the seed replication protocol (4 seed files ×120 copies ×2 samples, `tests/ci/ci_config.json`) — precision + source perf on both platforms plus a warm-start perf smoke on the packaged onedir binary. `packaging/guards.py` (full 1.3 GB suite) was green on the M4 dev box before merge.
+
+            ### Verification
+            - `pytest -m deterministic` and `tests/ci/seed_precision.py --compare` green on macOS-14 + windows-latest.
+            - `benchmarks/run_benchmarks.py --seed-dir tests/ci/sample --count 120` green on both OSes.
+            - Bundled ONNX models (f1_yolov8n / yolov8n / p4_car_model) + exiftool; no Python install required.
+
+            > This is a **draft** — review the files and notes, then Publish.
