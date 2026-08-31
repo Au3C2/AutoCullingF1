@@ -20,12 +20,12 @@
 
 ```powershell
 # Windows
-.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+.\auto_cull_v0.2_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
 ```
 
 ```bash
 # macOS（Apple Silicon）
-./auto_cull_v0.1_macos_arm64 --input-dir /path/to/photos --recursive --force
+./auto_cull_v0.2_macos_arm64 --input-dir /path/to/photos --recursive --force
 ```
 
 二进制已内置 ONNX 模型与 exiftool，无需额外安装。省略 `--input-dir` 会弹出文件夹选择器。

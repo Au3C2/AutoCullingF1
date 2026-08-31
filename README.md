@@ -22,12 +22,12 @@ Grab a prebuilt binary from [GitHub Releases](https://github.com/Au3C2/AutoCulli
 
 ```powershell
 # Windows
-.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+.\auto_cull_v0.2_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
 ```
 
 ```bash
 # macOS (Apple Silicon)
-./auto_cull_v0.1_macos_arm64 --input-dir /path/to/photos --recursive --force
+./auto_cull_v0.2_macos_arm64 --input-dir /path/to/photos --recursive --force
 ```
 
 The binary bundles the ONNX models and exiftool — nothing else to install. Omit
