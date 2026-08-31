@@ -30,12 +30,28 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+def _ver() -> str:
+    ver = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
+    if ver:
+        return ver
+    toml = ROOT / "pyproject.toml"
+    if toml.exists():
+        import re as _re
+        for line in toml.read_text().splitlines():
+            if line.strip().startswith("version"):
+                m = _re.search(r'"([^"]+)"', line)
+                if m:
+                    return m.group(1).strip()
+    return "0.1"
+
+_VER = _ver()
 if sys.platform == "win32":
     PY = ROOT / ".venv" / "Scripts" / "python.exe"
-    ONEDIR = ROOT / "dist" / "auto_cull_v0.1_win_x64" / "auto_cull_v0.1_win_x64.exe"
+    ONEDIR = ROOT / "dist" / f"auto_cull_v{_VER}_win_x64" / f"auto_cull_v{_VER}_win_x64.exe"
 else:
     PY = ROOT / ".venv" / "bin" / "python"
-    ONEDIR = ROOT / "dist" / "auto_cull_v0.1_macos_arm64" / "auto_cull_v0.1_macos_arm64"
+    ONEDIR = ROOT / "dist" / f"auto_cull_v{_VER}_macos_arm64" / f"auto_cull_v{_VER}_macos_arm64"
 
 PRECISION_TESTS = [
     "tests/test_cull.py",

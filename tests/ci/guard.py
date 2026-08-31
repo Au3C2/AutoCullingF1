@@ -25,9 +25,24 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]  # repo root (tests/ci/) 
+ROOT = Path(__file__).resolve().parents[2]  # repo root (tests/ci/)
+
+def _ver() -> str:
+    v = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
+    if v:
+        return v
+    toml = ROOT / "pyproject.toml"
+    if toml.exists():
+        import re as _re
+        for line in toml.read_text().splitlines():
+            if line.strip().startswith("version"):
+                m = _re.search(r'"([^"]+)"', line)
+                if m:
+                    return m.group(1).strip()
+    return "0.1"
+
 PY = ROOT / ".venv" / "bin" / "python" if (ROOT / ".venv").exists() else "python"
-ONEDIR = ROOT / "dist" / "auto_cull_v0.1_macos_arm64" / "auto_cull_v0.1_macos_arm64"
+ONEDIR = ROOT / "dist" / f"auto_cull_v{_ver()}_macos_arm64" / f"auto_cull_v{_ver()}_macos_arm64"
 CONFIG = ROOT / "tests" / "ci" / "ci_config.json"
 
 

@@ -8,9 +8,23 @@ import pytest
 from pathlib import Path
 import csv
 
+def _ver() -> str:
+    v = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
+    if v:
+        return v
+    toml = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if toml.exists():
+        import re as _re
+        for line in toml.read_text().splitlines():
+            if line.strip().startswith("version"):
+                m = _re.search(r'"([^"]+)"', line)
+                if m:
+                    return m.group(1).strip()
+    return "0.1"
+
 EXE_NAME_MAP = {
-    "Darwin": "auto_cull_v0.1_macos_arm64",
-    "Windows": "auto_cull_v0.1_win_x64.exe"
+    "Darwin": f"auto_cull_v{_ver()}_macos_arm64",
+    "Windows": f"auto_cull_v{_ver()}_win_x64.exe"
 }
 
 def get_executable() -> Path:
