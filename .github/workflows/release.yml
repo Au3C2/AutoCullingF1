@@ -170,7 +170,7 @@ jobs:
           .venv/Scripts/python.exe packaging/build.py --onedir
           ls -lh "dist/auto_cull_v${VER}_win_x64/auto_cull_v${VER}_win_x64.exe"
           ONEDIR="dist/auto_cull_v${VER}_win_x64"
-          (cd dist && zip -r -q "auto_cull_v${VER}_win_x64_onedir.zip" "auto_cull_v${VER}_win_x64")
+          powershell -NoProfile -Command "Compress-Archive -Path '$ONEDIR' -DestinationPath 'dist/auto_cull_v${VER}_win_x64_onedir.zip' -Force"
           ls -lh "dist/auto_cull_v${VER}_win_x64_onedir.zip"
           cp "dist/auto_cull_v${VER}_win_x64_onedir.zip" "./auto_cull_v${VER}_win_x64_onedir.zip"
           echo "Rebuilding onefile (onedir --clean wipes dist/, zip already stashed) ..."
@@ -220,7 +220,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Derive tag + inspect
+      - name: Stage onedir assets only
+        run: |
+          mkdir -p release_assets
+          # Only ship the onedir zips (+ their sha256) per the v0.2 release goal.
+          # Onefile binaries stay as CI artifacts but are not attached to the draft.
+          find artifacts -name '*_onedir.zip' -exec cp -v {} release_assets/ \;
+          find artifacts -name '*_onedir.zip.sha256' -exec cp -v {} release_assets/ \;
+          # Fallback: if the zip-specific sha256 wasn't split out, grab the onedir ones
+          # from the dist/*.sha256 files (they contain both hashes — filter to onedir lines)
+          if ! ls release_assets/*.sha256 1>/dev/null 2>&1; then
+            find artifacts -name '*.sha256' -exec grep -l onedir {} \; -exec cp -v {} release_assets/ \;
+          fi
+          echo "Staged release assets:"; ls -lh release_assets/; cat release_assets/*.sha256 2>/dev/null || true
+      - name: Derive tag + what changed vs last release
         id: tag
         run: |
           TAG="${{ inputs.version != '' && inputs.version || github.ref_name }}"
@@ -228,6 +241,28 @@ jobs:
           [[ "$TAG" == v* ]] || TAG="v$TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: $TAG"
+          git fetch --tags --force
+          PREV="$(git tag --sort=-v:refname | grep -E '^v[0-9]' | head -1)"
+          # On first v0.2 the previous tag is v0.1; on v0.2 dry-runs the tag doesn't exist yet
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            PREV="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo v0.1)"
+          else
+            PREV="${PREV:-v0.1}"
+            # If workflow_dispatch on master without a new tag, PREV is the latest tag
+            if [ "$TAG" = "$PREV" ]; then PREV="v0.1"; fi
+          fi
+          if ! git rev-parse "$PREV" >/dev/null 2>&1; then PREV="v0.1"; fi
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous release tag: $PREV → $TAG"
+          echo "### Commits since $PREV" > /tmp/what_changed.md
+          echo "" >> /tmp/what_changed.md
+          git log --oneline --no-merges "$PREV"..HEAD | head -80 >> /tmp/what_changed.md || echo "(no commits found)" >> /tmp/what_changed.md
+          echo "" >> /tmp/what_changed.md
+          echo "Full diff: [\`$PREV...$TAG\`](https://github.com/${{ github.repository }}/compare/$PREV...$TAG)" >> /tmp/what_changed.md
+          cat /tmp/what_changed.md
+          # Also stash a shortstat for the body
+          git diff --shortstat "$PREV"..HEAD > /tmp/shortstat.txt 2>/dev/null || true
+          cat /tmp/shortstat.txt
           find artifacts -type f | sort
           du -sh artifacts/*/* 2>/dev/null | head -20
       - name: Create draft release
@@ -236,37 +271,38 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           draft: true
           prerelease: false
-          generate_release_notes: true
           fail_on_unmatched_files: true
-          files: artifacts/**/*
+          files: release_assets/*
           body: |
             ## Auto-Culling ${{ steps.tag.outputs.tag }} — Draft
 
             Automated culling for F1 & motorsport burst photography.
+            Previous release: `${{ steps.tag.outputs.prev }}` → `${{ steps.tag.outputs.tag }}` · [full diff](https://github.com/${{ github.repository }}/compare/${{ steps.tag.outputs.prev }}...${{ steps.tag.outputs.tag }})
 
-            ### Download
+            ### Download — Onedir (stable inodes; recommended for daily use & benchmarks)
 
-            | Platform | Onefile (quick start) | Onedir (stable inodes; recommended for benchmarks/daily use) |
-            | --- | --- | --- |
-            | macOS Apple Silicon | `auto_cull_v*-macos_arm64` | `auto_cull_v*-macos_arm64_onedir.zip` |
-            | Windows x64 | `auto_cull_v*-win_x64.exe` | `auto_cull_v*-win_x64_onedir.zip` |
+            | Platform | Onedir |
+            | --- | --- |
+            | macOS Apple Silicon | `auto_cull_v*-macos_arm64_onedir.zip` |
+            | Windows x64 | `auto_cull_v*-win_x64_onedir.zip` |
 
-            Each artifact ships with a `.sha256` — verify with `shasum -a 256 <file>` / `Get-FileHash -Algorithm SHA256`.
+            Each zip ships with a `.sha256` — verify with `shasum -a 256 <file>` / `Get-FileHash -Algorithm SHA256`. Unzip and run the binary inside.
 
             ```powershell
-            # Windows
-            .\auto_cull_v*-win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+            # Windows — unzip first
+            Expand-Archive auto_cull_v*-win_x64_onedir.zip; .\auto_cull_v*-win_x64\auto_cull_v*-win_x64.exe --input-dir C:\Photos\F1 --recursive --force
             ```
 
             ```bash
-            # macOS
-            ./auto_cull_v*-macos_arm64 --input-dir /path/to/photos --recursive --force
+            # macOS — unzip first
+            unzip auto_cull_v*-macos_arm64_onedir.zip && ./auto_cull_v*-macos_arm64/auto_cull_v*-macos_arm64 --input-dir /path/to/photos --recursive --force
             ```
 
             Omit `--input-dir` to open a folder picker. `--force` re-analyzes already-rated files.
 
-            ### What changed vs v0.1
-            See [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md) and the auto-generated notes below.
+            ### What changed since ${{ steps.tag.outputs.prev }}
+
+            See the auto-generated release notes below (GitHub's `generate_release_notes`) and the [full diff](https://github.com/${{ github.repository }}/compare/${{ steps.tag.outputs.prev }}...${{ steps.tag.outputs.tag }}). The detailed commit list since the previous tag is also printed in the workflow log's "Derive tag + what changed vs last release" step.
 
             ### Performance
             Gate protocol (~500 real files/format steady state; see [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md)). This tag was gated on the seed replication protocol (4 seed files ×120 copies ×2 samples, `tests/ci/ci_config.json`) — precision + source perf on both platforms plus a warm-start perf smoke on the packaged onedir binary. `packaging/guards.py` (full 1.3 GB suite) was green on the M4 dev box before merge.
