@@ -82,7 +82,12 @@ def _exiftool_datas() -> list[tuple[str, str]]:
         files = ["perl.exe", "perl532.dll", "exiftool.pl",
                  "libgcc_s_seh-1.dll", "liblzma-5__.dll",
                  "libstdc++-6.dll", "libwinpthread-1.dll"]
-        return [(f"{base}/{f}", base) for f in files] + [(f"{base}/lib", f"{base}/lib")]
+        return [(f"{base}/{f}", base) for f in files] \
+            + [(f"{base}/lib", f"{base}/lib"),
+               # win32-only perl core/XS modules (Encode, File::Glob, …),
+               # split from lib/ so the darwin `-I lib` never sees them —
+               # bundled perl gets both dirs via two -I flags.
+               (f"{base}/lib-win32", f"{base}/lib-win32")]
     return [
         ("external/exiftool/exiftool", "external/exiftool"),
         ("external/exiftool/lib", "external/exiftool/lib"),

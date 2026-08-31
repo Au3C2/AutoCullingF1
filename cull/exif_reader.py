@@ -32,15 +32,27 @@ def get_resource_path(relative_path: str) -> Path:
     return base_path / relative_path
 
 def _find_exiftool_path() -> list[str]:
-    """Return command list for exiftool (bundled or system-wide)."""
+    """Return command list for exiftool (bundled or system-wide).
+
+    The win32-only perl core/XS modules live in ``lib-win32/``, split from
+    ``lib/`` (the pure-Perl exiftool dist: Image::ExifTool & co). Branch 2
+    runs the launcher through the SYSTEM perl with ``-I lib`` only — the
+    win32 tree must never land on that @INC or its ``.xs.dll`` files shadow
+    system core modules and dlopen-fail on macOS (silently killed EXIF
+    there, 2026-08-31). Keep in sync with cull/loader.py.
+    """
     # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
     ext = ".exe" if sys.platform == "win32" else ""
     bundled_perl = get_resource_path(f"external/exiftool/perl{ext}")
     bundled_pl = get_resource_path("external/exiftool/exiftool.pl")
     lib_path = get_resource_path("external/exiftool/lib")
+    win32_lib = get_resource_path("external/exiftool/lib-win32")
 
     if bundled_perl.exists() and bundled_pl.exists() and lib_path.exists():
-        return [str(bundled_perl), "-I", str(lib_path), str(bundled_pl)]
+        cmd = [str(bundled_perl), "-I", str(lib_path)]
+        if win32_lib.exists():
+            cmd += ["-I", str(win32_lib)]
+        return [*cmd, str(bundled_pl)]
 
     # 2. Check for bundled binary/launcher
     bundled_bin = get_resource_path(f"external/exiftool/exiftool{ext}")
@@ -166,8 +178,16 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             "  Windows:        https://exiftool.org/"
         )
     except subprocess.CalledProcessError as exc:
-        log.warning("exiftool exited with code %d: %s", exc.returncode, exc.stderr)
-        return []
+        # exiftool was FOUND and ran but exited non-zero: broken install or
+        # broken bundle. Returning [] here would silently degrade burst
+        # grouping to mtime heuristics and corrupt scores while every gate
+        # keeps passing (2026-08-31 CI incident: a win32 lib/ shadowed the
+        # darwin system perl modules → dlopen failure → EXIF silently
+        # empty on macOS). Fail loudly instead.
+        stderr_tail = (exc.stderr or "").strip()[-400:]
+        raise RuntimeError(
+            f"exiftool exited with code {exc.returncode} (broken install?): {stderr_tail}"
+        ) from exc
 
     try:
         return json.loads(result.stdout)
