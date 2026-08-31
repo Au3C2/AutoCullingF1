@@ -70,7 +70,15 @@ EXE_NAMES = {
 
 def _archive_summary(path: Path) -> str:
     """zlib-compressed CArchive sizes grouped by top-level name."""
-    viewer = ROOT / ".venv" / "bin" / "pyi-archive_viewer"
+    # macOS/Linux: .venv/bin/, Windows: .venv/Scripts/
+    viewer = None
+    for rel in (Path("bin") / "pyi-archive_viewer", Path("Scripts") / "pyi-archive_viewer"):
+        cand = ROOT / ".venv" / rel
+        if cand.exists():
+            viewer = cand
+            break
+    if viewer is None:
+        return "(pyi-archive_viewer not found; skipping archive summary)"
     proc = subprocess.run([str(viewer), "-l", str(path)],
                           capture_output=True, text=True, check=True)
     groups: dict[str, tuple[int, int, int]] = defaultdict(lambda: [0, 0, 0])

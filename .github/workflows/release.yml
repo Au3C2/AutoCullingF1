@@ -65,7 +65,7 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 \
             --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --no-prewarm --json build/ci_source.json
-      - name: Build onefile then onedir (zip)
+      - name: Build onefile + onedir (zip)
         run: |
           VER="${{ steps.ver.outputs.ver }}"
           echo "Building onefile v$VER ..."
@@ -77,9 +77,16 @@ jobs:
           ONEDIR="dist/auto_cull_v${VER}_macos_arm64"
           (cd dist && zip -r -q "auto_cull_v${VER}_macos_arm64_onedir.zip" "auto_cull_v${VER}_macos_arm64")
           ls -lh "dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
-          echo "Rebuilding onefile (onedir --clean wiped dist/) ..."
+          # Stash the zip outside dist/ so the next onefile --clean doesn't wipe it
+          cp "dist/auto_cull_v${VER}_macos_arm64_onedir.zip" "./auto_cull_v${VER}_macos_arm64_onedir.zip"
+          echo "Rebuilding onefile (onedir --clean wipes dist/, zip already stashed) ..."
           .venv/bin/python packaging/build.py
           ls -lh "auto_cull_v${VER}_macos_arm64"
+          mv "./auto_cull_v${VER}_macos_arm64_onedir.zip" "dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
+          ls -lh "dist/auto_cull_v${VER}_macos_arm64_onedir.zip"
+          echo "Rebuilding onedir for warm-start perf smoke (needs --clean'd dist/) ..."
+          .venv/bin/python packaging/build.py --onedir
+          ls -lh "dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
       - name: SHA256
         run: |
           VER="${{ steps.ver.outputs.ver }}"
@@ -152,7 +159,7 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 --tolerance 0.65 `
             --baseline-file tests/ci/ci_config.json --no-prewarm `
             --json build/ci_source.json
-      - name: Build onefile then onedir (zip)
+      - name: Build onefile + onedir (zip)
         shell: bash
         run: |
           VER="${{ steps.ver.outputs.ver }}"
@@ -165,9 +172,15 @@ jobs:
           ONEDIR="dist/auto_cull_v${VER}_win_x64"
           (cd dist && zip -r -q "auto_cull_v${VER}_win_x64_onedir.zip" "auto_cull_v${VER}_win_x64")
           ls -lh "dist/auto_cull_v${VER}_win_x64_onedir.zip"
-          echo "Rebuilding onefile (onedir --clean wiped dist/) ..."
+          cp "dist/auto_cull_v${VER}_win_x64_onedir.zip" "./auto_cull_v${VER}_win_x64_onedir.zip"
+          echo "Rebuilding onefile (onedir --clean wipes dist/, zip already stashed) ..."
           .venv/Scripts/python.exe packaging/build.py
           ls -lh "auto_cull_v${VER}_win_x64.exe"
+          mv "./auto_cull_v${VER}_win_x64_onedir.zip" "dist/auto_cull_v${VER}_win_x64_onedir.zip"
+          ls -lh "dist/auto_cull_v${VER}_win_x64_onedir.zip"
+          echo "Rebuilding onedir for warm-start perf smoke (needs --clean'd dist/) ..."
+          .venv/Scripts/python.exe packaging/build.py --onedir
+          ls -lh "dist/auto_cull_v${VER}_win_x64/auto_cull_v${VER}_win_x64.exe"
       - name: SHA256
         shell: bash
         run: |
