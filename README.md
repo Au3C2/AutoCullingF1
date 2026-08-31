@@ -1,159 +1,137 @@
 # Auto-Culling (F1 Exclusive) 🏎️📸
 
-[中文版](README_zh.md) | **English**
+**English** | [中文版](README_zh.md)
 
-An automated photo culling tool for F1 & motorsport photography. It systematically processes thousands of burst-shot images (HIF/RAW), identifies the best shots using deep learning and heuristic rules, and generates Lightroom-compatible XMP sidecars with ratings and auto-crops.
+Automated culling for F1 & motorsport photography. Point it at a card straight off the
+camera: it groups burst sequences, scores every frame with a multi-stage AI pipeline,
+keeps the best shots per burst, and writes Lightroom-compatible star ratings, reject
+flags and auto-crops — no manual triage required.
 
----
+- **Input**: a folder straight off the camera — Sony ARW, Nikon NEF, Canon CR2/CR3,
+  Fuji RAF, Olympus ORF, Panasonic RW2, HEIF (`.hif/.heif/.heic`), JPEG, PNG, TIFF
+- **Output**: `.xmp` sidecars (RAW/HEIF) or in-file XMP (JPEG) with star ratings,
+  reject flags and crop parameters
+- **Runtime**: ONNX Runtime only, no PyTorch. GPU acceleration is automatic
+  (CoreML on Apple Silicon, DirectML/CUDA on Windows) with CPU fallback everywhere.
 
-## 🌟 Key Features
+## Quick Start
 
-- **Burst Grouping**: Automatically groups rapid-fire sequences based on EXIF timestamps.
-- **Multi-Stage Scoring Pipeline**:
-  - **P0 Sharpness**: High-frequency detail analysis (HF Ratio) to filter out-of-focus shots.
-  - **P1 Composition**: YOLO-based object detection (F1 specific + COCO) to evaluate subject size and centering.
-  - **P4 Orientation & Integrity**: MobileNetV3 multi-task model to classify car orientation (rejecting rear shots) and detect cut/occluded subjects.
-- **Top-N Selection**: Intelligently selects the best $N$ frames from each burst sequence.
-- **Auto-Cropping**: Automatically calculates and writes optimal crops to XMP based on subject position and target aspect ratio (3:2/2:3).
-- **Lightroom Integration**: Generates `.xmp` files that Lightroom Classic reads instantly for ratings (1-5 stars) and flags.
-- **Lite & Portable**: Completely removed heavy dependencies (Torch, OpenCV). The entire engine is now powered by **ONNX Runtime** and **Pillow**, enabling a <50MB compressed distribution.
+### Standalone executable (no Python needed)
 
----
+Grab a prebuilt binary from [GitHub Releases](https://github.com/Au3C2/AutoCullingF1/releases):
 
-## 🚀 End-to-End Performance
+```powershell
+# Windows
+.\auto_cull_v0.1_win_x64.exe --input-dir C:\Photos\F1 --recursive --force
+```
 
-Measured on a sample of 1000 HEIF images (1280px decode scale). **"End-to-End"** throughput represents the entire workflow: file loading, decoding, multi-stage AI inference, and XMP generation.
+```bash
+# macOS (Apple Silicon)
+./auto_cull_v0.1_macos_arm64 --input-dir /path/to/photos --recursive --force
+```
 
-### macOS (Apple Silicon M4 Pro)
-Optimized for the Apple Neural Engine (ANE) using CoreML.
+The binary bundles the ONNX models and exiftool — nothing else to install. Omit
+`--input-dir` to open a folder picker. Files that already carry ratings are skipped
+unless `--force`.
 
-| Backend | Hardware | End-to-End Throughput |
-| :--- | :--- | :--- |
-| **ONNX Runtime** | M-Series CPU | ~13.8 img/s |
-| **CoreML** | **Neural Engine (ANE)** | **~18.6 img/s (+35%)** |
+### From source
 
-### Windows (Intel i9 + RTX 4070 Ti)
-Leverages CUDA acceleration and massively parallel prefetching.
+Prerequisites: Python 3.10+ with [uv](https://github.com/astral-sh/uv), and ffmpeg on
+PATH (`brew install ffmpeg`; Windows: vendored under `external/ffmpeg/`).
 
-| Backend | Hardware | End-to-End Throughput |
-| :--- | :--- | :--- |
-| **CUDA** | **NVIDIA RTX 4070 Ti** | **~35.0 img/s** |
-| **CUDA** | **NVIDIA RTX 4090** | **~52.0+ img/s** |
-
----
-
-## 🛠️ Quick Start
-
-### 1. Prerequisites
-
-- **Python 3.10+**
-- **FFmpeg**: Required for high-speed HIF decoding.
-  - **macOS**: `brew install ffmpeg`
-  - **Windows**: [Download](https://ffmpeg.org/download.html) and add to `PATH`.
-
-### 2. Installation
-
-We recommend using [uv](https://github.com/astral-sh/uv) for fast and reliable dependency management.
-
-**macOS / Linux:**
 ```bash
 uv sync
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python cull_photos.py --input-dir /path/to/photos --recursive --force
 ```
 
-**Windows (PowerShell):**
-```powershell
-uv sync
-.venv\Scripts\activate.ps1
-```
+Omitting `--input-dir` opens a small GUI (customtkinter) instead.
 
-### 3. Basic Usage
+### Useful options
 
-Analyze a directory of images and generate XMP sidecars:
+| Option | Meaning |
+| :--- | :--- |
+| `--workers N` | Decode-pool size (default 8; ratings are worker-invariant) |
+| `--top-n 11` | Max keepers per burst group |
+| `--scale-width 1280` | Decode resolution for the scoring chain |
+| `--p4-policy` | `always` (default) / `never` / `auto` (F1/GP folders only) |
+| `--crop-off` | Disable auto-crop writing |
+| `--dry-run` | Score and report without writing any metadata |
+| `--dump-scores FILE` | Export per-image CSV (sharp/comp/raw/rating) |
+| `--force` | Re-analyze files that already carry ratings |
+| `--deterministic` | Bit-identical cross-platform CPU path (slower) |
 
-**macOS:**
-```bash
-python cull_photos.py --input-dir /path/to/photos --workers 8 --scale-width 1280
-```
+## How it works
 
-**Windows:**
-```powershell
-python cull_photos.py --input-dir C:\Photos\F1 --workers 12 --scale-width 1280
-```
+1. **Burst grouping** — frames are grouped by EXIF capture time, with a time-gap
+   fallback when EXIF is unavailable.
+2. **Per-frame scoring** —
+   - **Sharpness**: FFT-based high-frequency energy with subject-ROI weighting;
+     out-of-focus frames are rejected outright.
+   - **Composition**: an F1-specific YOLO model (COCO `yolov8n` cascade fallback)
+     scores subject size, placement and lead room.
+   - **Orientation & integrity**: a compact classifier rejects rear-view shots and
+     penalizes cut-off / occluded subjects.
+3. **Top-N selection** — the best *N* frames per burst (default 11) keep their stars;
+   the rest of the group is downgraded.
+4. **Auto-crop** — a Lightroom crop around the detected subject (3:2 / 2:3) is written
+   next to the rating.
 
-**Common Options:**
-- `--workers N`: Number of parallel prefetch workers.
-- `--scale-width 1280`: Downscale images during decode for faster processing.
-- `--top-n 11`: Max keepers per burst group.
-- `--force`: Re-analyze even if XMP/Ratings already exist.
+A frame is auto-rejected (−1) when no subject is detected, the frame is out of focus,
+the car is seen from the rear, or its score falls below the keep floor. The exact
+weights and thresholds live in `cull/scorer.py` and are locked against the committed
+deterministic truth in `tests/baselines/`.
 
----
+## Performance
 
-## 📦 Binary Distribution (LITE)
+Gate protocol (~500 real camera files per format, steady state):
 
-The **LITE version** is a standalone executable that does not require Python or any heavy AI frameworks installed on your system. It is optimized for speed and portability.
+**macOS — Apple M4, workers = 4**
 
-### 1. Download & Use (Pre-compiled)
-1. Download the latest `cull_photos_lite.zip` from our releases.
-2. Unzip to any folder.
-3. Run the command directly:
-   - **macOS:** `./dist/cull_photos/cull_photos --input-dir /path/to/photos`
-   - **Windows:** `.\dist\cull_photos\cull_photos.exe --input-dir C:\Photos`
+| JPEG | HEIF | Sony ARW | Nikon NEF |
+| ---: | ---: | ---: | ---: |
+| 83.5 img/s | 65.5 img/s | 49.9 img/s | 70.0 img/s |
 
-### 2. Build Your Own (Packaging)
-If you want to compile the binary yourself using `pyinstaller`:
+**Windows** — Ryzen 7 5700X + RTX 4070 Ti, default workers = 8: 35–46 img/s across
+formats.
 
-**Step 1: Install PyInstaller**
-```bash
-uv pip install pyinstaller
-```
+Benchmark methodology, per-platform baselines and the optimization history live in
+[`results/performance_baseline.md`](results/performance_baseline.md).
 
-**Step 2: Build the Lite Binary**
-```bash
-# Using the provided spec file (optimized to exclude Torch/CV2)
-pyinstaller cull_photos.spec --noconfirm
-```
-The output will be available in `dist/cull_photos/`.
-
-## 📂 Project Structure
+## For developers
 
 ```text
-auto_culling/
-├── cull/                  # Core package (Sharpness, Composition, Detectors, Scorer)
-├── eval/                  # Evaluation & benchmarking scripts
-├── train/                 # Model training pipelines (YOLO, Classifiers)
-├── utils/                 # Utility scripts (Autocrop, EXIF tools, Model download)
-├── models/                # Model weights (Local ONNX/CoreML)
-├── results/               # Benchmark reports and experiment logs
-├── tests/                 # Automated test suite
-└── cull_photos.py         # Main entry point
+cull/           core engine: decode, burst grouping, detection, scoring, XMP write, GUI
+models/         ONNX weights
+train/          training pipelines (YOLO fine-tune, P4 multi-task, fence classifier)
+packaging/      PyInstaller build + unified regression suite (guards.py)
+benchmarks/     per-format steady-state perf gate
+tests/          precision gates, deterministic truth, CI harness
+scripts/ eval/ docs/ results/    tooling, labeling guides, baseline records
+external/       vendored exiftool (+ ffmpeg on Windows)
 ```
 
----
-
-## 📊 Scoring Logic
-
-The final `raw_score` is calculated as:
-$$score = 1.5 \times S_{sharp} + 2.5 \times S_{comp} - Penalty_{cut}$$
-
-**Veto Rules (Automatic Rejection):**
-- No target detected.
-- Sharpness below threshold (0.05).
-- Car orientation is "Rear" (back view).
-- Low overall score (below 3.1).
-
----
-
-## 🧪 Testing
-
-Run the integration test suite to verify backend execution and XMP accuracy:
+Regression gates:
 
 ```bash
-pytest tests/test_cull.py
+pytest tests/ -m deterministic                        # cross-platform truth (strict)
+pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
+python packaging/guards.py    # precision → perf → build → packaged gates, ~15 min
 ```
 
----
+CI (`.github/workflows/`) runs the same gates on GitHub-hosted macOS/Windows runners
+from committed seed samples. To build the standalone binaries:
 
-## 📜 License
+```bash
+uv pip install pyinstaller
+python packaging/build.py            # onefile
+python packaging/build.py --onedir   # recommended: no per-launch extraction tax
+```
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+Further reading: [`results/performance_baseline.md`](results/performance_baseline.md)
+(measured numbers, platform baselines), [`docs/P4_LABELING.md`](docs/P4_LABELING.md)
+(P4 labeling guide).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any
@@ -15,7 +15,7 @@ from typing import Callable, Any
 import numpy as np
 from cull.exif_reader import ExifData, BurstGroup, read_exif, group_bursts
 from cull.detector import CloudF1Detector, load_f1_model, load_coco_model, detect
-from cull.loader import load_image_rgb, update_image_metadata, RAW_EXTS, COOKED_EXTS, EXTENSIONS
+from cull.loader import load_image_rgb, update_image_metadata, update_image_metadata_batch, RAW_EXTS, COOKED_EXTS, EXTENSIONS
 from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
@@ -46,9 +46,11 @@ class EngineConfig:
     autocrop: bool = True
     rename: bool = False
     workers: int = 4
+    consumer_threads: int = 1
     dump_scores: Path | None = None
     label_check: bool = False
     label_check_dir: Path | None = None
+    deterministic: bool = False
 
 class CullingEngine:
     """
@@ -117,6 +119,11 @@ class CullingEngine:
         if progress_callback:
             progress_callback("Loading models...", 0.8)
             
+        # COCO model is NOT a pure fallback: in the HEIF/RAW domain the
+        # camera-preview-resolution frames often carry targets too small for
+        # the F1 model (e.g. DSC00827 has zero f1 detections, top conf 0.03),
+        # and detections then come from the COCO person/car classes. Keep it
+        # loaded unconditionally (it gates HEIF/RAW precision baselines).
         self.coco_model = load_coco_model()
         if self.config.rf_api_key:
             self.cloud_f1 = CloudF1Detector(self.config.rf_api_key)
@@ -125,27 +132,132 @@ class CullingEngine:
         else:
             log.warning("No F1 model available.")
 
+        # Warm the P4 classifier here instead of lazily on the first scored
+        # frame (score_image). Its ORT session + warmup run take ~1 s; doing
+        # it before the timed processing window removes a first-frame stall
+        # and keeps score_image's per-frame cost flat.
+        from cull.scorer import _get_p4_classifier
+        _get_p4_classifier()
+
+        # Pre-build per-consumer model bundles OUTSIDE the timed window so the
+        # multi-consumer path pays no session-load tax while scoring.
+        import queue as _queue
+        self._bundle_queue: _queue.Queue | None = None
+        if int(self.config.consumer_threads) > 1 and self.cloud_f1 is None:
+            from cull.p4_classifier import P4Classifier
+            q: _queue.Queue = _queue.Queue()
+            for _ in range(int(self.config.consumer_threads)):
+                f1b = load_f1_model(self.config.f1_model_path) if self.config.f1_model_path.exists() else None
+                cocob = load_coco_model()
+                p4b = P4Classifier()
+                q.put((f1b, cocob, p4b))
+            self._bundle_queue = q
+
+    def _acquire_bundle(self) -> tuple | None:
+        """Check out one exclusive model bundle (or None in single-consumer)."""
+        if self._bundle_queue is None:
+            return None
+        return self._bundle_queue.get()
+
+    def _release_bundle(self, bundle: tuple | None) -> None:
+        if bundle is not None:
+            self._bundle_queue.put(bundle)
+
     def run(self, progress_callback: Callable[[str, float], None] | None = None):
         """Execute the culling process."""
-        self.scan(progress_callback)
-        self.load_models(progress_callback)
-        
+        # scan() (walk + EXIF + grouping) and load_models() (CoreML session
+        # init) are data-independent; run concurrently to hide the ~1.1s model
+        # load behind the EXIF/directory scan.
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        with _TPE(max_workers=2) as _setup_pool:
+            _f_scan = _setup_pool.submit(self.scan, progress_callback)
+            _f_models = _setup_pool.submit(self.load_models, progress_callback)
+            _f_scan.result()
+            _f_models.result()
+
         if progress_callback:
             progress_callback("Analyzing images...", 0.9)
 
         t_start = time.perf_counter()
-        
-        # Parallel group processing
-        with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
-            def _wrap_process(g_info):
-                idx, group = g_info
-                log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
-                res = self._process_group_internal(group)
-                for s in res:
-                    s.burst_group = idx
-                return res
 
-            group_results = list(executor.map(_wrap_process, enumerate(self.groups, start=1)))
+        # Image decoding parallelizes across cores via a ThreadPoolExecutor.
+        # load_image_rgb releases the GIL in its C layers (ImageIO, VideoToolbox,
+        # OpenCV/libjpeg, numpy), so thread-based parallelism matches a process
+        # pool for decode throughput while eliminating Pickle/IPC transfer of the
+        # decoded RGB arrays (~3.2 MB per frame). Frames are submitted per burst
+        # group and consumed in group order, bounding in-flight buffers to one
+        # group instead of the whole dataset.
+        n_consumers = max(1, int(self.config.consumer_threads))
+        group_results: list[list[ImageScore]] = []
+        with ThreadPoolExecutor(max_workers=max(2, min(self.config.workers, 8))) as decode_pool:
+            if n_consumers > 1 and self.cloud_f1 is None:
+                def _score_job(job):
+                    idx, group, futs = job
+                    bundle = self._acquire_bundle()
+                    try:
+                        f1, coco, p4 = bundle
+
+                        def _decode_loader(i: int) -> np.ndarray | None:
+                            return futs[i].result()
+
+                        res = self._process_group_internal(
+                            group, decode_loader=_decode_loader, f1=f1, coco=coco, p4=p4)
+                    finally:
+                        self._release_bundle(bundle)
+                    for s in res:
+                        s.burst_group = idx
+                    return res
+
+                jobs = [
+                    (idx, group, [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
+                                  for fp in group.frames])
+                    for idx, (group) in enumerate(self.groups, start=1)
+                ]
+                with ThreadPoolExecutor(max_workers=n_consumers) as score_pool:
+                    # executor.map preserves group order regardless of completion order.
+                    group_results = list(score_pool.map(_score_job, jobs))
+            else:
+                # Continuous Sliding Window Pipeline (Global Bounded Buffer):
+                # Rather than coarse per-group prefetching (which stalls when a
+                # group is small or has 1-2 frames), maintain a continuous
+                # in-flight decode window of bounded depth across ALL groups.
+                # As each frame is popped and scored, the next frame down the line
+                # is submitted to keep the decode pool 100% busy without memory blowup.
+                import queue as _pyqueue
+
+                # Flatten group frames to build the continuous sequence
+                flat_sequence: list[tuple[int, int, Path]] = []
+                for g_idx, grp in enumerate(self.groups):
+                    for f_idx, fp in enumerate(grp.frames):
+                        flat_sequence.append((g_idx, f_idx, fp))
+
+                total_frames = len(flat_sequence)
+                window_depth = max(8, min(16, self.config.workers * 3))
+                in_flight_queue: _pyqueue.Queue = _pyqueue.Queue()
+                submitted_idx = 0
+
+                # Pre-fill sliding window
+                while submitted_idx < min(window_depth, total_frames):
+                    _, _, fp_sub = flat_sequence[submitted_idx]
+                    in_flight_queue.put(decode_pool.submit(load_image_rgb, fp_sub, self.config.scale_width))
+                    submitted_idx += 1
+
+                for idx, group in enumerate(self.groups, start=1):
+                    log.info("Processing Group %d/%d (%d frames)", idx, len(self.groups), len(group.frames))
+
+                    def _decode_loader(i: int) -> np.ndarray | None:
+                        nonlocal submitted_idx
+                        fut = in_flight_queue.get()
+                        if submitted_idx < total_frames:
+                            _, _, fp_next = flat_sequence[submitted_idx]
+                            in_flight_queue.put(decode_pool.submit(load_image_rgb, fp_next, self.config.scale_width))
+                            submitted_idx += 1
+                        return fut.result()
+
+                    res = self._process_group_internal(group, decode_loader=_decode_loader)
+                    for s in res:
+                        s.burst_group = idx
+                    group_results.append(res)
         
         self.all_scores = []
         for res in group_results:
@@ -166,17 +278,25 @@ class CullingEngine:
             to_sync = [s for s in self.all_scores if s.path in self.standalone_cooked and not s.is_manual]
             if to_sync:
                 log.info("Syncing metadata to %d standalone JPG/HIF files...", len(to_sync))
-                with ThreadPoolExecutor(max_workers=min(8, self.config.workers)) as sync_executor:
-                    for s in to_sync:
-                        sync_executor.submit(update_image_metadata, s.path, s.rating, s.crop)
+                # One persistent exiftool session instead of N subprocess spawns.
+                update_image_metadata_batch([(s.path, s.rating, s.crop) for s in to_sync])
 
         if progress_callback:
             progress_callback("Done!", 1.0)
             
         return self.all_scores, elapsed
 
-    def _process_group_internal(self, group: BurstGroup) -> list[ImageScore]:
-        """Core logic for processing a single burst group."""
+    def _process_group_internal(self, group: BurstGroup,
+                                decode_loader: Callable[[int], np.ndarray | None] | None = None,
+                                f1=None, coco=None, p4=None) -> list[ImageScore]:
+        """Core logic for processing a single burst group.
+
+        *decode_loader* optionally provides pre-decoded frames by index from
+        the process pool (the pool is drained in burst order by the caller);
+        when None, frames are decoded inline on this thread. *f1*/*coco*/*p4*
+        override the shared model instances (multi-consumer threads pass their
+        own sessions); None falls back to the primary instances / global P4.
+        """
         scores: list[ImageScore] = []
         prev_detections = None
         frames = group.frames
@@ -209,8 +329,9 @@ class CullingEngine:
                 ))
                 continue
 
-            # Load image
-            img_rgb = load_image_rgb(frame_path, scale_width=self.config.scale_width)
+            # Load image (from the process pool when available, else inline)
+            img_rgb = decode_loader(frame_idx) if decode_loader is not None else \
+                load_image_rgb(frame_path, scale_width=self.config.scale_width)
             if img_rgb is None:
                 continue
 
@@ -223,7 +344,10 @@ class CullingEngine:
                 if not detections:
                     detections = detect(img_rgb, None, self.coco_model, conf=self.config.conf)
             else:
-                detections = detect(img_rgb, self.f1_model, self.coco_model, conf=self.config.conf)
+                detections = detect(img_rgb,
+                                    f1 if f1 is not None else self.f1_model,
+                                    coco if coco is not None else self.coco_model,
+                                    conf=self.config.conf)
 
             # Scoring
             s_sharp = score_sharpness(img_rgb, detections[0] if detections else None)
@@ -233,7 +357,8 @@ class CullingEngine:
                 path=frame_path, detections=detections, s_sharp=s_sharp, s_comp=s_comp,
                 sharp_thresh=self.config.sharp_thresh, w_sharp=self.config.w_sharp,
                 w_comp=self.config.w_comp, min_raw=self.config.min_raw,
-                check_p4=check_p4, img_rgb=img_rgb, img_w=w, img_h=h
+                check_p4=check_p4, img_rgb=img_rgb, img_w=w, img_h=h,
+                p4_classifier=p4,
             )
             scores.append(img_score)
             

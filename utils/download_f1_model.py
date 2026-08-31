@@ -36,7 +36,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# Default Roboflow model coordinates
+# Default Roboflow model coordinates (API key must be passed via --api-key)
 _DEFAULT_WORKSPACE = "jayanths-workspace"
 _DEFAULT_PROJECT   = "formula-one-car-detection"
 _DEFAULT_VERSION   = 1
@@ -213,7 +213,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--api-key",
         default=None,
-        help="Roboflow API key.",
+        help="Roboflow API key (required; get it from Roboflow settings).",
     )
     parser.add_argument(
         "--workspace",
@@ -247,6 +247,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not args.api_key:
+        print("--api-key is required (Roboflow settings > API keys)", file=sys.stderr)
+        return 2
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s  %(levelname)-8s  %(message)s",

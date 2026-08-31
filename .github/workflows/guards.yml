@@ -1,0 +1,226 @@
+name: culling-guards
+
+# macOS guards (original three + CPU deterministic).
+# Platform: macos-14 (Apple Silicon).  Two artifact tiers:
+#   - deterministic.json: cross-platform truth (CULL_DETERMINISTIC=1,
+#     CPU-only ORT, software decode) — committed once, runs everywhere.
+#   - seed tests/ci/sample/: one file per format, local mutation only.
+# Perf baselines are runner-calibrated via perf-calibrate (manual).
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "files per dataset (debug the VM hang with 120)"
+        type: number
+        default: 500
+      samples:
+        description: "interleaved samples per format"
+        type: number
+        default: 3
+
+concurrency:
+  group: guards-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
+  perf-calibrate:
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Calibrate source seed performance
+        timeout-minutes: 40
+        run: |
+          mkdir -p build
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count ${{ inputs.count }} \
+            --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
+            --json build/calib_source.json --no-prewarm
+      - name: Build onedir
+        timeout-minutes: 10
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Calibrate packaged seed performance
+        timeout-minutes: 40
+        run: |
+          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
+            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count ${{ inputs.count }} \
+            --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
+            --json build/calib_onedir.json
+      - name: Merge into tests/ci/ci_config.json
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          base = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
+          src = json.loads(pathlib.Path("build/calib_source.json").read_text())["results"]
+          od  = json.loads(pathlib.Path("build/calib_onedir.json").read_text())["results"]
+          base["baselines"] = {
+              "source": {f: src[f]["steady"] for f in src},
+              "onedir": {f: od[f]["steady"] for f in od},
+          }
+          pathlib.Path("build/ci_config.json").write_text(
+              json.dumps(base, indent=2))
+          EOF
+      - name: Upload calibrated config
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_config.json
+          path: build/ci_config.json
+      - name: Next step
+        run: |
+          echo "Download ci_config.json and commit it to tests/ci/ci_config.json to "
+          echo "enable the guarded steps on this runner type."
+
+  # ------------------------------------------------------------------
+  # Automatic guards on every push/PR — four parallel jobs so wall
+  # clock ~ 1 perf gate (~7 min at count=120, samples=2 on this VM)
+  # + build + precision + deterministic, not their sum.  workers=2 is
+  # mandated on the macOS VM runner (workers=4 stalls there).
+  # ------------------------------------------------------------------
+
+  precision:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Build onedir (needed by the precision comparison)
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Precision — packaged vs source consistency
+        run: .venv/bin/python tests/ci/seed_precision.py --compare
+
+  perf-source:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Skip unless runner calibrated
+        run: |
+          .venv/bin/python - <<'PY'
+          import json, pathlib, sys
+          d = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
+          if d.get("baselines", {}).get("source"):
+              print("calibrated")
+          else:
+              print("skip: tests/ci/ci_config.json baselines empty (run perf-calibrate on this runner type)")
+          PY
+      - name: Performance — seed steady state (source CLI)
+        timeout-minutes: 25
+        run: |
+          .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --no-prewarm --json build/ci_source.json
+
+  perf-packaged:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pyinstaller"
+      - name: Build onedir
+        run: .venv/bin/python packaging/build.py --onedir
+      - name: Skip unless runner calibrated
+        run: |
+          .venv/bin/python - <<'PY'
+          import json, pathlib
+          d = json.loads(pathlib.Path("tests/ci/ci_config.json").read_text())
+          if d.get("baselines", {}).get("source"):
+              print("calibrated")
+          else:
+              print("skip: tests/ci/ci_config.json baselines empty (run perf-calibrate on this runner type)")
+          PY
+      - name: Performance — seed steady state (packaged binary)
+        timeout-minutes: 25
+        run: |
+          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
+            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+            --seed-dir tests/ci/sample --count 120 --samples 2 \
+            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --json build/ci_onedir.json
+
+  # NEW: CPU deterministic truth (macOS copy).  Same repo, same gate count
+  # and timeout as the Windows copies so the suite stays platform-symmetric.
+  # Deterministic mode is CPU-only + software decode, so this runner exercises
+  # the truth without requiring the full 70-file datasets (seed protocol is
+  # enough to lock cross-platform equality).
+  deterministic-cpu:
+    runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv
+        run: |
+          uv venv .venv --python 3.10
+          uv pip install --python .venv/bin/python \
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "pytest"
+      - name: Deterministic truth — seed replication vs committed baseline
+        run: |
+          .venv/bin/python -m pytest tests/test_deterministic_baseline.py -v \
+            -m "deterministic"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-deterministic-cpu
+          path: build/perf_*.json
+          if-no-files-found: ignore

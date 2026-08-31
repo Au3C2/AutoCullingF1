@@ -81,11 +81,23 @@ def setup_logging(base_dir: Path):
     return log_file
 
 def run(args: argparse.Namespace) -> int:
+    # Deterministic gate: --deterministic and CULL_DETERMINISTIC=1 are
+    # interchangeable; normalize to the env var early so every module sees it.
+    if getattr(args, "deterministic", False):
+        import os as _os
+        _os.environ["CULL_DETERMINISTIC"] = "1"
+    try:
+        from cull.deterministic import is_deterministic as _is_det_cli
+        if _is_det_cli():
+            logging.getLogger(__name__).info("Deterministic mode: CPU-only ONNX + software decode (macOS/Windows identical, slower)")
+    except Exception:
+        pass
+
     input_dir = Path(args.input_dir)
     if not input_dir.is_dir():
         log.error("Input directory not found: %s", input_dir)
         return 1
-        
+
     setup_logging(input_dir)
         
     # Map argparse Namespace to EngineConfig
@@ -107,9 +119,11 @@ def run(args: argparse.Namespace) -> int:
         autocrop=not args.crop_off,
         rename=args.rename,
         workers=args.workers,
+        consumer_threads=args.consumer_threads,
         dump_scores=Path(args.dump_scores) if args.dump_scores else None,
         label_check=args.label_check,
-        label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None
+        label_check_dir=Path(args.label_check_dir) if args.label_check_dir else None,
+        deterministic=getattr(args, "deterministic", False) or __import__("os").environ.get("CULL_DETERMINISTIC", "") not in ("", "0", "false", "False", "FALSE", "off", "OFF"),
     )
 
     # Resolve model paths for bundled version
@@ -184,7 +198,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--label-check", action="store_true")
     parser.add_argument("--label-check-dir", type=Path, default=None)
     parser.add_argument("--scale-width", type=int, default=1280)
-    parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--workers", type=int, default=8,
+                        help="decode-pool size; 8 is the measured optimum on the "
+                             "8-core win32 dev box (JPG +30-50%% vs 4, +8-14%% vs 6; "
+                             "HEIF/NEF neutral, ARW consumer-bound — 2026-08-31 sweep)")
+    parser.add_argument("--consumer-threads", type=int, default=1,
+                        help="scoring threads; each owns its ONNX sessions (>=2 "
+                             "processes different burst groups concurrently; "
+                             "A/B'd neutral-to-slower on the 8-core dev box)")
+    parser.add_argument("--deterministic", action="store_true",
+                        help="force CPU-only ONNX + software decode + single-threaded "
+                             "kernels for bit-identical macOS/Windows results "
+                             "(also enabled by CULL_DETERMINISTIC=1; slower)")
     parser.add_argument("-v", "--verbose", action="store_true")
 
     return parser.parse_args(argv)
@@ -217,4 +242,8 @@ def main(argv: list[str] | None = None) -> int:
     return run(args)
 
 if __name__ == "__main__":
+    # Windows spawn workers re-import this module; freeze_support keeps them
+    # from re-running main() (no-op in source mode, required in frozen builds).
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

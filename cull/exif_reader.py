@@ -32,15 +32,27 @@ def get_resource_path(relative_path: str) -> Path:
     return base_path / relative_path
 
 def _find_exiftool_path() -> list[str]:
-    """Return command list for exiftool (bundled or system-wide)."""
+    """Return command list for exiftool (bundled or system-wide).
+
+    The win32-only perl core/XS modules live in ``lib-win32/``, split from
+    ``lib/`` (the pure-Perl exiftool dist: Image::ExifTool & co). Branch 2
+    runs the launcher through the SYSTEM perl with ``-I lib`` only — the
+    win32 tree must never land on that @INC or its ``.xs.dll`` files shadow
+    system core modules and dlopen-fail on macOS (silently killed EXIF
+    there, 2026-08-31). Keep in sync with cull/loader.py.
+    """
     # 1. Check for bundled Perl script + Bundled Perl Interpreter (Self-contained)
     ext = ".exe" if sys.platform == "win32" else ""
     bundled_perl = get_resource_path(f"external/exiftool/perl{ext}")
     bundled_pl = get_resource_path("external/exiftool/exiftool.pl")
     lib_path = get_resource_path("external/exiftool/lib")
+    win32_lib = get_resource_path("external/exiftool/lib-win32")
 
     if bundled_perl.exists() and bundled_pl.exists() and lib_path.exists():
-        return [str(bundled_perl), "-I", str(lib_path), str(bundled_pl)]
+        cmd = [str(bundled_perl), "-I", str(lib_path)]
+        if win32_lib.exists():
+            cmd += ["-I", str(win32_lib)]
+        return [*cmd, str(bundled_pl)]
 
     # 2. Check for bundled binary/launcher
     bundled_bin = get_resource_path(f"external/exiftool/exiftool{ext}")
@@ -107,20 +119,45 @@ _EXIFTOOL_FIELDS = [
 def _run_exiftool(paths: list[Path]) -> list[dict]:
     """Run exiftool -json on *paths* and return the parsed list of dicts.
 
-    Uses ``-@ -`` (read filenames from stdin) to avoid hitting the Windows
-    command-line length limit (~32 KB) when processing hundreds of files.
+    Shards into parallel subprocesses with argv file lists (measured 8.1
+    ms/file vs 18.5 ms/file for the -@ - stdin protocol on Apple M4,
+    2026-08-24); very large batches fall back to the -@ - stdin protocol to
+    stay under the Windows command-line length limit (~32 KB). ExifData
+    lookup is by path, so shard ordering does not affect results.
     """
     if not paths:
         return []
-        
+
     cmd_base = _find_exiftool_path()
-    cmd = [
+    args = [
         *cmd_base,
         "-json",
         "-n",                   # numeric values (no units/text decoration)
         *[f"-{f}" for f in _EXIFTOOL_FIELDS],
-        "-@", "-",              # read file list from stdin
     ]
+
+    try:
+        if len(paths) <= 400:
+            import os
+            from concurrent.futures import ThreadPoolExecutor
+            nproc = max(1, min(4, (os.cpu_count() or 1) // 2))
+            chunks = [paths[i::nproc] for i in range(nproc)]
+
+            def _run_shard(shard: list[Path]) -> list[dict]:
+                result = subprocess.run(
+                    [*args, *[str(p) for p in shard]],
+                    capture_output=True, text=True, check=True,
+                )
+                return json.loads(result.stdout)
+
+            with ThreadPoolExecutor(max_workers=nproc) as pool:
+                shard_results = list(pool.map(_run_shard, chunks))
+            return [entry for shard in shard_results for entry in shard]
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass  # fall through to the -@ - path, which raises properly
+
+    # Fallback: very large batches via -@ - (read filenames from stdin).
+    cmd = [*args, "-@", "-"]
 
     # Build newline-separated file list for stdin
     file_list = "\n".join(str(p) for p in paths) + "\n"
@@ -141,8 +178,16 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             "  Windows:        https://exiftool.org/"
         )
     except subprocess.CalledProcessError as exc:
-        log.warning("exiftool exited with code %d: %s", exc.returncode, exc.stderr)
-        return []
+        # exiftool was FOUND and ran but exited non-zero: broken install or
+        # broken bundle. Returning [] here would silently degrade burst
+        # grouping to mtime heuristics and corrupt scores while every gate
+        # keeps passing (2026-08-31 CI incident: a win32 lib/ shadowed the
+        # darwin system perl modules → dlopen failure → EXIF silently
+        # empty on macOS). Fail loudly instead.
+        stderr_tail = (exc.stderr or "").strip()[-400:]
+        raise RuntimeError(
+            f"exiftool exited with code {exc.returncode} (broken install?): {stderr_tail}"
+        ) from exc
 
     try:
         return json.loads(result.stdout)

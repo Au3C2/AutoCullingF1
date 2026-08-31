@@ -1,0 +1,124 @@
+name: culling-guards-windows
+
+# Windows guards — platform-split counterpart to culling-guards (macOS).
+#
+# Three parallel jobs keep the wall clock inside the 10 min budget:
+#   deterministic-cpu — CULL_DETERMINISTIC=1 vs tests/baselines/deterministic.json (strict)
+#   gpu-alignment     — default CUDA path vs same truth (rating strict + raw 0.03)
+#   perf-seed         — Windows perf gate via the same 4-seed replication
+#                       protocol as macOS (one seed file per format copied
+#                       N times via --seed-dir, --count stays in sync with
+#                       the macOS gate: 120).
+#
+# The Windows perf baselines are stored in tests/ci/ci_config.json under
+# a per-platform key (win32); the macOS build tolerates a missing win32
+# key by skipping until calibrated (same pattern as macOS calibration was
+# behind `perf-calibrate` before it was populated).
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "files per dataset (seed replication, stays in sync with macOS gate)"
+        type: number
+        default: 120
+      samples:
+        description: "interleaved samples per format"
+        type: number
+        default: 2
+
+concurrency:
+  group: guards-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: Deterministic truth — 70-file gate (strict)
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-deterministic-cpu
+          path: build/perf_*.json
+          if-no-files-found: ignore
+
+  gpu-alignment:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: GPU alignment — default CUDA vs deterministic truth
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "alignment"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gpu-alignment
+          path: build/perf_*.json
+          if-no-files-found: ignore
+
+  perf-seed:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
+        run: |
+          .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
+            --seed-dir tests/ci/sample --count ${{ inputs.count || 120 }} `
+            --samples ${{ inputs.samples || 2 }} --tolerance 0.65 `
+            --baseline-file tests/ci/ci_config.json --no-prewarm `
+            --json build/ci_windows_perf.json
+      - name: Upload perf result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-perf-seed
+          path: |
+            build/ci_windows_perf.json
+            build/perf_*.json
+          if-no-files-found: warn

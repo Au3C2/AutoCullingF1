@@ -52,6 +52,11 @@ preview/
 scores_preview.csv
 test_import/
 
+# Tool state and root build artifacts
+.codegraph/
+.zcode/
+/auto_cull_v0.1_win_x64.exe
+
 # Error review analysis (separate from production code)
 error_review/
 
@@ -59,6 +64,10 @@ error_review/
 p4_data/
 fence_label/
 vehicle_orientation_labels/
+
+# Keep build/perf_*.json artifacts locally; the committed truth is
+# tests/baselines/deterministic.json + tests/ci/ci_config.json
+build/perf_*.json
 
 # Model checkpoints (large binary, regenerate via training scripts)
 fence_classifier_checkpoints/*.pth
@@ -83,5 +92,19 @@ p4_model_checkpoints/*.onnx
 *.NEF
 *.ARW
 *.bin
+
+# CI seed samples (one file per format, committed for the GitHub Actions gate)
+tests/ci/sample/*
+!tests/ci/sample/seed.jpg
+!tests/ci/sample/seed.heif
+!tests/ci/sample/seed.ARW
+!tests/ci/sample/seed.nef
+
+# Bundled exiftool (perl script + lib tree) — required by the packaged build
+external/*
+!external/exiftool/
+
 auto_cull
-external/
+
+# Rust/Tauri build artifacts
+src-tauri/target/
