@@ -238,9 +238,6 @@ def measure(fmt: str, workers: int, count: int,
 
 
 def _prewarm(workers: int, seed_dir: Path | None = None) -> None:
-    exe = os.environ.get("CULL_EXE")
-    if not exe:
-        return
     picks = [sorted(build_dataset(fmt, DATASETS[fmt][2] * DATASETS[fmt][3], seed_dir)
                     .glob(DATASETS[fmt][1]))[0]
              for fmt in DATASETS]
@@ -248,8 +245,7 @@ def _prewarm(workers: int, seed_dir: Path | None = None) -> None:
     try:
         for p in picks[:4]:
             shutil.copy(p, tmp / p.name)
-        subprocess.run([exe, "--input-dir", str(tmp), "--workers", str(workers),
-                        "--force", "--dry-run"], capture_output=True, text=True,
+        subprocess.run(_command(tmp, workers), capture_output=True, text=True,
                        env={**os.environ, "PYTHONPATH": str(ROOT)}, timeout=600)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -287,7 +283,7 @@ def main() -> int:
     args = ap.parse_args()
 
     who = _exe_name()
-    if who == "onedir" and not args.no_prewarm:
+    if not args.no_prewarm:
         _prewarm(args.workers, args.seed_dir)
 
     base_table = _load_baselines(args.baseline_file)
