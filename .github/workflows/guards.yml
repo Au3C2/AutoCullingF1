@@ -59,8 +59,9 @@ jobs:
       - name: Calibrate packaged seed performance
         timeout-minutes: 40
         run: |
-          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
-            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+          CULL_EXE=$(find dist -type f -perm +111 -not -name "*.zip" | head -1)
+          echo "Using CULL_EXE: $CULL_EXE"
+          CULL_EXE="$CULL_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count ${{ inputs.count }} \
             --samples ${{ inputs.samples }} --cooldown 5 --no-guard \
             --json build/calib_onedir.json
@@ -184,8 +185,9 @@ jobs:
       - name: Performance — seed steady state (packaged binary)
         timeout-minutes: 25
         run: |
-          CULL_EXE=dist/auto_cull_v0.1_macos_arm64/auto_cull_v0.1_macos_arm64 \
-            .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
+          CULL_EXE=$(find dist -type f -perm +111 -not -name "*.zip" | head -1)
+          echo "Using CULL_EXE: $CULL_EXE"
+          CULL_EXE="$CULL_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count 120 --samples 2 \
             --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --json build/ci_onedir.json
