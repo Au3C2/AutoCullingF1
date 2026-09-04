@@ -82,6 +82,8 @@ p4_model_checkpoints/*.onnx
 !tests/test_img/*.jpg
 *.jpeg
 *.png
+!src-tauri/icons/*.png
+!docs/assets/*.png
 *.bmp
 *.gif
 *.tiff
@@ -108,3 +110,5 @@ auto_cull
 
 # Rust/Tauri build artifacts
 src-tauri/target/
+src-tauri/binaries/*.exe
+src-tauri/resources/

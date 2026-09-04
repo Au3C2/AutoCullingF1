@@ -778,10 +778,13 @@ def _extract_embedded_raw(path: Path, tags: list[str]) -> bytes | None:
                 return data
         return None
     exiftool_cmd = _find_exiftool_path()
+    run_kwargs: dict = {"stdin": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        run_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     for tag in tags:
         try:
             proc = subprocess.run([*exiftool_cmd, "-b", tag, str(path)],
-                                  capture_output=True, timeout=10)
+                                  capture_output=True, timeout=10, **run_kwargs)
             if proc.returncode == 0 and proc.stdout:
                 return proc.stdout
         except Exception:
@@ -800,8 +803,11 @@ def update_image_metadata(img_path: Path, rating: int, crop: tuple[float, float,
                     f"-XMP-crs:CropBottom={b:.6f}", f"-XMP-crs:CropRight={r:.6f}",
                     "-XMP-crs:CropAngle=0", "-XMP-crs:CropConstrainToWarp=0", "-XMP-crs:CropConstrainToUnitSquare=1"])
     cmd.append(str(img_path))
+    run_kwargs: dict = {"stdin": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        run_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     try:
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(cmd, check=True, capture_output=True, **run_kwargs)
         return True, img_path.name
     except subprocess.CalledProcessError as e:
         return False, f"Error updating {img_path.name}: {e.stderr.decode().strip()}"

@@ -30,11 +30,24 @@ async fn select_folder(app: AppHandle) -> Result<Option<String>, String> {
 /// Helper to find repo root directory
 fn repo_root() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if cwd.join("tauri.conf.json").exists() {
-        cwd.parent().map(|p| p.to_path_buf()).unwrap_or(cwd)
-    } else {
-        cwd
+    if cwd.join("cull_photos.py").exists() {
+        return cwd;
     }
+    if cwd.join("tauri.conf.json").exists() {
+        if let Some(parent) = cwd.parent() {
+            if parent.join("cull_photos.py").exists() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+    if let Ok(mut exe) = std::env::current_exe() {
+        while exe.pop() {
+            if exe.join("cull_photos.py").exists() {
+                return exe;
+            }
+        }
+    }
+    cwd
 }
 
 fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), String> {
@@ -78,6 +91,12 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
         }
     }
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -85,6 +104,16 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
     let stdin = child.stdin.take().ok_or("Failed to open sidecar stdin")?;
     let stdout = child.stdout.take().ok_or("Failed to open sidecar stdout")?;
+    if let Some(err_pipe) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let reader = BufReader::new(err_pipe);
+            for line in reader.lines() {
+                if let Ok(line_str) = line {
+                    eprintln!("[sidecar stderr] {}", line_str);
+                }
+            }
+        });
+    }
 
     let waiters = Arc::clone(&state.preview_waiters);
     let app_clone = app.clone();
@@ -238,6 +267,14 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(sidecar_state)
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128@2x.png")) {
+                    let _ = window.set_icon(icon);
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             select_folder,
             scan,

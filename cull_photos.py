@@ -107,7 +107,7 @@ def _build_config(args: argparse.Namespace, input_dir: Path) -> EngineConfig:
         force=args.force,
         p4_policy=args.p4_policy,
         scale_width=args.scale_width,
-        autocrop=not args.crop_off,
+        autocrop=getattr(args, "autocrop", not getattr(args, "crop_off", False)),
         rename=args.rename,
         workers=args.workers,
         consumer_threads=getattr(args, "consumer_threads", 1),
@@ -195,8 +195,9 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
     def do_run(cmd: dict) -> None:
         merged = argparse.Namespace(**vars(args))
         for key, value in cmd.get("config", {}).items():
-            if hasattr(merged, key):
-                setattr(merged, key, value)
+            setattr(merged, key, value)
+            if key == "autocrop":
+                merged.crop_off = not value
         run_input_str = cmd.get("dir") or (str(merged.input_dir) if merged.input_dir else "")
         if not run_input_str:
             emit({"type": "error", "message": "no directory specified"})
