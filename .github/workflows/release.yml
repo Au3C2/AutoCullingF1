@@ -65,7 +65,7 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 \
             --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
             --no-prewarm --json build/ci_source.json
-      - name: Build onefile + onedir (zip)
+      - name: Build onefile + onedir (zip) + Desktop GUI (DMG)
         run: |
           VER="${{ steps.ver.outputs.ver }}"
           echo "Building onefile v$VER ..."
@@ -87,6 +87,10 @@ jobs:
           echo "Rebuilding onedir for warm-start perf smoke (needs --clean'd dist/) ..."
           .venv/bin/python packaging/build.py --onedir
           ls -lh "dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
+
+          echo "Building Desktop GUI DMG Installer v$VER ..."
+          .venv/bin/python packaging/build_gui.py
+          ls -lh dist/AutoCulling_*.dmg || true
       - name: SHA256
         run: |
           VER="${{ steps.ver.outputs.ver }}"
@@ -159,7 +163,7 @@ jobs:
             --seed-dir tests/ci/sample --count 120 --samples 2 --tolerance 0.65 `
             --baseline-file tests/ci/ci_config.json --no-prewarm `
             --json build/ci_source.json
-      - name: Build onefile + onedir (zip)
+      - name: Build onefile + onedir (zip) + Desktop GUI (Setup + Portable)
         shell: bash
         run: |
           VER="${{ steps.ver.outputs.ver }}"
@@ -181,6 +185,10 @@ jobs:
           echo "Rebuilding onedir for warm-start perf smoke (needs --clean'd dist/) ..."
           .venv/Scripts/python.exe packaging/build.py --onedir
           ls -lh "dist/auto_cull_v${VER}_win_x64/auto_cull_v${VER}_win_x64.exe"
+
+          echo "Building Windows Desktop GUI Packages v$VER ..."
+          .venv/Scripts/python.exe packaging/build_gui.py
+          ls -lh dist/AutoCulling_* || true
       - name: SHA256
         shell: bash
         run: |
@@ -224,18 +232,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Stage onedir assets only
+      - name: Stage release assets (onedir + GUI packages)
         run: |
           mkdir -p release_assets
-          # Only ship the onedir zips (+ their sha256) per the v0.2 release goal.
-          # Onefile binaries stay as CI artifacts but are not attached to the draft.
           find artifacts -name '*_onedir.zip' -exec cp -v {} release_assets/ \;
-          find artifacts -name '*_onedir.zip.sha256' -exec cp -v {} release_assets/ \;
-          # Fallback: if the zip-specific sha256 wasn't split out, grab the onedir ones
-          # from the dist/*.sha256 files (they contain both hashes — filter to onedir lines)
-          if ! ls release_assets/*.sha256 1>/dev/null 2>&1; then
-            find artifacts -name '*.sha256' -exec grep -l onedir {} \; -exec cp -v {} release_assets/ \;
-          fi
+          find artifacts -name 'AutoCulling_*.dmg' -exec cp -v {} release_assets/ \;
+          find artifacts -name 'AutoCulling_*.exe' -exec cp -v {} release_assets/ \;
+          find artifacts -name 'AutoCulling_*.zip' -exec cp -v {} release_assets/ \;
+          find artifacts -name '*.sha256' -exec cp -v {} release_assets/ \;
           echo "Staged release assets:"; ls -lh release_assets/; cat release_assets/*.sha256 2>/dev/null || true
       - name: Derive tag + what changed vs last release
         id: tag
