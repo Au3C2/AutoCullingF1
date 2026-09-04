@@ -26,7 +26,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "nsis"],
+    "targets": ["app", "dmg", "nsis"],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "background": "icons/dmg-background.png",
+        "windowSize": { "width": 660, "height": 400 },
+        "windowPosition": { "x": 100, "y": 100 },
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 }
+      }
+    },
     "externalBin": [
       "binaries/cull-sidecar"
     ],

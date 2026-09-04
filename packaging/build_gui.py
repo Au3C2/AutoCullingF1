@@ -110,7 +110,26 @@ def build_tauri_gui() -> None:
         tauri_cli = ["cargo", "tauri", "build"]
 
     print(f"Running Tauri build: {' '.join(tauri_cli)}")
-    subprocess.run(tauri_cli, cwd=str(ROOT), check=True)
+    try:
+        subprocess.run(tauri_cli, cwd=str(ROOT), check=True)
+    except subprocess.CalledProcessError:
+        # Known Tauri 2 + macOS Sequoia issue: create-dmg's Finder AppleScript
+        # prettify step times out (AppleEvent -1712) even though .app + dmg
+        # script are fine. Fall back to a plain DMG with --skip-jenkins so the
+        # Applications drag link still works without Finder cosmetics.
+        bundle_dmg = SRC_TAURI / "target/release/bundle/dmg/bundle_dmg.sh"
+        app_dir = SRC_TAURI / "target/release/bundle/macos"
+        dmg_out = SRC_TAURI / "target/release/bundle/dmg/AutoCulling_0.1.0_aarch64.dmg"
+        if bundle_dmg.exists() and app_dir.exists():
+            print("Tauri DMG prettify failed; retrying with --skip-jenkins fallback...")
+            subprocess.run(
+                ["bash", str(bundle_dmg), "--skip-jenkins", "--volname", "AutoCulling",
+                 "--window-size", "660", "400", "--icon-size", "128",
+                 "--app-drop-link", "480", "170",
+                 str(dmg_out), str(app_dir)],
+                cwd=str(ROOT), check=True)
+        else:
+            raise
 
 
 def sha256_file(path: Path) -> str:
