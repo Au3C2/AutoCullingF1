@@ -1,10 +1,16 @@
-# Auto-Culling (F1 专用) 🏎️📸
+<p align="center">
+  <img src="docs/assets/logo.png" width="128" height="128" alt="Auto-Culling Logo">
+</p>
+
+# Auto Culling
 
 **中文版** | [English](README.md)
 
 面向 F1 及各类赛车摄影的自动筛选工具。指向相机直出的文件夹即可：自动完成连拍分组、
 逐帧多阶段 AI 评分、每组精选，并直接写入 Lightroom 兼容的星级/拒绝标记与自动裁剪
 参数——无需人工初筛。
+
+![Auto-Culling 桌面 GUI 界面](docs/assets/gui_demo.png)
 
 - **输入**：相机直出文件夹——索尼 ARW、尼康 NEF、佳能 CR2/CR3、富士 RAF、奥之心 ORF、
   松下 RW2、HEIF（`.hif/.heif/.heic`）、JPEG、PNG、TIFF

@@ -178,12 +178,15 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             "  Windows:        https://exiftool.org/"
         )
     except subprocess.CalledProcessError as exc:
-        # exiftool was FOUND and ran but exited non-zero: broken install or
-        # broken bundle. Returning [] here would silently degrade burst
-        # grouping to mtime heuristics and corrupt scores while every gate
-        # keeps passing (2026-08-31 CI incident: a win32 lib/ shadowed the
-        # darwin system perl modules → dlopen failure → EXIF silently
-        # empty on macOS). Fail loudly instead.
+        # If exiftool returns code 1 or 2 (e.g. minor warnings or unreadable single corrupt files),
+        # check if stdout still contains valid JSON for the valid files.
+        if exc.stdout and exc.stdout.strip().startswith("["):
+            try:
+                return json.loads(exc.stdout)
+            except Exception:
+                pass
+
+        # exiftool failed fatally (e.g. broken perl environment/dlopen failure)
         stderr_tail = (exc.stderr or "").strip()[-400:]
         raise RuntimeError(
             f"exiftool exited with code {exc.returncode} (broken install?): {stderr_tail}"
