@@ -76,6 +76,7 @@ p4_model_checkpoints/*.onnx
 
 # macOS
 .DS_Store
+!packaging/dmg-assets/.DS_Store
 
 # Raw image files
 *.jpg

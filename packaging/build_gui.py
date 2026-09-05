@@ -115,27 +115,8 @@ def build_tauri_gui() -> None:
     else:
         tauri_cli = ["cargo", "tauri", "build"]
 
-    print(f"Running Tauri build: {' '.join(tauri_cli)}")
-    try:
-        subprocess.run(tauri_cli, cwd=str(ROOT), check=True)
-    except subprocess.CalledProcessError:
-        # Known Tauri 2 + macOS Sequoia issue: create-dmg's Finder AppleScript
-        # prettify step times out (AppleEvent -1712) even though .app + dmg
-        # script are fine. Fall back to a plain DMG with --skip-jenkins so the
-        # Applications drag link still works without Finder cosmetics.
-        bundle_dmg = SRC_TAURI / "target/release/bundle/dmg/bundle_dmg.sh"
-        app_dir = SRC_TAURI / "target/release/bundle/macos"
-        dmg_out = SRC_TAURI / "target/release/bundle/dmg/AutoCulling_0.1.0_aarch64.dmg"
-        if bundle_dmg.exists() and app_dir.exists():
-            print("Tauri DMG prettify failed; retrying with --skip-jenkins fallback...")
-            subprocess.run(
-                ["bash", str(bundle_dmg), "--skip-jenkins", "--volname", "AutoCulling",
-                 "--window-size", "660", "400", "--icon-size", "128",
-                 "--app-drop-link", "480", "170",
-                 str(dmg_out), str(app_dir)],
-                cwd=str(ROOT), check=True)
-        else:
-            raise
+    print(f"Running Tauri build: {' '.join(tauri_cli)} --bundles app")
+    subprocess.run([*tauri_cli, "--bundles", "app"], cwd=str(ROOT), check=True)
 
 
 def sha256_file(path: Path) -> str:
@@ -144,6 +125,62 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def build_macos_dmg(dist_dir: Path, ver: str) -> Path | None:
+    """Deterministic DMG assembly from a pre-baked Finder layout.
+
+    Tauri's create-dmg prettify step drives Finder via AppleScript, which
+    times out (AppleEvent -1712) in background shells and CI. Instead we
+    stage the volume contents ourselves — .app, Applications symlink,
+    background image and a committed .DS_Store (captured from the
+    human-approved layout) — and let hdiutil compress it. No Finder, no
+    AppleScript, byte-identical layout on every machine.
+    """
+    app_path = SRC_TAURI / "target/release/bundle/macos/AutoCulling.app"
+    if not app_path.exists():
+        print("WARNING: AutoCulling.app not found to create DMG.")
+        return None
+
+    stage = SRC_TAURI / "target/release/dmg-stage"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+
+    shutil.copytree(app_path, stage / "AutoCulling.app", symlinks=True)
+    (stage / "Applications").symlink_to("/Applications")
+
+    bg_src = SRC_TAURI / "icons/dmg-background.png"
+    if bg_src.exists():
+        (stage / ".background").mkdir()
+        shutil.copy2(bg_src, stage / ".background/dmg-background.png")
+
+    ds_store = ROOT / "packaging/dmg-assets/.DS_Store"
+    if ds_store.exists():
+        shutil.copy2(ds_store, stage / ".DS_Store")
+        print("Injected pre-baked Finder layout (.DS_Store)")
+    else:
+        print("WARNING: packaging/dmg-assets/.DS_Store missing — window layout will be Finder defaults")
+
+    vol_icns = SRC_TAURI / "icons/icon.icns"
+    if vol_icns.exists():
+        shutil.copy2(vol_icns, stage / ".VolumeIcon.icns")
+
+    dst_dmg = dist_dir / f"AutoCulling_v{ver}_macos_arm64.dmg"
+    if dst_dmg.exists():
+        dst_dmg.unlink()
+    cmd = [
+        "hdiutil", "create",
+        "-volname", "AutoCulling",
+        "-srcfolder", str(stage),
+        "-fs", "HFS+",
+        "-ov", "-format", "UDZO",
+        str(dst_dmg),
+    ]
+    print(f"Creating DMG via hdiutil: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+    shutil.rmtree(stage, ignore_errors=True)
+    print(f"Output DMG: {dst_dmg} ({dst_dmg.stat().st_size / 1024 / 1024:.1f} MB)")
+    return dst_dmg
 
 
 def organize_dist_artifacts() -> list[Path]:
@@ -157,23 +194,9 @@ def organize_dist_artifacts() -> list[Path]:
     bundle_dir = SRC_TAURI / "target/release/bundle"
 
     if sys.platform == "darwin":
-        # Create standard DMG using hdiutil on macOS
-        app_path = bundle_dir / "macos/AutoCulling.app"
-        if not app_path.exists():
-            # Fallback to direct release target
-            app_path = SRC_TAURI / "target/release/bundle/macos/AutoCulling.app"
-        
-        if app_path.exists():
-            dst_dmg = dist_dir / f"AutoCulling_v{ver}_macos_arm64.dmg"
-            if dst_dmg.exists():
-                dst_dmg.unlink()
-            cmd = ["hdiutil", "create", "-volname", "AutoCulling", "-srcfolder", str(app_path), "-ov", "-format", "UDZO", str(dst_dmg)]
-            print(f"Creating DMG via hdiutil: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
-            print(f"Output DMG: {dst_dmg} ({dst_dmg.stat().st_size / 1024 / 1024:.1f} MB)")
-            collected_artifacts.append(dst_dmg)
-        else:
-            print("WARNING: AutoCulling.app not found to create DMG.")
+        dmg = build_macos_dmg(dist_dir, ver)
+        if dmg is not None:
+            collected_artifacts.append(dmg)
 
     elif sys.platform == "win32":
         # 1. NSIS Setup Exe
