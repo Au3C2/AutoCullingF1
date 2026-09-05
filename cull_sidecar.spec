@@ -13,6 +13,12 @@ import sys
 from pathlib import Path
 
 is_win = sys.platform == "win32"
+# CULL_ONEDIR=1 produces the directory form. The onefile form re-extracts the
+# whole 160 MB bundle to a fresh temp dir on EVERY launch (15-25 s macOS
+# signature-verification tax; inode-keyed cache never hits across runs). The
+# GUI ships the onedir form via Tauri resources — instant start.
+onedir = os.environ.get("CULL_ONEDIR") == "1"
+
 _MODEL_STAGE = Path("build") / "_bundle_models"
 
 
@@ -83,24 +89,55 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name="cull_sidecar",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # Windowed: no console popup when spawned by Tauri
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
+if onedir:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="cull_sidecar",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        upx=False,
+        upx_exclude=[],
+        name="cull_sidecar",
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name="cull_sidecar",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,  # Windowed: no console popup when spawned by Tauri
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )

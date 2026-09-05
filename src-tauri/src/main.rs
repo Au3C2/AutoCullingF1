@@ -99,17 +99,20 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
     let script_path = root.join("cull_photos.py");
     let dev_mode = venv_python.exists() && script_path.exists();
 
-    // Bundled sidecar: Tauri's externalBin lands NEXT TO the main binary
-    // (Contents/MacOS on macOS), resource_dir is only a secondary guess.
+    // Engine resolution (release): the sidecar ships as a PyInstaller ONEDIR
+    // via Tauri resources (instant start; no per-launch extraction). The
+    // exe-adjacent externalBin layout is kept as a secondary candidate.
     let mut candidates: Vec<PathBuf> = Vec::new();
+    let sidecar_name = if cfg!(windows) { "cull_sidecar.exe" } else { "cull_sidecar" };
     if let Some(dir) = &exe_dir {
-        candidates.push(dir.join("cull-sidecar"));
+        candidates.push(dir.join(sidecar_name));
     }
-    candidates.push(resource_dir.join("cull-sidecar"));
+    candidates.push(resource_dir.join("sidecar").join(sidecar_name));
+    candidates.push(resource_dir.join("resources/sidecar").join(sidecar_name));
+    candidates.push(resource_dir.join(sidecar_name));
 
     let mut cmd: Command;
     if !cfg!(debug_assertions) && !dev_mode {
-        // Packaged build: the bundled sidecar is the only correct engine.
         let found = candidates.iter().find(|p| {
             p.exists() && p.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false)
         });
@@ -123,7 +126,11 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
             }
         };
         log_line(&format!("spawn bundled sidecar: {}", sidecar_bin.display()));
-        cmd = Command::new(sidecar_bin);
+        cmd = Command::new(&sidecar_bin);
+        // onedir engines resolve their bundled models relative to the binary
+        if let Some(dir) = sidecar_bin.parent() {
+            cmd.current_dir(dir);
+        }
         cmd.arg("--json-lines");
     } else if dev_mode {
         log_line("dev mode: venv python sidecar");
@@ -137,6 +144,9 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
             Some(p) => {
                 log_line(&format!("spawn bundled sidecar (dev fallback): {}", p.display()));
                 cmd = Command::new(p);
+                if let Some(dir) = p.parent() {
+                    cmd.current_dir(dir);
+                }
                 cmd.arg("--json-lines");
             }
             None => {

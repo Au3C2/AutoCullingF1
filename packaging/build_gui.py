@@ -56,8 +56,14 @@ def get_rust_target_triple() -> str:
 
 
 def build_sidecar_binary() -> Path:
-    """Compile cull_photos into a windowed sidecar binary using PyInstaller."""
-    print("=== Step 1: Building Python Sidecar Binary ===")
+    """Compile cull_photos into a windowed onedir sidecar using PyInstaller.
+
+    onedir (not onefile): the onefile form re-extracts the whole ~160 MB
+    bundle to a fresh temp dir on EVERY launch and re-pays the macOS
+    signature-verification tax (~15-25 s). The onedir form starts instantly
+    and is shipped via Tauri resources.
+    """
+    print("=== Step 1: Building Python Sidecar (onedir) ===")
     spec_path = ROOT / "cull_sidecar.spec"
     if not spec_path.exists():
         raise FileNotFoundError("cull_sidecar.spec not found in project root")
@@ -67,39 +73,37 @@ def build_sidecar_binary() -> Path:
     # broken DMG whose sidecar fails with Permission denied at runtime.
     triple = get_rust_target_triple()
     ext = ".exe" if sys.platform == "win32" else ""
-    target_bin_path = SRC_TAURI / "binaries" / f"cull-sidecar-{triple}{ext}"
-    if target_bin_path.exists() and target_bin_path.stat().st_size < 1_000_000:
-        target_bin_path.unlink()
+    legacy_bin = SRC_TAURI / "binaries" / f"cull-sidecar-{triple}{ext}"
+    if legacy_bin.exists() and legacy_bin.stat().st_size < 1_000_000:
+        legacy_bin.unlink()
 
     _pyi = "pyinstaller.exe" if sys.platform == "win32" else "pyinstaller"
     pyinstaller = ROOT / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / _pyi
     if not pyinstaller.exists():
         pyinstaller = Path(shutil.which(_pyi) or _pyi)
 
+    env = dict(os.environ)
+    env["CULL_ONEDIR"] = "1"
     cmd = [str(pyinstaller), str(spec_path), "--noconfirm", "--clean"]
     print(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=str(ROOT), check=True)
+    subprocess.run(cmd, cwd=str(ROOT), check=True, env=env)
 
-    sidecar_out_name = "cull_sidecar.exe" if sys.platform == "win32" else "cull_sidecar"
-    compiled_sidecar = ROOT / "dist" / sidecar_out_name
-    if not compiled_sidecar.exists():
-        raise FileNotFoundError(f"Expected compiled sidecar at {compiled_sidecar}")
+    sidecar_dir = ROOT / "dist" / "cull_sidecar"
+    sidecar_bin = sidecar_dir / ("cull_sidecar.exe" if sys.platform == "win32" else "cull_sidecar")
+    if not sidecar_bin.exists():
+        raise FileNotFoundError(f"Expected onedir sidecar binary at {sidecar_bin}")
 
-    print(f"PASS: Compiled sidecar binary: {compiled_sidecar} ({compiled_sidecar.stat().st_size / 1024 / 1024:.1f} MB)")
+    print(f"PASS: Compiled onedir sidecar: {sidecar_dir} ({sum(f.stat().st_size for f in sidecar_dir.rglob('*') if f.is_file()) / 1024 / 1024:.1f} MB)")
 
-    # Copy to src-tauri/binaries/cull-sidecar-<triple>[.exe]
-    binaries_dir = SRC_TAURI / "binaries"
-    binaries_dir.mkdir(parents=True, exist_ok=True)
-
-    target_bin_path = binaries_dir / f"cull-sidecar-{triple}{ext}"
-
-    shutil.copy2(compiled_sidecar, target_bin_path)
-    # Ensure executable permissions on POSIX
+    # Ship the onedir via Tauri resources (src-tauri/resources/sidecar/)
+    res_dir = SRC_TAURI / "resources" / "sidecar"
+    shutil.rmtree(res_dir, ignore_errors=True)
+    shutil.copytree(sidecar_dir, res_dir)
     if sys.platform != "win32":
-        os.chmod(target_bin_path, 0o755)
+        os.chmod(sidecar_bin, 0o755)
 
-    print(f"PASS: Staged sidecar to {target_bin_path}")
-    return target_bin_path
+    print(f"PASS: Staged sidecar onedir to {res_dir}")
+    return sidecar_bin
 
 
 def build_tauri_gui() -> None:

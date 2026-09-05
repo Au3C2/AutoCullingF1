@@ -533,6 +533,15 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
                     return cv2.resize(img, (scale_width, new_h), interpolation=cv2.INTER_AREA)
                 return img
         except Exception: pass
+    else:
+        # ffprobe unavailable (packaged GUI apps run with a minimal PATH that
+        # lacks Homebrew): probe streams with pyav itself instead of skipping
+        # the fast in-process path entirely. _load_image_pyav performs its own
+        # stream selection + VideoToolbox decode, identical to the source-env
+        # fast path.
+        img_pyav = _load_image_pyav(path, scale_width=scale_width)
+        if img_pyav is not None:
+            return img_pyav
     return None
 
 def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:

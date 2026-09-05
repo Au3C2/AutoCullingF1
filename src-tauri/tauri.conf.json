@@ -37,8 +37,8 @@
         "applicationFolderPosition": { "x": 481, "y": 221 }
       }
     },
-    "externalBin": [
-      "binaries/cull-sidecar"
+    "resources": [
+      "resources/sidecar"
     ],
     "icon": [
       "icons/32x32.png",
