@@ -83,9 +83,11 @@ p4_model_checkpoints/*.onnx
 *.jpeg
 *.png
 !src-tauri/icons/*.png
+!src-tauri/icons/*.tiff
 !docs/assets/*.png
 *.bmp
 *.gif
+!src-tauri/icons/*.tiff
 *.tiff
 *.nef
 *.arw
