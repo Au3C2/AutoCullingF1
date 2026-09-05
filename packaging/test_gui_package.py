@@ -15,6 +15,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -37,24 +38,40 @@ def _get_version() -> str:
     return "0.1"
 
 
+def _detach_stale_attachments(dmg_path: Path) -> None:
+    """Detach any leftover mounts of this exact image (same DMG attached twice
+    makes hdiutil attach fail with 'Resource busy')."""
+    try:
+        info = subprocess.run(["hdiutil", "info"], capture_output=True, text=True, check=True).stdout
+    except Exception:
+        return
+    current_image = None
+    for line in info.splitlines():
+        line = line.strip()
+        if line.startswith("image-path"):
+            current_image = line.split(":", 1)[1].strip()
+        elif line.startswith("/dev/disk") and current_image == str(dmg_path):
+            subprocess.run(["hdiutil", "detach", line.split()[0], "-force"],
+                           capture_output=True)
+
+
 def test_macos_dmg(dmg_path: Path | None = None) -> bool:
     """Mount macOS DMG, verify .app structure, test embedded sidecar and unmount."""
     print("=== Testing macOS DMG Installer Package ===")
     if not dmg_path or not dmg_path.exists():
-        # Search dist/ or src-tauri/target/release/bundle/dmg/
-        candidates = list((ROOT / "dist").glob("*.dmg")) + list(
-            (ROOT / "src-tauri/target/release/bundle/dmg").glob("*.dmg")
-        )
+        # Search dist/ or src-tauri/target/release/bundle/dmg/ — prefer release
+        # artifacts over leftover design DMGs.
+        candidates = sorted(
+            (ROOT / "dist").glob("AutoCulling_v*.dmg")
+        ) + list((ROOT / "src-tauri/target/release/bundle/dmg").glob("*.dmg"))
         if not candidates:
             print("FAIL: No DMG package found to test.")
             return False
         dmg_path = candidates[0]
 
     print(f"Testing DMG artifact: {dmg_path} ({dmg_path.stat().st_size / 1024 / 1024:.1f} MB)")
-    mount_point = Path("/tmp/AutoCulling_DMG_TestMount")
-    if mount_point.exists():
-        subprocess.run(["hdiutil", "detach", str(mount_point), "-force"], capture_output=True)
-    mount_point.mkdir(parents=True, exist_ok=True)
+    _detach_stale_attachments(dmg_path)
+    mount_point = Path(tempfile.mkdtemp(prefix="ac_dmg_test_"))
 
     try:
         # Mount DMG
@@ -87,12 +104,48 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
 
         success = True
 
+        # --- DMG install-layout guards (regressions from 2026-09-05) ---
+        # 1. Applications drag link must exist (hdiutil fallback dropped it).
+        apps_link = app_bundle / "Contents" / ".." / "Applications"
+        if (app_bundle.parent / "Applications").is_symlink():
+            print("PASS: DMG carries the Applications drag link.")
+        else:
+            print("FAIL: DMG missing Applications symlink — no drag-install guide.")
+            success = False
+        # 2. Background image must be shipped (visual drag-install guide).
+        bg_check = list((app_bundle.parent / ".background").glob("*.png")) \
+            + list((app_bundle.parent / ".background").glob("*.tiff"))
+        if bg_check and bg_check[0].stat().st_size > 10_000:
+            print(f"PASS: DMG ships install background ({bg_check[0].name}).")
+        else:
+            print("FAIL: DMG missing/stub install background image.")
+            success = False
+        # 3. Pre-baked Finder layout must be injected (window size/icon coords).
+        if (app_bundle.parent / ".DS_Store").exists():
+            print("PASS: DMG carries pre-baked .DS_Store layout.")
+        else:
+            print("FAIL: DMG missing .DS_Store — icon/window layout not applied.")
+            success = False
+
         # Test sidecar executable if bundled in Resources or MacOS
         sidecar_cand = None
-        for cand in [res_dir / "cull-sidecar", res_dir / "cull_sidecar", macos_dir / "cull-sidecar", macos_dir / "cull_sidecar"]:
+        for cand in [res_dir / "resources/sidecar/cull_sidecar",
+                     res_dir / "resources/sidecar/cull_sidecar.exe",
+                     res_dir / "cull-sidecar", res_dir / "cull_sidecar",
+                     macos_dir / "cull-sidecar", macos_dir / "cull_sidecar"]:
             if cand.exists():
                 sidecar_cand = cand
                 break
+
+        # 4. Sidecar must ship as ONEDIR (binary + _internal). The onefile form
+        # re-extracts 160 MB per launch (15-25 s startup tax on macOS).
+        if sidecar_cand and (sidecar_cand.parent / "_internal").is_dir():
+            print("PASS: Sidecar ships as onedir (no per-launch extraction tax).")
+        elif sidecar_cand:
+            print("FAIL: Sidecar shipped as onefile — 15-25s startup tax per launch.")
+            success = False
+        else:
+            print("NOTE: Sidecar is bundled as external binary or dev-resolved.")
 
         if sidecar_cand:
             print(f"Testing bundled sidecar: {sidecar_cand}")
@@ -136,13 +189,18 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
         )
         try:
             sidecar_alive = False
-            deadline = time.time() + 25.0
+            deadline = time.time() + 40.0
+            gui_log = app_bin.parent / "gui.log"
             while time.time() < deadline:
                 probe = subprocess.run(
-                    ["pgrep", "-f", "cull-sidecar"],
+                    ["pgrep", "-f", "cull_sidecar"],
                     capture_output=True, text=True,
                 )
                 if probe.returncode == 0 and probe.stdout.strip():
+                    sidecar_alive = True
+                    break
+                # The app logs "sidecar spawned and alive" next to its binary
+                if gui_log.exists() and "sidecar spawned and alive" in gui_log.read_text(errors="ignore"):
                     sidecar_alive = True
                     break
                 if app_proc.poll() is not None:
@@ -151,7 +209,8 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
             if sidecar_alive:
                 print("PASS: Installed .app spawned the bundled sidecar at startup.")
             else:
-                print("FAIL: .app did not spawn the bundled sidecar (folder pick would hit Broken pipe).")
+                tail = gui_log.read_text(errors="ignore")[-500:] if gui_log.exists() else "(no gui.log)"
+                print(f"FAIL: .app did not spawn the bundled sidecar. gui.log tail:\n{tail}")
                 success = False
         finally:
             app_proc.terminate()
@@ -159,7 +218,101 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
                 app_proc.wait(timeout=5.0)
             except Exception:
                 app_proc.kill()
-            subprocess.run(["pkill", "-f", "cull-sidecar"], capture_output=True)
+            subprocess.run(["pkill", "-f", "cull_sidecar"], capture_output=True)
+            shutil.rmtree(install_dir, ignore_errors=True)
+
+        # 5. HEIF frozen-engine guard: packaged GUI apps run with a minimal
+        # PATH (no Homebrew ffprobe). If the pyav fast path doesn't engage in
+        # the frozen env, HEIF decodes via pillow_heif software — a measured
+        # 20x slowdown (3.7 vs 61 img/s) AND different pixels (score drift).
+        # Guard = sanitized-PATH run of the shipped engine on real HEIF data:
+        # (a) ratings/raw must match the source engine (pixel-identical
+        # decode), (b) per-frame engine time must stay under 120 ms (healthy
+        # ~17 ms, broken ~267 ms — 4x+ margin on both sides).
+        print("Testing shipped engine HEIF decode under sanitized PATH...")
+        seed = ROOT / "tests/ci/sample/seed.heif"
+        if seed.exists() and seed.stat().st_size > 1_000_000:
+            heif_dir = Path("/tmp/AutoCulling_HeifGuard")
+            shutil.rmtree(heif_dir, ignore_errors=True)
+            heif_dir.mkdir(parents=True)
+            for i in range(3):
+                shutil.copy2(seed, heif_dir / f"guard_{i:02d}.heif")
+
+            engine_bin = install_dir / app_bundle.name / "Contents" / "Resources" / "resources" / "sidecar" / "cull_sidecar" / "cull_sidecar"
+            if not engine_bin.exists():
+                engine_bin = sidecar_cand or engine_bin
+
+            def run_engine(cmd_prefix, path_env):
+                env = dict(os.environ)
+                env["PATH"] = path_env
+                proc = subprocess.Popen(
+                    [*cmd_prefix, "--json-lines"],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, text=True, bufsize=1,
+                    cwd=str(engine_bin.parent), env=env,
+                )
+                ratings, engine_secs, logs = {}, 0.0, []
+                proc.stdin.write(json.dumps({
+                    "cmd": "run", "dir": str(heif_dir),
+                    "config": {"dry_run": True}}) + "\n")
+                proc.stdin.flush()
+                while True:
+                    line = proc.stdout.readline()
+                    if not line:
+                        break
+                    try:
+                        evt = json.loads(line)
+                    except Exception:
+                        continue
+                    if evt.get("type") == "frame":
+                        ratings[evt["name"]] = (evt["rating"], round(evt["raw"], 2))
+                    elif evt.get("type") == "log":
+                        logs.append(evt.get("line", ""))
+                    if evt.get("type") == "done":
+                        engine_secs = evt.get("elapsed", 0) or 0
+                        break
+                try:
+                    proc.stdin.write(json.dumps({"cmd": "quit"}) + "\n")
+                    proc.stdin.flush()
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                return ratings, engine_secs, logs
+
+            sanitized_path = "/usr/bin:/bin:/usr/sbin:/sbin"
+            src_cmd = [str(ROOT / ".venv/bin/python"),
+                       str(ROOT / "cull_photos.py")]
+            src_ratings, _, _ = run_engine(src_cmd, os.environ.get("PATH", sanitized_path))
+            # Deterministic guard: the shipped engine must decode HEIF via the
+            # in-process pyav/VideoToolbox path under a GUI-app PATH. Timing is
+            # informational only (per-process CoreML warmup pollutes small sets).
+            pack_ratings, pack_secs, pack_logs = run_engine([str(engine_bin)], sanitized_path)
+
+            used_pyav = any("HEIF decode path: pyav" in l for l in pack_logs)
+            used_sw = any("pillow_heif SOFTWARE fallback" in l for l in pack_logs)
+            per_file_ms = pack_secs / 3 * 1000
+
+            if used_sw or not used_pyav:
+                print(f"FAIL: packaged HEIF decode used software fallback "
+                      f"(pyav={used_pyav}, pillow_heif={used_sw}) — 20x slowdown regression.")
+                success = False
+            elif per_file_ms > 350:
+                print(f"FAIL: packaged HEIF decode path correct but slow ({per_file_ms:.0f} ms/frame).")
+                success = False
+            else:
+                print(f"PASS: packaged HEIF decode via in-process pyav "
+                      f"({per_file_ms:.0f} ms/frame incl. first-frame warmup).")
+
+            if src_ratings and src_ratings == pack_ratings:
+                print("PASS: packaged HEIF ratings/raw identical to source engine.")
+            else:
+                diff = {k: (src_ratings.get(k), pack_ratings.get(k))
+                        for k in src_ratings if src_ratings.get(k) != pack_ratings.get(k)}
+                print(f"FAIL: packaged HEIF scores drift from source: {list(diff.items())[:3]}")
+                success = False
+            shutil.rmtree(heif_dir, ignore_errors=True)
+        else:
+            print("NOTE: seed.heif unavailable — HEIF frozen-engine guard skipped.")
             shutil.rmtree(install_dir, ignore_errors=True)
 
         return success

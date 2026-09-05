@@ -511,6 +511,7 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     if preview is not None:
         img_pyav = _load_image_pyav(path, scale_width=scale_width)
         if img_pyav is not None:
+            log.info("HEIF decode path: pyav (ffprobe-probed stream)")
             return img_pyav
         idx, w, h = preview
         try:
@@ -541,6 +542,7 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         # fast path.
         img_pyav = _load_image_pyav(path, scale_width=scale_width)
         if img_pyav is not None:
+            log.info("HEIF decode path: pyav (self-probed, ffprobe unavailable)")
             return img_pyav
     return None
 
@@ -548,7 +550,9 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
     suffix = path.suffix.lower()
     if suffix in (".hif", ".heif", ".heic"):
         img = load_image_ffmpeg(path, scale_width=scale_width)
-        if img is not None: return img
+        if img is not None:
+            log.info("HEIF decode path: in-process av/VideoToolbox")
+            return img
         # Pillow Fallback
         try:
             import pillow_heif
@@ -558,7 +562,9 @@ def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
             if scale_width > 0:
                 h, w = img_arr.shape[:2]
                 new_h = int(round(h * scale_width / w))
+                log.warning("HEIF decode path: pillow_heif SOFTWARE fallback (%dx%d)", w, h)
                 return cv2.resize(img_arr, (scale_width, new_h), interpolation=cv2.INTER_AREA)
+            log.warning("HEIF decode path: pillow_heif SOFTWARE fallback")
             return img_arr
         except Exception as e:
             log.warning(f"pillow-heif failed for {path.name}: {e}")

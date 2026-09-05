@@ -100,12 +100,23 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
     let dev_mode = venv_python.exists() && script_path.exists();
 
     // Engine resolution (release): the sidecar ships as a PyInstaller ONEDIR
-    // via Tauri resources (instant start; no per-launch extraction). The
-    // exe-adjacent externalBin layout is kept as a secondary candidate.
+    // via Tauri resources (instant start; no per-launch extraction). Candidates
+    // cover BOTH resource_dir and exe-relative layouts: when the raw binary is
+    // launched as a child process, LaunchServices may not register the bundle
+    // and resource_dir() fails — exe-relative paths keep working regardless.
     let mut candidates: Vec<PathBuf> = Vec::new();
     let sidecar_name = if cfg!(windows) { "cull_sidecar.exe" } else { "cull_sidecar" };
     if let Some(dir) = &exe_dir {
         candidates.push(dir.join(sidecar_name));
+        candidates.push(dir.join("sidecar").join(sidecar_name));
+        if let Some(parent) = dir.parent() {
+            // macOS .app: <App>.app/Contents/MacOS -> ../Resources
+            candidates.push(parent.join("Resources/sidecar").join(sidecar_name));
+            candidates.push(parent.join("Resources/resources/sidecar").join(sidecar_name));
+            // NSIS/onefile-adjacent layouts
+            candidates.push(parent.join(sidecar_name));
+            candidates.push(parent.join("resources/sidecar").join(sidecar_name));
+        }
     }
     candidates.push(resource_dir.join("sidecar").join(sidecar_name));
     candidates.push(resource_dir.join("resources/sidecar").join(sidecar_name));
