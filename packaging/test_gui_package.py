@@ -78,11 +78,14 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
         macos_dir = app_bundle / "Contents" / "MacOS"
         res_dir = app_bundle / "Contents" / "Resources"
 
-        main_execs = list(macos_dir.glob("*"))
+        main_execs = [e for e in macos_dir.glob("*") if e.name != "cull-sidecar"]
         if not main_execs:
             print("FAIL: Missing executable in Contents/MacOS/")
             return False
-        print(f"PASS: Found main app executable: {main_execs[0].name}")
+        app_main = main_execs[0]
+        print(f"PASS: Found main app executable: {app_main.name}")
+
+        success = True
 
         # Test sidecar executable if bundled in Resources or MacOS
         sidecar_cand = None
@@ -116,7 +119,50 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
         else:
             print("NOTE: Sidecar is bundled as external binary or dev-resolved.")
 
-        return True
+        # Regression test for the installed-app flow: the .app must spawn the
+        # bundled sidecar itself (eagerly at startup). A broken resolution here
+        # used to surface as "Broken pipe (os error 32)" on folder pick.
+        print("Testing .app self-spawn of bundled sidecar (installed-app simulation)...")
+        install_dir = Path("/tmp/AutoCulling_AppInstall")
+        shutil.rmtree(install_dir, ignore_errors=True)
+        install_dir.mkdir(parents=True)
+        shutil.copytree(app_bundle, install_dir / app_bundle.name, symlinks=True)
+        app_bin = install_dir / app_bundle.name / "Contents" / "MacOS" / app_main.name
+        app_proc = subprocess.Popen(
+            [str(app_bin)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(install_dir),
+        )
+        try:
+            sidecar_alive = False
+            deadline = time.time() + 25.0
+            while time.time() < deadline:
+                probe = subprocess.run(
+                    ["pgrep", "-f", "cull-sidecar"],
+                    capture_output=True, text=True,
+                )
+                if probe.returncode == 0 and probe.stdout.strip():
+                    sidecar_alive = True
+                    break
+                if app_proc.poll() is not None:
+                    break
+                time.sleep(0.5)
+            if sidecar_alive:
+                print("PASS: Installed .app spawned the bundled sidecar at startup.")
+            else:
+                print("FAIL: .app did not spawn the bundled sidecar (folder pick would hit Broken pipe).")
+                success = False
+        finally:
+            app_proc.terminate()
+            try:
+                app_proc.wait(timeout=5.0)
+            except Exception:
+                app_proc.kill()
+            subprocess.run(["pkill", "-f", "cull-sidecar"], capture_output=True)
+            shutil.rmtree(install_dir, ignore_errors=True)
+
+        return success
 
     except Exception as e:
         print(f"FAIL: DMG test encountered error: {e}")

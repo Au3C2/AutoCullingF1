@@ -50,44 +50,100 @@ fn repo_root() -> PathBuf {
     cwd
 }
 
+/// Append a timestamped diagnostics line. Written next to the executable when
+/// writable (dev/bundle dir), else to the user's temp dir — the packaged app
+/// has no console, so this is the only way to debug sidecar resolution.
+fn log_line(msg: &str) {
+    use std::io::Write;
+    let path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("gui.log")))
+        .filter(|p| std::fs::OpenOptions::new()
+            .append(true).create(true).open(p).is_ok())
+        .unwrap_or_else(|| std::env::temp_dir().join("autoculling-gui.log"));
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = writeln!(f, "[{secs}] {msg}");
+    }
+}
+
 fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), String> {
-    if state.child.is_some() {
-        return Ok(());
+    if let Some(ref mut child) = state.child {
+        // Respawn transparently if the previous sidecar died (e.g. crashed).
+        if child.try_wait().map(|s| s.is_some()).unwrap_or(false) {
+            log_line("sidecar dead; respawning");
+            state.child = None;
+            state.stdin = None;
+        } else {
+            return Ok(());
+        }
     }
 
     let root = repo_root();
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     let resource_dir = app
         .path()
         .resource_dir()
         .unwrap_or_else(|_| PathBuf::from("."));
-    
-    let mut cmd: Command;
+
     let venv_python = if cfg!(windows) {
         root.join(".venv/Scripts/python.exe")
     } else {
         root.join(".venv/bin/python")
     };
     let script_path = root.join("cull_photos.py");
+    let dev_mode = venv_python.exists() && script_path.exists();
 
-    if venv_python.exists() && script_path.exists() {
+    // Bundled sidecar: Tauri's externalBin lands NEXT TO the main binary
+    // (Contents/MacOS on macOS), resource_dir is only a secondary guess.
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = &exe_dir {
+        candidates.push(dir.join("cull-sidecar"));
+    }
+    candidates.push(resource_dir.join("cull-sidecar"));
+
+    let mut cmd: Command;
+    if !cfg!(debug_assertions) && !dev_mode {
+        // Packaged build: the bundled sidecar is the only correct engine.
+        let found = candidates.iter().find(|p| {
+            p.exists() && p.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false)
+        });
+        let sidecar_bin = match found {
+            Some(p) => p.clone(),
+            None => {
+                let searched = format!("{:?}", candidates);
+                let msg = format!("bundled sidecar not found (searched {})", searched);
+                log_line(&msg);
+                return Err(msg);
+            }
+        };
+        log_line(&format!("spawn bundled sidecar: {}", sidecar_bin.display()));
+        cmd = Command::new(sidecar_bin);
+        cmd.arg("--json-lines");
+    } else if dev_mode {
+        log_line("dev mode: venv python sidecar");
         cmd = Command::new(&venv_python);
         cmd.current_dir(&root);
         cmd.arg(&script_path).arg("--json-lines");
     } else {
-        // Production bundle fallback
-        let binary_name = if cfg!(windows) {
-            "cull-sidecar.exe"
-        } else {
-            "cull-sidecar"
-        };
-        let sidecar_bin = resource_dir.join(binary_name);
-        if sidecar_bin.exists() {
-            cmd = Command::new(sidecar_bin);
-            cmd.arg("--json-lines");
-        } else {
-            cmd = Command::new("python3");
-            cmd.current_dir(&root);
-            cmd.arg(&script_path).arg("--json-lines");
+        // Dev tree without venv — last resort bundled sidecar.
+        let found = candidates.iter().find(|p| p.exists());
+        match found {
+            Some(p) => {
+                log_line(&format!("spawn bundled sidecar (dev fallback): {}", p.display()));
+                cmd = Command::new(p);
+                cmd.arg("--json-lines");
+            }
+            None => {
+                let msg = "no engine available: venv python and bundled sidecar both missing".to_string();
+                log_line(&msg);
+                return Err(msg);
+            }
         }
     }
 
@@ -101,7 +157,11 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        let msg = format!("Failed to spawn sidecar: {}", e);
+        log_line(&msg);
+        msg
+    })?;
     let stdin = child.stdin.take().ok_or("Failed to open sidecar stdin")?;
     let stdout = child.stdout.take().ok_or("Failed to open sidecar stdout")?;
     if let Some(err_pipe) = child.stderr.take() {
@@ -118,7 +178,7 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
     let waiters = Arc::clone(&state.preview_waiters);
     let app_clone = app.clone();
 
-    // Spawn reader thread for line-delimited JSON events
+    // Reader thread for line-delimited JSON events from the sidecar
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -147,7 +207,24 @@ fn ensure_sidecar(app: &AppHandle, state: &mut SidecarState) -> Result<(), Strin
         }
     });
 
-    state.child = Some(child);
+    // Liveness probe: a sidecar that dies within 1.5s of spawn crashed at
+    // startup (missing deps, bad script path). Surface a clear error instead
+    // of a downstream broken pipe.
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    let mut child_guard = child;
+    if let Some(status) = child_guard
+        .try_wait()
+        .map_err(|e| format!("sidecar wait failed: {}", e))?
+    {
+        let msg = format!(
+            "sidecar exited immediately ({}); check gui.log for details",
+            status
+        );
+        log_line(&msg);
+        return Err(msg);
+    }
+    log_line("sidecar spawned and alive");
+    state.child = Some(child_guard);
     state.stdin = Some(stdin);
     Ok(())
 }
@@ -158,15 +235,24 @@ fn send_sidecar_command(
     payload: serde_json::Value,
 ) -> Result<(), String> {
     ensure_sidecar(app, state)?;
-    if let Some(ref mut stdin) = state.stdin {
+    let write_result = if let Some(ref mut stdin) = state.stdin {
         let mut msg = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
         msg.push('\n');
         stdin.write_all(msg.as_bytes()).map_err(|e| e.to_string())?;
-        stdin.flush().map_err(|e| e.to_string())?;
-        Ok(())
+        stdin.flush().map_err(|e| e.to_string())
     } else {
         Err("Sidecar stdin not available".into())
+    };
+    if let Err(err) = write_result {
+        // Broken pipe etc. means the sidecar died since the last command —
+        // reset so the next attempt respawns it fresh.
+        let msg = format!("sidecar write failed ({}); will respawn on next command", err);
+        log_line(&msg);
+        state.child = None;
+        state.stdin = None;
+        return Err(msg);
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -273,6 +359,22 @@ fn main() {
                     let _ = window.set_icon(icon);
                 }
             }
+            // Warm up the sidecar engine at startup so picking a folder is
+            // instant, and spawn failures surface immediately (via gui.log
+            // and the sidecar-error event) instead of on first use.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = handle.state::<Arc<Mutex<SidecarState>>>();
+                let mut guard = match state.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+                if let Err(err) = ensure_sidecar(&handle, &mut guard) {
+                    let msg = format!("startup sidecar warmup failed: {}", err);
+                    log_line(&msg);
+                    let _ = handle.emit("sidecar-error", serde_json::json!({ "message": err }));
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

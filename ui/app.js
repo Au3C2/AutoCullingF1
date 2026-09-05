@@ -348,6 +348,14 @@
     listenTauri('log', ({ payload }) => {
       appendLog(payload.line || JSON.stringify(payload));
     });
+
+    // 7. Sidecar lifecycle errors (startup warmup failures etc.)
+    listenTauri('sidecar-error', ({ payload }) => {
+      appendLog(`[Sidecar Error] ${payload && payload.message ? payload.message : JSON.stringify(payload)}`);
+      if (!state.isRunning) {
+        els.stageStatus.textContent = '引擎启动失败（详见日志）';
+      }
+    });
   }
 
   function appendLog(line) {
