@@ -121,8 +121,11 @@ def build_tauri_gui() -> None:
     else:
         tauri_cli = ["cargo", "tauri", "build"]
 
-    print(f"Running Tauri build: {' '.join(tauri_cli)} --bundles app")
-    subprocess.run([*tauri_cli, "--bundles", "app"], cwd=str(ROOT), check=True)
+    # Bundle type is platform-specific: Windows Tauri only accepts msi/nsis,
+    # macOS uses the .app bundle (DMG is assembled by build_macos_dmg).
+    bundle_type = "nsis" if sys.platform == "win32" else "app"
+    print(f"Running Tauri build: {' '.join(tauri_cli)} --bundles {bundle_type}")
+    subprocess.run([*tauri_cli, "--bundles", bundle_type], cwd=str(ROOT), check=True)
 
 
 def sha256_file(path: Path) -> str:
@@ -214,15 +217,17 @@ def organize_dist_artifacts() -> list[Path]:
             print(f"Output Setup EXE: {dst_exe} ({dst_exe.stat().st_size / 1024 / 1024:.1f} MB)")
             collected_artifacts.append(dst_exe)
 
-        # 2. Portable ZIP
+        # 2. Portable ZIP — app exe + onedir sidecar resources so the
+        #    green build resolves the sidecar exactly like the NSIS install.
         release_exe = SRC_TAURI / "target/release/AutoCulling.exe"
-        if release_exe.exists():
+        sidecar_stage = SRC_TAURI / "resources/sidecar"
+        if release_exe.exists() and sidecar_stage.exists():
             portable_zip = dist_dir / f"AutoCulling_v{ver}_win_x64_portable.zip"
             with zipfile.ZipFile(portable_zip, "w", zipfile.ZIP_DEFLATED) as z:
                 z.write(release_exe, "AutoCulling.exe")
-                # Include sidecar if exists in release dir
-                for f in (SRC_TAURI / "target/release").glob("cull-sidecar*.exe"):
-                    z.write(f, f.name)
+                for f in sorted(sidecar_stage.rglob("*")):
+                    if f.is_file():
+                        z.write(f, str(f.relative_to(SRC_TAURI)))
             print(f"Output Portable ZIP: {portable_zip} ({portable_zip.stat().st_size / 1024 / 1024:.1f} MB)")
             collected_artifacts.append(portable_zip)
 
