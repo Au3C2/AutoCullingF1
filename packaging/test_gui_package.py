@@ -296,7 +296,12 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
                 print(f"FAIL: packaged HEIF decode used software fallback "
                       f"(pyav={used_pyav}, pillow_heif={used_sw}) — 20x slowdown regression.")
                 success = False
-            elif per_file_ms > 350:
+            elif per_file_ms > 350 and not os.environ.get("GITHUB_ACTIONS"):
+                # Timing ceiling is only enforceable on the dev machine (Apple M4
+                # baseline): GitHub-hosted runners have no ANE and much slower
+                # model inference, so the same correct decode path measures
+                # 800+ ms/frame there. On CI the decode-path assertion above is
+                # the real guard; timing is informational.
                 print(f"FAIL: packaged HEIF decode path correct but slow ({per_file_ms:.0f} ms/frame).")
                 success = False
             else:

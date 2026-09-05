@@ -115,7 +115,9 @@ def build_tauri_gui() -> None:
     if shutil.which("cargo-tauri"):
         tauri_cli = ["cargo", "tauri", "build"]
     elif shutil.which("npx"):
-        tauri_cli = ["npx", "@tauri-apps/cli", "build"]
+        # Use the resolved path: on Windows "npx" is npx.cmd, which
+        # CreateProcess cannot spawn by bare name (WinError 2).
+        tauri_cli = [shutil.which("npx"), "@tauri-apps/cli", "build"]
     else:
         tauri_cli = ["cargo", "tauri", "build"]
 
