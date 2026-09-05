@@ -112,3 +112,6 @@ auto_cull
 src-tauri/target/
 src-tauri/binaries/*.exe
 src-tauri/resources/
+
+# PyInstaller sidecar artifacts (built by packaging/build_gui.py, too large for git)
+src-tauri/binaries/

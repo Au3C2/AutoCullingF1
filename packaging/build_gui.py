@@ -62,6 +62,15 @@ def build_sidecar_binary() -> Path:
     if not spec_path.exists():
         raise FileNotFoundError("cull_sidecar.spec not found in project root")
 
+    # Guard against the 0-byte placeholder trap: tauri build silently packs
+    # whatever sits in src-tauri/binaries/, so a stale empty file produces a
+    # broken DMG whose sidecar fails with Permission denied at runtime.
+    triple = get_rust_target_triple()
+    ext = ".exe" if sys.platform == "win32" else ""
+    target_bin_path = SRC_TAURI / "binaries" / f"cull-sidecar-{triple}{ext}"
+    if target_bin_path.exists() and target_bin_path.stat().st_size < 1_000_000:
+        target_bin_path.unlink()
+
     _pyi = "pyinstaller.exe" if sys.platform == "win32" else "pyinstaller"
     pyinstaller = ROOT / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / _pyi
     if not pyinstaller.exists():
@@ -82,10 +91,7 @@ def build_sidecar_binary() -> Path:
     binaries_dir = SRC_TAURI / "binaries"
     binaries_dir.mkdir(parents=True, exist_ok=True)
 
-    triple = get_rust_target_triple()
-    ext = ".exe" if sys.platform == "win32" else ""
-    target_bin_name = f"cull-sidecar-{triple}{ext}"
-    target_bin_path = binaries_dir / target_bin_name
+    target_bin_path = binaries_dir / f"cull-sidecar-{triple}{ext}"
 
     shutil.copy2(compiled_sidecar, target_bin_path)
     # Ensure executable permissions on POSIX
