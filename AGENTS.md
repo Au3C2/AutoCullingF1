@@ -338,30 +338,32 @@ CLI-engine packaging used by the precision/perf guards and the release gates
   knife-edge file IMG_20260314_160318_240.jpg (3→-1 at workers=4/6) — keep
   the .venv untouched by pip swaps; a mixed cv2 directory also flips it.
 
-## CI (GitHub Actions) — four workflows
+## CI (GitHub Actions) — three workflows (consolidated 2026-09-13)
 
-1. **gui-guards** (`.github/workflows/guards-gui.yml`) — GUI packaging guard.
-   Triggers: push to develop/master/**feature/tauri-gui**, PRs, manual. Two jobs:
-   `gui-macos` (DMG build + mount test: .app structure, engine onedir `lib/`
-   layout, CLI `--help`, stdio handshake, installed-app self-spawn, HEIF
-   frozen-engine guard) and `gui-windows` (NSIS silent install + portable zip
-   extraction + engine spawn). Uploads both platform artifacts. This is the
-   ACTIVE guard on feature/tauri-gui.
-2. **culling-guards** (`.github/workflows/guards.yml`) — engine source+packaged
-   gates; ALL jobs run on macos-14 despite the neutral name. Triggers:
-   develop/master/PR only (feature branches are NOT covered). Jobs:
-   `perf-calibrate` (manual-dispatch only, writes `tests/ci/ci_config.json`),
-   `precision`, `perf-source`, `perf-packaged`, `deterministic-cpu`.
-3. **culling-guards-windows** (`.github/workflows/guards-windows.yml`) —
-   windows-latest, develop/master/PR only. Jobs: `deterministic-cpu`
-   (70-file strict gate), `gpu-alignment` (CUDA vs deterministic truth),
-   `perf-seed`. NOT a symmetric twin of #2 — different job set.
-4. **release** (`.github/workflows/release.yml`) — tag push `v*` / manual
+1. **engine-test** (`.github/workflows/engine-test.yml`) — unified engine
+   gates for both platforms. Triggers: push to develop/master, PRs, manual.
+   Jobs (8 total, parallelized for minimal wall clock):
+   - `perf-calibrate` (macos-14, manual only): measures runner baselines,
+     writes `tests/ci/ci_config.json`.
+   - `precision` (macos-14): packaged vs source score consistency.
+   - `perf-source` (macos-14): seed steady state, source CLI (tolerance 0.65,
+     single retry against one-sided runner noise).
+   - `perf-packaged` (macos-14): same gate on the packaged onedir binary.
+   - `deterministic-cpu-macos` (macos-14): seed replication vs committed truth.
+   - `deterministic-cpu-windows` (windows-latest): CULL_DETERMINISTIC=1 vs truth.
+   - `gpu-alignment` (windows-latest): default CUDA vs truth.
+   - `perf-seed` (windows-latest): Windows 4-seed perf gate (tolerance 0.65).
+2. **gui-test** (`.github/workflows/gui-test.yml`) — desktop GUI packaging
+   and install/launch tests driven by a platform matrix (`macos-14` +
+   `windows-latest`). Triggers: push to develop/master, PRs, manual. Builds
+   packages (`packaging/build_gui.py`), runs the test suite
+   (`packaging/test_gui_package.py`), uploads artifacts. Adding a platform
+   (e.g. Linux) is one more matrix entry.
+3. **release** (`.github/workflows/release.yml`) — tag push `v*` / manual
    dispatch. Per platform: precision gate (`build.py --onedir`) + perf gate +
    GUI build (`build_gui.py`) + warm-start smoke; publishes a draft release
    with setup/portable/dmg + per-artifact `.sha256`. CLI is bundled inside
-   every GUI package (no separate CLI artifacts since v0.3). Release does not
-   gate on guard runs — it re-runs its own precision/perf gates.
+   every GUI package. Release re-runs its own precision/perf gates.
 
 Shared facts:
 - Seeds: `tests/ci/sample/` = ONE file per format (~70 MB total, .gitignore
@@ -370,21 +372,12 @@ Shared facts:
 - Precision (no calibration): `ci_seed_precision.py --compare` scores the
   same replicated dataset with source + packaged binary and asserts per-file
   raw_score equality (±0.002 tolerance — source alone jitters ±0.0004
-  run-to-run from ANE/P4) and rating-multiset equality. Per-copy ratings are
-  NOT uniform (identical EXIF → one burst → Top-N downgrades), which is why
-  the gate is consistency-based.
+  run-to-run from ANE/P4) and rating-multiset equality.
 - Performance: `run_benchmarks.py --seed-dir tests/ci/sample --baseline-file
-  tests/ci/ci_config.json --tolerance 0.85`. GitHub-hosted macOS runners have
-  NO ANE + different silicon → baselines MUST be measured on the runner via
-  the manual `perf-calibrate` workflow and committed to
-  `tests/ci/ci_config.json`; skipped until then. Local seed-protocol reference
-  (Apple M4, source, w4): JPG 84.5 / HEIF 42.6 / ARW 48.7 / NEF 69.9.
-- Known gaps / planned rework: (a) rename to a consistent scheme
-  (`engine-guards-macos.yml` / `engine-guards-windows.yml` / `gui-guards.yml`,
-  filename = workflow name — `guards-gui.yml` currently registers as
-  `gui-guards`); (b) guards should consume the `engine.spec` onedir instead of
-  building a second `cull_photos.spec` onedir; (c) feature branches only get
-  gui-guards — merge to master via PR so the engine gates run.
+  tests/ci/ci_config.json --tolerance 0.65`. Both platforms use tolerance
+  0.65; macOS has a single retry step to absorb one-sided runner load spikes.
+- Planned rework: guards/release should consume `engine.spec` onedir instead
+  of building a second `cull_photos.spec` onedir (eliminate dual-spec).
 
 ## Branch Management & Release Flow (2026-09-13, single-developer GitHub Flow)
 

@@ -284,7 +284,7 @@ jobs:
             See the auto-generated release notes below (GitHub's `generate_release_notes`) and the [full diff](https://github.com/${{ github.repository }}/compare/${{ steps.tag.outputs.prev }}...${{ steps.tag.outputs.tag }}). The detailed commit list since the previous tag is also printed in the workflow log's "Derive tag + what changed vs last release" step.
 
             ### Performance
-            Gate protocol (~500 real files/format steady state; see [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md)). This tag was gated on the seed replication protocol (4 seed files ×120 copies ×2 samples, `tests/ci/ci_config.json`) — precision + source perf on both platforms plus a warm-start perf smoke on the packaged onedir binary. `packaging/guards.py` (full 1.3 GB suite) was green on the M4 dev box before merge.
+            Gate protocol (~500 real files/format steady state; see [results/performance_baseline.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/results/performance_baseline.md)). This tag was gated on the seed replication protocol (4 seed files ×120 copies ×2 samples, `tests/ci/ci_config.json`) — precision + source perf on both platforms plus a warm-start perf smoke on the packaged onedir binary. `packaging/test.py` (full 1.3 GB suite) was green on the M4 dev box before merge.
 
             ### Verification
             - `pytest -m deterministic` and `tests/ci/seed_precision.py --compare` green on macOS-14 + windows-latest.

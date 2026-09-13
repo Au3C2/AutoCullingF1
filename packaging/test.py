@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""packaging/guards.py — unified local regression guards (macOS-first).
+"""packaging/test.py — unified local regression checks (macOS-first).
 
-Runs the five guards in order and exits non-zero on the first failure:
+Runs the five checks in order and exits non-zero on the first failure:
 
   1. source precision  — pytest tests/test_cull.py + test_precision_heif +
                          test_precision_raw (9 gates, workers 1/4/6)
@@ -16,9 +16,9 @@ Steps 2 and 5 use the ~500-file protocol and run in ~3 min each on Apple M4
 artifact for steps 4-5 (CI-style reruns).
 
 Usage:
-    python packaging/guards.py             # all five guards
-    python packaging/guards.py --workers 6 # run perf gates at workers=6
-    python packaging/guards.py --skip-build
+    python packaging/test.py             # all five checks
+    python packaging/test.py --workers 6 # run perf gates at workers=6
+    python packaging/test.py --skip-build
 """
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def main() -> int:
         rcs.append(run([str(PY), "-m", "pytest", "-q", *PACKAGED_PRECISION_TESTS],
                        "4. packaged precision gates", env_pkg))
     if do_perf:
-        # Local guards use the full multi-source 500-file protocol against the
+        # Local runs use the full multi-source 500-file protocol against the
         # locked baselines. The CI workflow (separate) uses the seed protocol
         # with runner-calibrated baselines + wider tolerance.
         rcs.append(run([str(PY), "benchmarks/run_benchmarks.py",

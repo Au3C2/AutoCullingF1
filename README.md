@@ -168,7 +168,7 @@ Regression gates:
 ```bash
 pytest tests/ -m deterministic                        # cross-platform truth (strict)
 pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
-python packaging/guards.py    # precision → perf → build → packaged gates, ~15 min
+python packaging/test.py      # precision → perf → build → packaged gates, ~15 min
 ```
 
 CI (`.github/workflows/`) runs the same gates on GitHub-hosted macOS/Windows runners

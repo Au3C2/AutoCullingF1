@@ -155,7 +155,7 @@ external/       内置 exiftool（Windows 另含 ffmpeg）
 ```bash
 pytest tests/ -m deterministic                        # 跨平台真值（严格）
 pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
-python packaging/guards.py    # 精度 → 性能 → 构建 → 打包门，约 15 分钟
+python packaging/test.py      # 精度 → 性能 → 构建 → 打包门，约 15 分钟
 ```
 
 CI（`.github/workflows/`）在 GitHub 托管的 macOS/Windows runner 上用已提交的种子样本

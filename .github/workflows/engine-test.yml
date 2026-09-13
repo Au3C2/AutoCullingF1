@@ -1,11 +1,26 @@
-name: culling-guards
+name: engine-test
 
-# macOS guards (original three + CPU deterministic).
-# Platform: macos-14 (Apple Silicon).  Two artifact tiers:
-#   - deterministic.json: cross-platform truth (CULL_DETERMINISTIC=1,
-#     CPU-only ORT, software decode) — committed once, runs everywhere.
-#   - seed tests/ci/sample/: one file per format, local mutation only.
-# Perf baselines are runner-calibrated via perf-calibrate (manual).
+# Engine tests — seed-protocol precision / determinism / performance gates
+# across both platforms, in ONE workflow:
+#
+#   macOS (macos-14, Apple Silicon):
+#     perf-calibrate      — manual dispatch only: measures runner baselines,
+#                           uploads tests/ci/ci_config.json to commit back
+#     precision           — packaged vs source score consistency
+#     perf-source         — seed steady state, source CLI (tolerance 0.65,
+#                           single retry against one-sided runner noise)
+#     perf-packaged       — same gate against the packaged onedir binary
+#     deterministic-cpu   — seed replication vs committed deterministic truth
+#
+#   Windows (windows-latest):
+#     deterministic-cpu   — CULL_DETERMINISTIC=1 vs tests/baselines (strict)
+#     gpu-alignment       — default CUDA path vs the same truth
+#     perf-seed           — Windows perf gate via the same 4-seed protocol
+#
+# Deterministic mode is CPU-only + software decode, so the seed protocol is
+# enough to lock cross-platform equality without the full 1.3 GB datasets.
+# Perf baselines are runner-calibrated (perf-calibrate) and stored per
+# platform in tests/ci/ci_config.json; uncalibrated runner types skip.
 
 on:
   push:
@@ -14,16 +29,16 @@ on:
   workflow_dispatch:
     inputs:
       count:
-        description: "files per dataset (debug the VM hang with 120)"
+        description: "files per dataset (macOS calibrate; debug the VM hang)"
         type: number
         default: 500
       samples:
-        description: "interleaved samples per format"
+        description: "interleaved samples per format (macOS calibrate)"
         type: number
         default: 3
 
 concurrency:
-  group: guards-macos-${{ github.ref }}
+  group: engine-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -92,13 +107,14 @@ jobs:
           echo "enable the guarded steps on this runner type."
 
   # ------------------------------------------------------------------
-  # Automatic guards on every push/PR — four parallel jobs so wall
-  # clock ~ 1 perf gate (~7 min at count=120, samples=2 on this VM)
-  # + build + precision + deterministic, not their sum.  workers=2 is
-  # mandated on the macOS VM runner (workers=4 stalls there).
+  # Automatic tests on every push/PR — parallel jobs so wall clock is
+  # ~ one perf gate (~7 min at count=120, samples=2) + build + precision
+  # + deterministic, not their sum.  workers=2 is mandated on the macOS
+  # VM runner (workers=4 stalls there).
   # ------------------------------------------------------------------
 
   precision:
+    name: precision (macos)
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
     steps:
@@ -121,6 +137,7 @@ jobs:
         run: .venv/bin/python tests/ci/seed_precision.py --compare
 
   perf-source:
+    name: perf-source (macos)
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
     steps:
@@ -166,6 +183,7 @@ jobs:
           fi
 
   perf-packaged:
+    name: perf-packaged (macos)
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
     steps:
@@ -215,12 +233,11 @@ jobs:
             run_gate
           fi
 
-  # NEW: CPU deterministic truth (macOS copy).  Same repo, same gate count
-  # and timeout as the Windows copies so the suite stays platform-symmetric.
-  # Deterministic mode is CPU-only + software decode, so this runner exercises
-  # the truth without requiring the full 70-file datasets (seed protocol is
-  # enough to lock cross-platform equality).
-  deterministic-cpu:
+  # CPU deterministic truth on both platforms.  Deterministic mode is
+  # CPU-only + software decode, so the seed protocol locks cross-platform
+  # equality without requiring the full camera datasets.
+  deterministic-cpu-macos:
+    name: deterministic-cpu (macos)
     runs-on: macos-14
     if: github.event_name != 'workflow_dispatch'
     timeout-minutes: 10
@@ -249,3 +266,97 @@ jobs:
           name: macos-deterministic-cpu
           path: build/perf_*.json
           if-no-files-found: ignore
+
+  deterministic-cpu-windows:
+    name: deterministic-cpu (windows)
+    runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: Deterministic truth — 70-file gate (strict)
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-deterministic-cpu
+          path: build/perf_*.json
+          if-no-files-found: ignore
+
+  gpu-alignment:
+    name: gpu-alignment (windows)
+    runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: GPU alignment — default CUDA vs deterministic truth
+        run: .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "alignment"
+      - name: Upload perf artifact (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gpu-alignment
+          path: build/perf_*.json
+          if-no-files-found: ignore
+
+  perf-seed:
+    name: perf-seed (windows)
+    runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install runtime deps into .venv + exiftool
+        run: |
+          choco install exiftool -y --no-progress
+          uv venv .venv --python 3.10
+          uv pip install --python .venv `
+            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" "pytest"
+      - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
+        run: |
+          .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
+            --seed-dir tests/ci/sample --count ${{ inputs.count || 120 }} `
+            --samples ${{ inputs.samples || 2 }} --tolerance 0.65 `
+            --baseline-file tests/ci/ci_config.json `
+            --json build/ci_windows_perf.json
+      - name: Upload perf result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-perf-seed
+          path: |
+            build/ci_windows_perf.json
+            build/perf_*.json
+          if-no-files-found: warn
