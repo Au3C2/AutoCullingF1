@@ -39,15 +39,15 @@ else:
     ONEDIR = ROOT / "dist" / "engine" / "auto_culling_cli"
 
 PRECISION_TESTS = [
-    "tests/test_cull.py",
-    "tests/test_precision_heif.py",
-    "tests/test_precision_raw.py",
+    "tests/test_engine/test_cull.py",
+    "tests/test_engine/test_precision_heif.py",
+    "tests/test_engine/test_precision_raw.py",
 ]
 # Packaged binary precision also covers the JPG golden baseline.
 PACKAGED_PRECISION_TESTS = [
-    "tests/test_package.py",
-    "tests/test_precision_heif.py",
-    "tests/test_precision_raw.py",
+    "tests/test_package/test_package.py",
+    "tests/test_engine/test_precision_heif.py",
+    "tests/test_engine/test_precision_raw.py",
 ]
 
 

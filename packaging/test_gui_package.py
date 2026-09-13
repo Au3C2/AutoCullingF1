@@ -641,7 +641,13 @@ def test_windows_package(dist_dir: Path | None = None) -> bool:
 
             print(f"Testing {fmt} format ({len(photos)} photos) in {target_dir.name}...")
             src_ratings, src_elapsed, _ = run_engine_cull(src_cmd, target_dir)
-            pack_ratings, pack_elapsed, _ = run_engine_cull(pack_cmd, target_dir)
+            pack_ratings, pack_elapsed, pack_logs = run_engine_cull(pack_cmd, target_dir)
+
+            # Execution Provider & Fallback Guard (anti-silent performance degradation)
+            has_sw_fallback = any("pillow_heif SOFTWARE fallback" in l for l in pack_logs)
+            if has_sw_fallback:
+                print(f"FAIL: Packaged {fmt} engine silently degraded to software decode (20x slowdown regression)!")
+                success = False
 
             # Assert Precision
             if src_ratings and src_ratings == pack_ratings:
@@ -655,10 +661,14 @@ def test_windows_package(dist_dir: Path | None = None) -> bool:
                 print(f"FAIL: Packaged {fmt} score drift detected on {len(diff)} files: {diff}")
                 success = False
 
-            # Assert Performance (no 160MB extraction penalty; throughput check)
+            # Assert Stepwise Performance Floor (guards against catastrophic 5x~20x regression without noisy fine-grained baseline flakiness)
             if pack_elapsed > 0:
-                ips = len(photos) / pack_elapsed if pack_elapsed > 0 else float("inf")
+                ips = len(photos) / pack_elapsed
                 print(f"PASS: Packaged {fmt} throughput: {ips:.1f} img/s (elapsed {pack_elapsed:.2f}s).")
+                min_stepwise_floor = 1.0  # catastrophic floor threshold
+                if ips < min_stepwise_floor and not os.environ.get("GITHUB_ACTIONS"):
+                    print(f"FAIL: Packaged {fmt} throughput ({ips:.1f} img/s) fell below catastrophic floor ({min_stepwise_floor} img/s)!")
+                    success = False
 
     # 5. Cleanup sandbox install
     if setups:
