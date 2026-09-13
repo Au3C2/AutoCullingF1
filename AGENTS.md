@@ -385,3 +385,55 @@ Shared facts:
   `gui-guards`); (b) guards should consume the `engine.spec` onedir instead of
   building a second `cull_photos.spec` onedir; (c) feature branches only get
   gui-guards — merge to master via PR so the engine gates run.
+
+## Branch Management & Release Flow (2026-09-13, single-developer GitHub Flow)
+
+All branches except `master` were deleted on 2026-09-13 (develop /
+feature/deterministic / feature/tauri-gui / gui / rule-based-culling /
+master-legacy). Every branch's unique content was verified superseded —
+tip SHAs recorded in the session log if recovery is ever needed.
+**Do not recreate long-lived branches** (develop etc.) — they rot.
+
+### Rules
+
+- `master` is the ONLY long-lived branch and must stay releasable at all
+  times (CI guards run on every push).
+- Trivial changes (docs, single-file fixes): commit directly to master
+  and push.
+- Large/risky work: short-lived `feature/<topic>` branch cut FROM master,
+  merged back via PR, deleted immediately after merge. Branch lifetime
+  target: under two weeks. Any branch older than that gets merged or
+  `git cherry`-verified and deleted.
+- NEVER run a parallel lineage (two branches evolving the same feature) —
+  this produced 13 orphaned commits in the `gui` branch and a 106-duplicate
+  `develop`.
+
+### Release ritual (per version)
+
+1. Confirm CI green on master (push-triggered guards).
+2. Bump version in BOTH `pyproject.toml` and `src-tauri/tauri.conf.json`
+   (three places track version: pyproject, tauri.conf, tag — keep them in
+   lockstep; ideally scripted, see below).
+3. Commit `chore(release): bump version to X.Y` and push.
+4. `git tag vX.Y` ON that commit (tag = version binding; a tag on an older
+   commit than the version bump is how the 0.4/0.3 mixup happened), push
+   the tag — the release workflow (gate → package → draft) runs itself.
+5. Review the draft: assets (win setup + portable, mac dmg, each + sha256)
+   and the body (CLI paths must match the current FLAT layout), then
+   Publish.
+
+### Hotfix
+
+Released version broken: fix directly on master, bump patch (X.Y → X.Y.Z),
+tag, re-run. No hotfix branches — there is no old-version maintenance line.
+
+### Known gotchas
+
+- Changing files under `ui/` does NOT re-embed assets on incremental
+  `cargo build --release` — run a FULL `cargo clean` (in src-tauri) before
+  locally verifying UI changes, or the app serves stale JS. CI/release
+  builds are unaffected (fresh checkouts).
+- Draft releases persist in the WebView2-shared identifier
+  (`com.autoculling.desktop`): the installed app and dev builds SHARE the
+  profile — clear `%LOCALAPPDATA%\com.autoculling.desktop\EBWebView` when
+  a dev build serves a stale UI.
