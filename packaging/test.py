@@ -31,20 +31,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-def _ver() -> str:
-    ver = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
-    if ver:
-        return ver
-    toml = ROOT / "pyproject.toml"
-    if toml.exists():
-        import re as _re
-        for line in toml.read_text().splitlines():
-            if line.strip().startswith("version"):
-                m = _re.search(r'"([^"]+)"', line)
-                if m:
-                    return m.group(1).strip()
-    return "0.1"
-
 if sys.platform == "win32":
     PY = ROOT / ".venv" / "Scripts" / "python.exe"
     ONEDIR = ROOT / "dist" / "engine" / "auto_culling_cli.exe"

@@ -14,7 +14,7 @@ drift, and it needs no runner-specific calibration.
 
 Usage:
     python tests/ci/seed_precision.py                    # source only
-    CULL_EXE=dist/.../auto_cull_v0.1_macos_arm64 \
+    CULL_EXE=dist/engine/auto_culling_cli \
         python tests/ci/seed_precision.py                # packaged only
     python tests/ci/seed_precision.py --compare          # both, assert equal
     python tests/ci/seed_precision.py --calibrate        # print per-format

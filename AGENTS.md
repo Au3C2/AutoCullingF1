@@ -312,8 +312,6 @@ have been removed.
 - Packaged-binary precision: the CLI inside `dist/engine/` shares the same
   code, dependencies and frozen models as the GUI engine, ensuring 100%
   consistency across CLI and desktop interfaces.
-  scipy.special → scipy.linalg); reverting to cv2.dft would cost ~8.7x the
-  per-frame FFT time (0.34 → 2.95 ms on M4) for ~12 MiB — rejected.
 - cv2 MUST stay opencv-python 5.0.0.93 (full): the headless build flips the
   knife-edge file IMG_20260314_160318_240.jpg (3→-1 at workers=4/6) — keep
   the .venv untouched by pip swaps; a mixed cv2 directory also flips it.

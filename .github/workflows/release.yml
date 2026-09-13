@@ -71,7 +71,7 @@ jobs:
         run: |
           .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count 120 --samples 2 \
-            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --tolerance 0.65 --baseline-file tests/ci/ci_config.json \
             --no-prewarm --json build/ci_source.json
       - name: Build Desktop GUI (DMG)
         run: |

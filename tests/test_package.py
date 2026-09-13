@@ -8,25 +8,6 @@ import pytest
 from pathlib import Path
 import csv
 
-def _ver() -> str:
-    v = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
-    if v:
-        return v
-    toml = Path(__file__).resolve().parents[1] / "pyproject.toml"
-    if toml.exists():
-        import re as _re
-        for line in toml.read_text().splitlines():
-            if line.strip().startswith("version"):
-                m = _re.search(r'"([^"]+)"', line)
-                if m:
-                    return m.group(1).strip()
-    return "0.1"
-
-EXE_NAME_MAP = {
-    "Darwin": f"auto_cull_v{_ver()}_macos_arm64",
-    "Windows": f"auto_cull_v{_ver()}_win_x64.exe"
-}
-
 def get_executable() -> Path:
     """Find the compiled CLI executable.
 
@@ -43,25 +24,12 @@ def get_executable() -> Path:
     system = platform.system()
     ext = ".exe" if system == "Windows" else ""
 
-    # Primary: unified engine.spec CLI output
     engine_cli = root / "dist" / "engine" / f"auto_culling_cli{ext}"
     if engine_cli.is_file() and os.access(engine_cli, os.X_OK):
         return engine_cli
 
-    expected_name = EXE_NAME_MAP.get(system)
-    if expected_name:
-        exe_path = root / expected_name
-        if exe_path.exists():
-            return exe_path
-
-    for p in root.glob("auto_cull*"):
-        if p.is_file() and os.access(p, os.X_OK):
-            if system == "Windows" and p.suffix.lower() != ".exe":
-                continue
-            return p
-
-    pytest.skip(f"Executable not found for system: {system}")
-    raise FileNotFoundError(f"Binary not found: {system}")
+    pytest.skip(f"Executable not found at {engine_cli}")
+    raise FileNotFoundError(f"Binary not found: {engine_cli}")
 
 @pytest.mark.packaged
 @pytest.mark.precision

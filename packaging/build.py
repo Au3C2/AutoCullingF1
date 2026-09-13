@@ -52,9 +52,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--clean",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="clean PyInstaller cache before building",
+        help="clean PyInstaller cache before building (use --no-clean to preserve)",
     )
     args = parser.parse_args()
 
