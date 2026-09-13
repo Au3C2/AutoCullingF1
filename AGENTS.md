@@ -171,8 +171,8 @@ unlocked back to workers=4 (score rake defaults changed). Throughput after #3
 (workers=4, dry-run): JPG 6.7 / HEIF 11.5 / ARW 4.7 / NEF 4.6 img/s (HEIF
 +80%). `--workers` now means decode-pool size, not thread groups.
 
-Gates (2026-08-22): precision = `tests/test_cull.py` +
-`tests/test_precision_heif.py` (24 HEIF) + `tests/test_precision_raw.py`
+Gates (2026-08-22): precision = `tests/test_engine/test_cull.py` +
+`tests/test_engine/test_precision_heif.py` (24 HEIF) + `tests/test_engine/test_precision_raw.py`
 (20 ARW + 20 NEF), at `--workers 4`; performance =
 `benchmarks/run_benchmarks.py` (thresholds: JPG 4.2 / HEIF 3.0 / ARW 2.3 /
 NEF 1.9 img/s; measured after #3: 6.84/3.73/2.98/3.15).
@@ -241,7 +241,7 @@ gates pass); performance must be proven on the non-darwin runner.
 2026-08-27 Dedicated macOS Performance & Precision Guards Locked (KEPT 68f9934):
 - benchmarks/run_benchmarks.py dedicated macOS thresholds locked: JPG 14.0, HEIF 6.0,
   ARW 5.0, NEF 5.5 img/s (replaces obsolete Windows 4070Ti baselines 4.2/3.0/2.3/1.9).
-- tests/test_cull.py parameterized across workers=(1, 4, 6) for concurrency determinism.
+- tests/test_engine/test_cull.py parameterized across workers=(1, 4, 6) for concurrency determinism.
 - All 9/9 precision gates and 4/4 performance gates strictly green.
 
 2026-08-27 perf gate REWORK: split into setup tax + per-format steady-state —
@@ -257,7 +257,7 @@ gates pass); performance must be proven on the non-darwin runner.
 - Heat/thermal drift is real on this fanless M4 (continuous full-load runs
   drop steady by 10-30%: measured JPG 82->61, NEF 68->58). ALWAYS interleave
   and cooldown; never trust a serial long batch for baselines.
-- Unified guard entrypoint: `python packaging/guards.py` runs 5 guards —
+- Unified regression entrypoint: `python packaging/test.py` runs 5 checks —
   source precision (9 gates) -> source perf -> packaging build (onedir) ->
   packaged precision (4 gates) -> packaged perf. Full suite ~12-15 min.
   Requires the ~1.3 GB camera datasets (test_import/test_arw/test_nef) present.
@@ -307,7 +307,7 @@ have been removed.
 - `packaging/build_gui.py` consumes this same `dist/engine/` layout to stage
   and build the final desktop installers (NSIS setup, portable zip, macOS DMG).
 - Test harness: `CULL_EXE=dist/engine/auto_culling_cli(.exe)` makes
-  `tests/test_package.py`, `tests/score_gate.py` (HEIF/ARW/NEF gates) and
+  `tests/test_package/test_package.py`, `tests/score_gate.py` (HEIF/ARW/NEF gates) and
   `benchmarks/run_benchmarks.py` run the compiled CLI instead of the source.
 - Packaged-binary precision: the CLI inside `dist/engine/` shares the same
   code, dependencies and frozen models as the GUI engine, ensuring 100%

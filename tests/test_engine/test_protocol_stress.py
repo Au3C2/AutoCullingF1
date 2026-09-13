@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 import pytest
 
-from test_json_protocol import EngineChannel
+sys.path.append(str(Path(__file__).parent))
+from test_protocol import EngineChannel
 
 
 @pytest.fixture

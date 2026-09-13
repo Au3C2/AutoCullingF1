@@ -20,7 +20,7 @@ def get_executable() -> Path:
         if exe_path.is_file() and os.access(exe_path, os.X_OK):
             return exe_path
         pytest.skip(f"CULL_EXE set but not executable: {override}")
-    root = Path(__file__).parent.parent
+    root = Path(__file__).resolve().parents[2]
     system = platform.system()
     ext = ".exe" if system == "Windows" else ""
 
@@ -38,7 +38,7 @@ def test_packaged_executable_precision(deterministic_env):
     from conftest import baseline_jpg_ratings  # noqa: E402
     baseline = baseline_jpg_ratings()
     exe_path = get_executable()
-    test_img_src = Path(__file__).parent / "test_img"
+    test_img_src = Path(__file__).resolve().parents[1] / "test_img"
     
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)

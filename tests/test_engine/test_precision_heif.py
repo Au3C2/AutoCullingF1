@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 import pytest
 
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from score_gate import run_cull_on_copies, assert_scores_match  # noqa: E402
 from conftest import DET_RAW_TOL, PLATFORM, baseline_section, SOURCE_DIRS  # noqa: E402

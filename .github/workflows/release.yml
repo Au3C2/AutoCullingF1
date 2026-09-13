@@ -64,7 +64,7 @@ jobs:
         timeout-minutes: 10
         run: |
           .venv/bin/python packaging/build.py --onedir
-          .venv/bin/python -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+          .venv/bin/python -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "deterministic"
           .venv/bin/python tests/ci/seed_precision.py --compare
       - name: Perf gate (seed steady state, source)
         timeout-minutes: 25
@@ -143,7 +143,7 @@ jobs:
         timeout-minutes: 10
         run: |
           .venv/Scripts/python.exe packaging/build.py --onedir
-          .venv/Scripts/python.exe -m pytest tests/test_deterministic_baseline.py -v -m "deterministic"
+          .venv/Scripts/python.exe -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "deterministic"
           .venv/Scripts/python.exe tests/ci/seed_precision.py --compare
       - name: Perf gate (seed steady state, source)
         timeout-minutes: 25

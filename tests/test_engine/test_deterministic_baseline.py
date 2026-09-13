@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from score_gate import assert_scores_match, run_cull_on_copies  # noqa: E402
 from conftest import (  # noqa: E402

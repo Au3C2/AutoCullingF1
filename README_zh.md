@@ -154,7 +154,7 @@ external/       内置 exiftool（Windows 另含 ffmpeg）
 
 ```bash
 pytest tests/ -m deterministic                        # 跨平台真值（严格）
-pytest tests/test_cull.py tests/test_precision_heif.py tests/test_precision_raw.py
+pytest tests/test_engine/test_cull.py tests/test_engine/test_precision_heif.py tests/test_engine/test_precision_raw.py
 python packaging/test.py      # 精度 → 性能 → 构建 → 打包门，约 15 分钟
 ```
 
