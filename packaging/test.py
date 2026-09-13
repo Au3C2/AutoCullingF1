@@ -45,13 +45,12 @@ def _ver() -> str:
                     return m.group(1).strip()
     return "0.1"
 
-_VER = _ver()
 if sys.platform == "win32":
     PY = ROOT / ".venv" / "Scripts" / "python.exe"
-    ONEDIR = ROOT / "dist" / f"auto_cull_v{_VER}_win_x64" / f"auto_cull_v{_VER}_win_x64.exe"
+    ONEDIR = ROOT / "dist" / "engine" / "auto_culling_cli.exe"
 else:
     PY = ROOT / ".venv" / "bin" / "python"
-    ONEDIR = ROOT / "dist" / f"auto_cull_v{_VER}_macos_arm64" / f"auto_cull_v{_VER}_macos_arm64"
+    ONEDIR = ROOT / "dist" / "engine" / "auto_culling_cli"
 
 PRECISION_TESTS = [
     "tests/test_cull.py",

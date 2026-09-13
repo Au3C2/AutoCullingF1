@@ -28,10 +28,10 @@ EXE_NAME_MAP = {
 }
 
 def get_executable() -> Path:
-    """Find the executable in the project root.
+    """Find the compiled CLI executable.
 
-    CULL_EXE env var overrides the search (used by packaging/build.py to
-    validate a freshly built binary without replacing the root artifact).
+    CULL_EXE env var overrides the search (used by CI and packaging/test.py).
+    Otherwise checks the default onedir location dist/engine/auto_culling_cli.
     """
     override = os.environ.get("CULL_EXE")
     if override:
@@ -41,19 +41,25 @@ def get_executable() -> Path:
         pytest.skip(f"CULL_EXE set but not executable: {override}")
     root = Path(__file__).parent.parent
     system = platform.system()
-    
+    ext = ".exe" if system == "Windows" else ""
+
+    # Primary: unified engine.spec CLI output
+    engine_cli = root / "dist" / "engine" / f"auto_culling_cli{ext}"
+    if engine_cli.is_file() and os.access(engine_cli, os.X_OK):
+        return engine_cli
+
     expected_name = EXE_NAME_MAP.get(system)
     if expected_name:
         exe_path = root / expected_name
         if exe_path.exists():
             return exe_path
-            
+
     for p in root.glob("auto_cull*"):
         if p.is_file() and os.access(p, os.X_OK):
             if system == "Windows" and p.suffix.lower() != ".exe":
                 continue
             return p
-            
+
     pytest.skip(f"Executable not found for system: {system}")
     raise FileNotFoundError(f"Binary not found: {system}")
 
@@ -82,6 +88,7 @@ def test_packaged_executable_precision(deterministic_env):
             "--input-dir", str(tmp_path),
             "--dump-scores", str(csv_path),
             "-f",
+            "--p4-policy", "always",
             "--workers", "1"
         ]
         

@@ -176,7 +176,7 @@ from committed seed samples. Build targets:
 
 ```bash
 uv pip install pyinstaller
-python packaging/build.py            # standalone CLI onedir (used by the precision guards)
+python packaging/build.py            # builds dist/engine/ (shared onedir CLI + engine)
 python packaging/build_gui.py        # desktop GUI packages: setup / portable / DMG
 ```
 

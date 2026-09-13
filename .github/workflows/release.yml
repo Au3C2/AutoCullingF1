@@ -85,12 +85,11 @@ jobs:
       - name: Smoke — warm-start perf (packaged binary)
         timeout-minutes: 25
         run: |
-          VER="${{ steps.ver.outputs.ver }}"
-          ONEDIR_EXE="dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
+          ONEDIR_EXE="dist/engine/auto_culling_cli"
           test -x "$ONEDIR_EXE" || { echo "missing executable $ONEDIR_EXE"; exit 1; }
           CULL_EXE="$ONEDIR_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count 120 --samples 2 \
-            --tolerance 0.75 --baseline-file tests/ci/ci_config.json \
+            --tolerance 0.65 --baseline-file tests/ci/ci_config.json \
             --json build/ci_onedir.json
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -167,8 +166,7 @@ jobs:
       - name: Smoke — warm-start perf (packaged binary)
         timeout-minutes: 25
         run: |
-          $ver = "${{ steps.ver.outputs.ver }}"
-          $exe = "dist/auto_cull_v${ver}_win_x64/auto_cull_v${ver}_win_x64.exe"
+          $exe = "dist/engine/auto_culling_cli.exe"
           if (-not (Test-Path $exe)) { Write-Error "missing $exe"; exit 1 }
           $env:CULL_EXE = (Resolve-Path $exe).Path
           .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `

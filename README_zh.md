@@ -163,7 +163,7 @@ CI（`.github/workflows/`）在 GitHub 托管的 macOS/Windows runner 上用已�
 
 ```bash
 uv pip install pyinstaller
-python packaging/build.py            # 独立 CLI onedir（精度守卫使用）
+python packaging/build.py            # 构建 dist/engine/（CLI 与引擎共享 onedir）
 python packaging/build_gui.py        # 桌面 GUI 安装包：setup / portable / DMG
 ```
 
