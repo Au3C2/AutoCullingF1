@@ -74,9 +74,7 @@ jobs:
       - name: Calibrate packaged seed performance
         timeout-minutes: 40
         run: |
-          VER=$(grep -E '^\s*version\s*=' pyproject.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')
-          VER="${VER:-0.2}"
-          CULL_EXE="dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
+          CULL_EXE="dist/engine/auto_culling_cli"
           echo "Using CULL_EXE: $CULL_EXE"
           CULL_EXE="$CULL_EXE" .venv/bin/python benchmarks/run_benchmarks.py --workers 2 \
             --seed-dir tests/ci/sample --count ${{ inputs.count }} \
@@ -215,9 +213,7 @@ jobs:
       - name: Performance — seed steady state (packaged binary)
         timeout-minutes: 25
         run: |
-          VER=$(grep -E '^\s*version\s*=' pyproject.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')
-          VER="${VER:-0.2}"
-          CULL_EXE="dist/auto_cull_v${VER}_macos_arm64/auto_cull_v${VER}_macos_arm64"
+          CULL_EXE="dist/engine/auto_culling_cli"
           echo "Using CULL_EXE: $CULL_EXE"
           test -x "$CULL_EXE" || { echo "Binary not found or not executable: $CULL_EXE"; ls -la dist/; exit 1; }
           run_gate() {

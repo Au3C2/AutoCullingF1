@@ -293,47 +293,25 @@ gates pass); performance must be proven on the non-darwin runner.
   NSIS silent install + portable extraction + engine spawn); local Windows
   NSIS silent install layout + bundled-engine spawn outside repo tree.
 
-## Packaging (single-file PyInstaller, macOS-first)
+## Packaging (Unified engine.spec, onedir-only)
 
-CLI-engine packaging used by the precision/perf guards and the release gates
-(`packaging/build.py`, spec `cull_photos.spec`; planned to converge on
-`engine.spec`):
+Since v0.3 / feature/ci-unified-engine-spec, all packaging converges on
+`engine.spec`. The legacy `cull_photos.spec` and standalone onefile forms
+have been removed.
 
-- Pipeline: `python packaging/build.py` (onefile, copies to root) / additional
-  `--onedir` (directory form). One cross-platform spec `cull_photos.spec`
-  branches on the platform: darwin ships the FROZEN onnxsim graphs
-  (f1_yolov8n_static 640 / yolov8n_static 640 / p4_car_model_static_ane 224)
-  UNDER THE BASE NAMES → the packaged runtime needs no `*_static` sibling;
-  Windows keeps dynamic exports + self-contained exiftool.exe. Exiftool on
-  macOS runs the bundled perl script via system perl (`/usr/bin/perl` ships
-  with macOS); bundled `external/exiftool/lib` in the archive.
-- Source changes required for standalone resolution (both zero-drift in the
-  source pipeline; 9/9 source gates stay green):
-  1. `cull/detector.py` `_has_concrete_input_shape()` — LiteYOLO darwin
-     branch falls back to a shape probe (fully-concrete input dims) when no
-     `*_static` sibling exists, so the packaged frozen models get the same
-     pinned CoreML options (RequireStaticInputShapes=1, CPUAndNeuralEngine).
-  2. `cull/p4_classifier.py` — model path falls back to `_MEIPASS` via
-     `get_resource_path`; same shape probe substitutes the `_static_ane`
-     detection for packed (single-file) bundles.
-- Test harness: `CULL_EXE=<binary>` makes `tests/test_package.py`,
-  `tests/score_gate.py` (HEIF/ARW/NEF gates) and `benchmarks/run_benchmarks.py`
-  run the packaged executable instead of the source CLI. `run_benchmarks.py`
-  prewarms the binary's dylib closure (`--no-prewarm` to disable).
-- macOS cold-start signature tax: the kernel verifies the adhoc code
-  signature of EVERY bundled Mach-O on first load (inode-keyed cache).
-  The onefile form extracts to a fresh temp dir per run → ~15-25 s tax
-  per launch (JPG gate 60 imgs → ~2.5 img/s measured). The onedir form has
-  stable inodes → tax paid once per boot, then source-identical throughput.
-  Perf gate verification runs against the onedir artifact with prewarm:
-  JPG 17.6 / HEIF 7.7 / ARW 6.7 / NEF 6.9 img/s (4/4 green, 2026-08-27).
-- Packaged-binary precision gates: 4/4 green on BOTH forms (JPG 6 + HEIF 24
-  + ARW 20 + NEF 20, ratings and raw_score ±0.005 identical to baseline).
-  Binary size: onefile 160.9 MiB (zlib CArchive): cv2 48 + models 33 +
-  av 18 + onnxruntime 16 + exiftool 14 + scipy 12 + rest ≈ 11 MiB.
-  scipy.fft is NOT excludable (its __init__ hard-imports _fftlog →
-  scipy.special → scipy.linalg); reverting to cv2.dft would cost ~8.7x the
-  per-frame FFT time (0.34 → 2.95 ms on M4) for ~12 MiB — rejected.
+- Pipeline: `python packaging/build.py` compiles `engine.spec` into
+  `dist/engine/` containing:
+  - `auto_culling_cli` (.exe on Windows)   — console CLI (same engine)
+  - `auto_culling_engine` (.exe on Win)    — windowed GUI backend
+  - `lib/`                                 — shared dependencies, ONNX models & exiftool
+- `packaging/build_gui.py` consumes this same `dist/engine/` layout to stage
+  and build the final desktop installers (NSIS setup, portable zip, macOS DMG).
+- Test harness: `CULL_EXE=dist/engine/auto_culling_cli(.exe)` makes
+  `tests/test_package.py`, `tests/score_gate.py` (HEIF/ARW/NEF gates) and
+  `benchmarks/run_benchmarks.py` run the compiled CLI instead of the source.
+- Packaged-binary precision: the CLI inside `dist/engine/` shares the same
+  code, dependencies and frozen models as the GUI engine, ensuring 100%
+  consistency across CLI and desktop interfaces.
 - cv2 MUST stay opencv-python 5.0.0.93 (full): the headless build flips the
   knife-edge file IMG_20260314_160318_240.jpg (3→-1 at workers=4/6) — keep
   the .venv untouched by pip swaps; a mixed cv2 directory also flips it.
@@ -376,8 +354,8 @@ Shared facts:
 - Performance: `run_benchmarks.py --seed-dir tests/ci/sample --baseline-file
   tests/ci/ci_config.json --tolerance 0.65`. Both platforms use tolerance
   0.65; macOS has a single retry step to absorb one-sided runner load spikes.
-- Planned rework: guards/release should consume `engine.spec` onedir instead
-  of building a second `cull_photos.spec` onedir (eliminate dual-spec).
+- Dual-spec elimination: completed (2026-09-13, feature/ci-unified-engine-spec).
+  All tests and release workflows build via `engine.spec` only.
 
 ## Branch Management & Release Flow (2026-09-13, single-developer GitHub Flow)
 

@@ -14,7 +14,7 @@ drift, and it needs no runner-specific calibration.
 
 Usage:
     python tests/ci/seed_precision.py                    # source only
-    CULL_EXE=dist/.../auto_cull_v0.1_macos_arm64 \
+    CULL_EXE=dist/engine/auto_culling_cli \
         python tests/ci/seed_precision.py                # packaged only
     python tests/ci/seed_precision.py --compare          # both, assert equal
     python tests/ci/seed_precision.py --calibrate        # print per-format
@@ -91,26 +91,11 @@ def collect(fmt: str, seed: str, glob: str,
 
 
 def _default_onedir() -> str:
-    if os.environ.get("CULL_EXE"):
+    if "CULL_EXE" in os.environ:
         return os.environ["CULL_EXE"]
-    # CULL_VERSION env > pyproject.toml > fallback 0.1, mirrors packaging/build.py
-    ver = os.environ.get("CULL_VERSION", "").strip().lstrip("v")
-    if not ver:
-        toml = ROOT / "pyproject.toml"
-        if toml.exists():
-            import re as _re
-            for line in toml.read_text().splitlines():
-                if line.strip().startswith("version"):
-                    m = _re.search(r'"([^"]+)"', line)
-                    if m:
-                        ver = m.group(1).strip()
-                        break
-        ver = ver or "0.1"
-    base = f"auto_cull_v{ver}_win_x64" if __import__("sys").platform == "win32" \
-        else f"auto_cull_v{ver}_macos_arm64"
-    # Source runs: onedir is dist/<base>/<base> (with .exe on win).
-    # CI injects CULL_VERSION=v0.2 so the built dist/ layout matches the lookup.
-    return str(ROOT / "dist" / base / base)
+    # Unified onedir location from engine.spec
+    ext = ".exe" if __import__("sys").platform == "win32" else ""
+    return str(ROOT / "dist" / "engine" / f"auto_culling_cli{ext}")
 
 
 ONEDIR_EXE = os.environ.get("CULL_EXE", _default_onedir())
