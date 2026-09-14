@@ -271,7 +271,7 @@ class CullingEngine:
                 jobs = [
                     (idx, group, [decode_pool.submit(load_image_rgb, fp, self.config.scale_width)
                                   for fp in group.frames])
-                    for idx, (group) in enumerate(self.groups, start=1)
+                    for idx, group in enumerate(self.groups, start=1)
                 ]
                 with ThreadPoolExecutor(max_workers=n_consumers) as score_pool:
                     # executor.map preserves group order regardless of completion order.
@@ -508,14 +508,18 @@ class CullingEngine:
         
         # Build ARW ground truth set if needed
         arw_stems: set[str] = set()
-        for search_dir in [self.config.input_dir, self.config.input_dir.parent]:
+        search_dirs = [self.config.input_dir]
+        if self.config.input_dir.parent.is_dir():
+            search_dirs.append(self.config.input_dir.parent)
+
+        for search_dir in search_dirs:
             if search_dir.is_dir():
-                for p in search_dir.iterdir():
-                    if p.suffix.lower() == ".arw":
-                        arw_stems.add(p.stem.lower())
+                pattern = "**/*.arw" if self.config.recursive else "*.arw"
+                for p in search_dir.glob(pattern):
+                    arw_stems.add(p.stem.lower())
 
         fieldnames = [
-            "filename", "s_sharp", "s_comp", "raw_score", "rating",
+            "filename", "path", "s_sharp", "s_comp", "raw_score", "rating",
             "vetoed", "veto_reason", "n_detections", "burst_group", "has_arw"
         ]
 
@@ -525,6 +529,7 @@ class CullingEngine:
             for s in self.all_scores:
                 writer.writerow({
                     "filename": s.path.name,
+                    "path": str(s.path),
                     "s_sharp": f"{s.s_sharp:.6f}",
                     "s_comp": f"{s.s_comp:.6f}",
                     "raw_score": f"{s.raw_score:.6f}",
@@ -545,13 +550,17 @@ class CullingEngine:
 
         arw_stems: set[str] = set()
         if arw_dir and arw_dir.is_dir():
-            arw_stems = {p.stem.lower() for p in arw_dir.iterdir() if p.suffix.lower() == ".arw"}
+            pattern = "**/*.arw" if self.config.recursive else "*.arw"
+            arw_stems = {p.stem.lower() for p in arw_dir.glob(pattern)}
         else:
-            for search_dir in [self.config.input_dir, self.config.input_dir.parent]:
+            search_dirs = [self.config.input_dir]
+            if self.config.input_dir.parent.is_dir():
+                search_dirs.append(self.config.input_dir.parent)
+            pattern = "**/*.arw" if self.config.recursive else "*.arw"
+            for search_dir in search_dirs:
                 if search_dir.is_dir():
-                    for p in search_dir.iterdir():
-                        if p.suffix.lower() == ".arw":
-                            arw_stems.add(p.stem.lower())
+                    for p in search_dir.glob(pattern):
+                        arw_stems.add(p.stem.lower())
 
         if not arw_stems:
             log.warning("No ARW files found — cannot run label check.")

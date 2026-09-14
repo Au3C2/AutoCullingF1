@@ -276,7 +276,8 @@
       <span class="tau-stat-sep">·</span>
       <span class="tau-stat-label">ETA:</span> <span class="tau-stat-val">${etaText}</span>
     `;
-    els.frameStat.textContent = `SCORED ${state.scoredCount}/${state.totalFiles} · KEEP ${state.keepCount} · REJECT ${state.rejectCount}`;
+    const failText = state.failedCount > 0 ? ` · FAIL ${state.failedCount}` : '';
+    els.frameStat.textContent = `SCORED ${state.scoredCount}/${state.totalFiles} · KEEP ${state.keepCount} · REJECT ${state.rejectCount}${failText}`;
   }
 
   // --- Event Handlers (Engine Stream) ---

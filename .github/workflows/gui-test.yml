@@ -71,6 +71,10 @@ jobs:
             "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
             "pyinstaller" "pytest"
 
+      - name: Run Tauri Rust unit tests
+        shell: bash
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Build desktop GUI packages
         shell: bash
         run: $PYBIN packaging/build_gui.py
