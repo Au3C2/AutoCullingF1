@@ -34,7 +34,7 @@ def _version() -> str:
                 m = re.search(r'"([^"]+)"', line)
                 if m:
                     return m.group(1).strip()
-    return "0.1"
+    return "0.3"
 
 
 def get_rust_target_triple() -> str:

@@ -375,6 +375,10 @@ tip SHAs recorded in the session log if recovery is ever needed.
   merged back via PR, deleted immediately after merge. Branch lifetime
   target: under two weeks. Any branch older than that gets merged or
   `git cherry`-verified and deleted.
+- **Mandatory Pre-Merge Review Rule**: Before merging ANY PR into master,
+  the authoring agent MUST spawn an independent sub-agent (or dedicated
+  review agent) to perform a full code, logic, security, and regression audit
+  on the branch diff. The sub-agent's feedback must be addressed before merge.
 - NEVER run a parallel lineage (two branches evolving the same feature) —
   this produced 13 orphaned commits in the `gui` branch and a 106-duplicate
   `develop`.
