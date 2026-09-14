@@ -84,8 +84,8 @@ def main() -> int:
     do_packaging = args.scope in ("all", "packaging")
 
     if do_precision:
-        rcs.append(run([str(PY), "-m", "pytest", "-q", *PRECISION_TESTS],
-                       "1. source precision gates", env_base))
+        rcs.append(run([str(PY), "-m", "pytest", "-q", *PRECISION_TESTS, "tests/test_gui"],
+                       "1. source precision & GUI gates", env_base))
         rcs.append(run([str(PY), "-m", "pytest", "-q", *PACKAGED_PRECISION_TESTS],
                        "4. packaged precision gates", env_pkg))
     if do_perf:

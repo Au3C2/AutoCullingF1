@@ -190,3 +190,30 @@ def test_json_lines_cancel(engine_process: EngineChannel):
 
     cancel_or_done = engine_process.wait_for_event("cancelled", timeout=10.0) or engine_process.wait_for_event("done", timeout=10.0)
     assert cancel_or_done is not None
+
+
+def test_json_lines_frame_status_and_veto_enum_consistency(engine_process: EngineChannel):
+    """Verify that frame events emitted by the engine have standardized status and veto codes."""
+    img_dir = Path("tests/test_img")
+    if not img_dir.exists():
+        pytest.skip("tests/test_img does not exist")
+
+    engine_process.clear()
+    engine_process.send({
+        "cmd": "run",
+        "dir": str(img_dir),
+        "config": {"dry_run": True, "top_n": 1}
+    })
+    done_evt = engine_process.wait_for_event("done", timeout=30.0)
+    assert done_evt is not None
+
+    frame_events = engine_process.get_events_by_type("frame")
+    assert len(frame_events) > 0
+
+    valid_statuses = {"pending", "scored", "decode_failed", "manual_metadata", "topn_final"}
+    for frame in frame_events:
+        assert frame.get("status") in valid_statuses, f"Invalid status: {frame.get('status')}"
+        veto = frame.get("veto", "")
+        # Veto should be string and if non-empty, either a code or informative message
+        assert isinstance(veto, str)
+

@@ -75,6 +75,10 @@ jobs:
         shell: bash
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Run Layer 2 GUI frontend & i18n tests
+        shell: bash
+        run: $PYBIN -m pytest tests/test_gui/
+
       - name: Build desktop GUI packages
         shell: bash
         run: $PYBIN packaging/build_gui.py
