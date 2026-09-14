@@ -4,6 +4,7 @@
  * Handles:
  * - IPC Communication with Tauri Rust / Resident Python Engine
  * - Dynamic Configuration Persistence with localStorage
+ * - Multi-Language Localization (i18n: zh-CN / en-US)
  * - Real-time Progress, Speed (张/秒) & ETA Calculations
  * - Virtual/Incremental Table Rendering, Sorting & Filtering
  * - Asynchronous Image Preview with Detection/Crop Overlays
@@ -12,6 +13,116 @@
 
 (function () {
   'use strict';
+
+  // --- Multi-Language (i18n) Engine ---
+  const I18N = {
+    currentLang: 'zh-CN', // 'zh-CN' | 'en-US'
+    preference: 'auto',   // 'auto' | 'zh-CN' | 'en-US'
+    dicts: {
+      'zh-CN': {},
+      'en-US': {},
+    },
+
+    flatten(obj, prefix = '') {
+      const res = {};
+      for (const [k, v] of Object.entries(obj)) {
+        const key = prefix ? `${prefix}.${k}` : k;
+        if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+          Object.assign(res, this.flatten(v, key));
+        } else {
+          res[key] = String(v);
+        }
+      }
+      return res;
+    },
+
+    detectSystemLang() {
+      const sysLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+      return sysLang.startsWith('zh') ? 'zh-CN' : 'en-US';
+    },
+
+    async loadLocales() {
+      try {
+        const [zhRes, enRes] = await Promise.all([
+          fetch('locales/zh-CN.json').then((r) => r.json()),
+          fetch('locales/en-US.json').then((r) => r.json()),
+        ]);
+        this.dicts['zh-CN'] = this.flatten(zhRes);
+        this.dicts['en-US'] = this.flatten(enRes);
+      } catch (err) {
+        console.error('[i18n] Failed to load locale files, using in-memory fallbacks', err);
+      }
+    },
+
+    t(key, params = {}) {
+      let text = this.dicts[this.currentLang]?.[key] || this.dicts['zh-CN']?.[key] || key;
+      for (const [p, val] of Object.entries(params)) {
+        text = text.replace(new RegExp(`\\{${p}\\}`, 'g'), String(val));
+      }
+      return text;
+    },
+
+    translateVeto(veto) {
+      if (!veto) return '';
+      const map = {
+        no_detection: 'veto.no_detection',
+        decode_failed: 'veto.decode_failed',
+        manual_metadata: 'veto.manual_metadata',
+        burst_group_topn: 'veto.burst_group_topn',
+      };
+      if (map[veto]) return this.t(map[veto]);
+      if (veto.includes('sharpness')) return this.t('veto.sharpness_fail');
+      if (veto.includes('raw=')) return this.t('veto.min_raw_fail');
+      if (veto.includes('p4_orient')) return this.t('veto.p4_orient_fail');
+      if (veto.includes('fence_detected')) return this.t('veto.fence_detected');
+      return veto;
+    },
+
+    applyDOM() {
+      // 1. Text elements
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+          el.textContent = this.t(key);
+        }
+      });
+
+      // 2. Attributes
+      document.querySelectorAll('[data-i18n-attr]').forEach((el) => {
+        const raw = el.getAttribute('data-i18n-attr');
+        if (!raw) return;
+        raw.split(';').forEach((pair) => {
+          const [attr, key] = pair.split(':').map((s) => s.trim());
+          if (attr && key) {
+            el.setAttribute(attr, this.t(key));
+          }
+        });
+      });
+
+      // 3. Document title
+      document.title = this.t('app.title');
+    },
+
+    setLanguage(pref) {
+      this.preference = pref;
+      localStorage.setItem('ac-ui-lang', pref);
+      if (pref === 'auto') {
+        this.currentLang = this.detectSystemLang();
+      } else {
+        this.currentLang = pref === 'en-US' ? 'en-US' : 'zh-CN';
+      }
+      document.documentElement.lang = this.currentLang;
+      this.applyDOM();
+    },
+
+    async init() {
+      await this.loadLocales();
+      const saved = localStorage.getItem('ac-ui-lang') || 'auto';
+      const selector = document.getElementById('langSelector');
+      if (selector) selector.value = saved;
+      this.setLanguage(saved);
+    },
+  };
 
   // --- State Management ---
   const state = {
@@ -56,7 +167,6 @@
     previewImg: $('previewImg'),
     previewEmpty: $('previewEmpty'),
     previewTitle: $('previewTitle'),
-    previewMeta: $('previewMeta'),
     previewScoreDetails: $('previewScoreDetails'),
     pillRating: $('pillRating'),
     pillSharp: $('pillSharp'),
@@ -67,6 +177,7 @@
     logConsole: $('logConsole'),
     btnClearLog: $('btnClearLog'),
     systemPulse: $('systemPulse'),
+    langSelector: $('langSelector'),
   };
 
   // --- Parameter Bindings & Persistence ---
@@ -87,9 +198,6 @@
     { id: 'pDryRun', key: 'dry_run', type: 'bool', default: false },
   ];
 
-  // Params persisted through the OS credential store (Rust keyring) instead
-  // of localStorage — plaintext webview storage is extractable from the
-  // profile directory.
   const SECRET_KEYS = new Set(['rf_api_key']);
 
   function loadSavedParams() {
@@ -97,9 +205,6 @@
       const el = $(p.id);
       if (!el) return;
       if (SECRET_KEYS.has(p.key)) {
-        // One-time migration: a legacy plaintext value in localStorage moves
-        // into the credential store BEFORE the plaintext copy is dropped, so
-        // upgrading users keep their saved key.
         const legacy = localStorage.getItem(`ac-param-${p.key}`);
         localStorage.removeItem(`ac-param-${p.key}`);
         invokeTauri('secret_get', { key: p.key }).then((v) => {
@@ -128,8 +233,6 @@
         }
         localStorage.setItem(`ac-param-${p.key}`, currentVal);
       };
-      // 'input' fires per keystroke (reliable in WebView2); 'change' is kept
-      // for checkboxes/selects and as a blur-time fallback.
       if (p.type === 'bool' || el.tagName === 'SELECT') {
         el.addEventListener('change', persist);
       } else {
@@ -194,13 +297,13 @@
         await triggerScan(selected);
       }
     } catch (err) {
-      appendLog(`[Error] 文件夹选择失败: ${err}`);
+      appendLog(`[Error] ${err}`);
     }
   }
 
   async function triggerScan(dirPath) {
     if (!dirPath) return;
-    els.stageStatus.textContent = '正在扫描目录...';
+    els.stageStatus.textContent = I18N.t('telemetry.scanning_dir');
     const recursive = $('pRecursive')?.checked || false;
     await invokeTauri('scan', { dir: dirPath, recursive });
   }
@@ -208,56 +311,54 @@
   // --- Start / Cancel Culling Run ---
   async function handleRunToggle() {
     if (state.isRunning) {
-      // User clicked Cancel
-      els.stageStatus.textContent = '正在取消筛选...';
+      els.stageStatus.textContent = I18N.t('telemetry.cancelling');
       await invokeTauri('cancel');
       return;
     }
 
     if (!state.inputDir) {
-      alert('请先选择待筛照片目录');
+      alert(I18N.t('dialog.alert_select_dir'));
       return;
     }
 
-    // Start Run
     state.isRunning = true;
     state.startTime = performance.now();
     state.scoredCount = 0;
     state.keepCount = 0;
     state.rejectCount = 0;
 
-    if (els.btnRunText) els.btnRunText.textContent = '取消筛选';
+    if (els.btnRunText) els.btnRunText.textContent = I18N.t('topbar.btn_cancel');
     els.btnRun.classList.remove('tau-btn-primary');
     els.btnRun.classList.add('tau-btn-cancel');
     els.progressBar.style.width = '0%';
-    els.stageStatus.textContent = '正在启动引擎...';
-    els.speedEtaStat.innerHTML = '<span class="tau-stat-label">SPEED:</span> <span class="tau-stat-val">CALCULATING...</span>';
+    els.stageStatus.textContent = I18N.t('telemetry.starting_engine');
+    els.speedEtaStat.innerHTML = `<span class="tau-stat-label">${I18N.t('telemetry.speed')}</span> <span class="tau-stat-val">CALCULATING...</span>`;
 
     const config = getEngineConfig();
     try {
       await invokeTauri('run', { dir: state.inputDir, config });
     } catch (err) {
-      appendLog(`[Error] 运行失败: ${err}`);
-      finishRun('运行出错');
+      appendLog(`[Error] ${err}`);
+      finishRun(I18N.t('telemetry.run_error'));
     }
   }
 
-  function finishRun(statusText = '已完成') {
+  function finishRun(statusText = null) {
     state.isRunning = false;
-    if (els.btnRunText) els.btnRunText.textContent = '⚡️开始筛选';
+    if (els.btnRunText) els.btnRunText.textContent = I18N.t('topbar.btn_run');
     els.btnRun.classList.add('tau-btn-primary');
     els.btnRun.classList.remove('tau-btn-cancel');
     els.btnExportCsv.disabled = state.photos.length === 0;
-    els.stageStatus.textContent = statusText;
+    els.stageStatus.textContent = statusText || I18N.t('telemetry.completed');
   }
 
-  // --- Real-time Metrics: Speed (img/s) & ETA (预计剩余时间) ---
+  // --- Real-time Metrics: Speed (img/s) & ETA ---
   function updateSpeedAndEta() {
     if (!state.isRunning || state.scoredCount <= 0) return;
     const elapsedSec = (performance.now() - state.startTime) / 1000;
     if (elapsedSec <= 0.1) return;
 
-    const speed = state.scoredCount / elapsedSec; // img/s
+    const speed = state.scoredCount / elapsedSec;
     const speedText = speed.toFixed(1);
 
     const remainingPhotos = Math.max(0, state.totalFiles - state.scoredCount);
@@ -272,19 +373,25 @@
     }
 
     els.speedEtaStat.innerHTML = `
-      <span class="tau-stat-label">SPEED:</span> <span class="tau-stat-val">${speedText} img/s</span>
+      <span class="tau-stat-label">${I18N.t('telemetry.speed')}</span> <span class="tau-stat-val">${speedText} img/s</span>
       <span class="tau-stat-sep">·</span>
-      <span class="tau-stat-label">ETA:</span> <span class="tau-stat-val">${etaText}</span>
+      <span class="tau-stat-label">${I18N.t('telemetry.eta')}</span> <span class="tau-stat-val">${etaText}</span>
     `;
-    const failText = state.failedCount > 0 ? ` · FAIL ${state.failedCount}` : '';
-    els.frameStat.textContent = `SCORED ${state.scoredCount}/${state.totalFiles} · KEEP ${state.keepCount} · REJECT ${state.rejectCount}${failText}`;
+
+    const failText = state.failedCount > 0 ? I18N.t('telemetry.failed_part', { failed: state.failedCount }) : '';
+    els.frameStat.textContent = I18N.t('telemetry.scored_summary', {
+      scored: state.scoredCount,
+      total: state.totalFiles,
+      keep: state.keepCount,
+      reject: state.rejectCount,
+      failed: failText,
+    });
   }
 
   // --- Event Handlers (Engine Stream) ---
   function setupEventListeners() {
     // 1. Directory Scanned
     listenTauri('scanned', ({ payload }) => {
-      // paths is an array of FULL paths — basenames collide in recursive scans.
       const paths = Array.isArray(payload.paths)
         ? payload.paths
         : Object.values(payload.paths || {});
@@ -314,8 +421,8 @@
       state.rejectCount = 0;
       state.failedCount = 0;
 
-      els.stageStatus.textContent = `已发现 ${count} 张照片`;
-      els.frameStat.textContent = `待筛选: 共 ${count} 张照片`;
+      els.stageStatus.textContent = I18N.t('telemetry.photos_discovered', { count });
+      els.frameStat.textContent = I18N.t('telemetry.photos_pending', { count });
       els.countAll.textContent = count;
       els.countKeep.textContent = '0';
       els.countReject.textContent = '0';
@@ -324,14 +431,14 @@
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       els.previewEmpty.style.display = 'flex';
-      els.previewTitle.textContent = '照片预览';
+      els.previewTitle.textContent = I18N.t('preview.title');
       els.previewScoreDetails.style.display = 'none';
       renderTable();
     });
 
     // 2. Stage updates
     listenTauri('stage', ({ payload }) => {
-      const msg = payload.message || payload.msg || '处理中...';
+      const msg = payload.message || payload.msg || '...';
       const pct = (payload.progress ?? payload.pct ?? 0) * 100;
       els.stageStatus.textContent = msg;
       if (!state.isRunning) return;
@@ -352,10 +459,6 @@
       item.veto = payload.veto;
       item.status = payload.status;
 
-      // Only first-pass events advance the counters. "topn_final" events are
-      // re-emissions of already-scored frames after the per-burst Top-N
-      // downgrade; "decode_failed" frames never enter the scored totals (the
-      // engine excludes them from done.total as well).
       if (payload.status === 'topn_final') {
         updateTableRow(item);
         return;
@@ -370,11 +473,9 @@
       if (payload.rating > 0) state.keepCount++;
       else state.rejectCount++;
 
-      // Update Counts
       els.countKeep.textContent = state.keepCount;
       els.countReject.textContent = state.rejectCount;
 
-      // Update Progress Bar
       if (state.totalFiles > 0) {
         const progressPct = 10 + (state.scoredCount / state.totalFiles) * 85;
         els.progressBar.style.width = `${Math.min(95, progressPct).toFixed(1)}%`;
@@ -393,13 +494,17 @@
         <span class="tau-stat-sep">·</span>
         <span class="tau-stat-label">TIME:</span> <span class="tau-stat-val">${(payload.elapsed || 0).toFixed(1)}s</span>
       `;
-      finishRun(`完成 · 保留 ${payload.keep} · 丢弃 ${payload.reject}` +
-        (payload.failed ? ` · 失败 ${payload.failed}` : ''));
+      const failedText = payload.failed ? I18N.t('telemetry.failed_part', { failed: payload.failed }) : '';
+      finishRun(I18N.t('telemetry.completed_summary', {
+        keep: payload.keep,
+        reject: payload.reject,
+        failed: failedText,
+      }));
     });
 
     // 5. Cancelled Event
     listenTauri('cancelled', () => {
-      finishRun('筛选已取消');
+      finishRun(I18N.t('telemetry.cancelled'));
     });
 
     // 6. Log Events
@@ -407,36 +512,35 @@
       appendLog(payload.line || JSON.stringify(payload));
     });
 
-    // 7. Engine lifecycle errors (startup warmup failures etc.)
+    // 7. Engine lifecycle errors
     listenTauri('engine-error', ({ payload }) => {
       appendLog(`[Engine Error] ${payload && payload.message ? payload.message : JSON.stringify(payload)}`);
       if (!state.isRunning) {
-        els.stageStatus.textContent = '引擎启动失败（详见日志）';
+        els.stageStatus.textContent = I18N.t('telemetry.run_error');
       }
     });
 
-    // 8. Engine run/scan errors — without these the UI would stay stuck on
-    //    "scanning/running" when the engine reports an error.
+    // 8. Engine run/scan errors
     listenTauri('error', ({ payload }) => {
       const msg = payload && payload.message ? payload.message : JSON.stringify(payload);
       appendLog(`[Error] ${msg}`);
       if (state.isRunning) {
-        finishRun(`运行失败: ${msg}`);
+        finishRun(`${I18N.t('telemetry.run_error')}: ${msg}`);
       } else {
-        els.stageStatus.textContent = `错误: ${msg}`;
+        els.stageStatus.textContent = `${I18N.t('telemetry.run_error')}: ${msg}`;
       }
     });
 
     listenTauri('scan_error', ({ payload }) => {
       const msg = payload && payload.message ? payload.message : JSON.stringify(payload);
       appendLog(`[Scan Error] ${msg}`);
-      els.stageStatus.textContent = `扫描失败: ${msg}`;
+      els.stageStatus.textContent = I18N.t('telemetry.scan_error', { err: msg });
     });
 
-    // 9. CSV export confirmation (the engine writes the file asynchronously)
+    // 9. CSV export confirmation
     listenTauri('export_done', ({ payload }) => {
       appendLog(`[Export] scores.csv written to ${payload.path}`);
-      els.stageStatus.textContent = `已导出: ${payload.path}`;
+      els.stageStatus.textContent = I18N.t('telemetry.exported_to', { path: payload.path });
     });
   }
 
@@ -455,7 +559,7 @@
           <td colspan="7">
             <div class="tau-empty-state">
               <span class="tau-empty-icon">📂</span>
-              <p>${state.photos.length === 0 ? '请选择待筛照片目录并点击「开始筛选」' : '当前过滤条件下无匹配照片'}</p>
+              <p>${state.photos.length === 0 ? I18N.t('table.empty_select_prompt') : I18N.t('table.empty_filter')}</p>
             </div>
           </td>
         </tr>
@@ -467,14 +571,10 @@
     els.tableBody.innerHTML = html;
   }
 
-  // Row DOM ids must key on the full path — basenames collide in recursive scans.
   function rowIdFor(item) {
     return `row-${item.path.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   }
 
-  // Escape interpolated values before they go through innerHTML — filenames
-  // and engine veto strings are user/external-controlled (CSP is not a
-  // substitute for escaping).
   function esc(value) {
     return String(value).replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -489,20 +589,21 @@
       ? '<span style="color:#475569;">—</span>'
       : item.rating > 0
         ? `<span class="tau-stars">${'★'.repeat(item.rating)}</span>`
-        : '<span class="tau-reject-tag">REJECT</span>';
+        : `<span class="tau-reject-tag">${I18N.t('table.tag_reject')}</span>`;
 
+    const translatedVeto = I18N.translateVeto(item.veto);
     const reasonDisplay = item.veto
-      ? `<span class="tau-veto-desc" title="${esc(item.veto)}">${esc(item.veto)}</span>`
+      ? `<span class="tau-veto-desc" title="${esc(item.veto)}">${esc(translatedVeto)}</span>`
       : item.rating > 0
-        ? '<span class="tau-pass-tag">PASSED</span>'
+        ? `<span class="tau-pass-tag">${I18N.t('table.tag_passed')}</span>`
         : '—';
 
     const statusDisplay = item.status === 'pending'
-      ? '<span style="color:#64748b;">QUEUED</span>'
+      ? `<span style="color:#64748b;">${I18N.t('status.queued')}</span>`
       : (item.status === 'decode_failed'
-        ? '<span style="color:#f87171;">FAILED</span>'
+        ? `<span style="color:#f87171;">${I18N.t('status.failed')}</span>`
         : (item.status === 'scored' || item.status === 'topn_final'
-          ? '<span style="color:#00e5ff;">SCORED</span>'
+          ? `<span style="color:#00e5ff;">${I18N.t('status.scored')}</span>`
           : item.status));
 
     return `
@@ -525,7 +626,6 @@
       return;
     }
 
-    // Check filter match
     if (state.filter === 'keep' && item.rating <= 0) {
       row.style.display = 'none';
       return;
@@ -580,13 +680,13 @@
     els.previewScoreDetails.style.display = 'flex';
     const pillScored = item.status !== 'pending' && item.status !== 'decode_failed';
     const pillNum = (v, digits) => (pillScored && Number.isFinite(v) ? v.toFixed(digits) : '-');
-    els.pillRating.textContent = `RATING: ${item.rating > 0 ? `${item.rating}★` : (item.rating === -1 ? 'REJECT' : '-')}`;
+    els.pillRating.textContent = `RATING: ${item.rating > 0 ? `${item.rating}★` : (item.rating === -1 ? I18N.t('table.tag_reject') : '-')}`;
     els.pillSharp.textContent = `SHARP: ${pillNum(item.sharp, 3)}`;
     els.pillComp.textContent = `COMP: ${pillNum(item.comp, 3)}`;
     els.pillRaw.textContent = `RAW: ${pillNum(item.raw, 2)}`;
-    els.pillReason.textContent = `REASON: ${item.veto || (item.rating > 0 ? 'PASSED' : 'QUEUED')}`;
+    const reasonText = item.veto ? I18N.translateVeto(item.veto) : (item.rating > 0 ? I18N.t('table.tag_passed') : I18N.t('status.queued'));
+    els.pillReason.textContent = `REASON: ${reasonText}`;
 
-    // Request Base64 preview with bounding boxes
     const requestedPath = item.path;
     try {
       const res = await invokeTauri('preview', { path: requestedPath, size: 640 });
@@ -599,16 +699,16 @@
         } else {
           els.previewImg.style.display = 'none';
           els.previewEmpty.style.display = 'flex';
-          els.previewEmpty.querySelector('.tau-empty-title').textContent = `无法加载预览`;
+          els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_load_title');
           els.previewEmpty.querySelector('.tau-empty-desc').textContent = item.name;
         }
       }
     } catch (err) {
       if (state.selectedPhoto && state.selectedPhoto.path === requestedPath) {
-        appendLog(`[Preview Error] 预览加载失败: ${err}`);
+        appendLog(`[Preview Error] ${err}`);
         els.previewImg.style.display = 'none';
         els.previewEmpty.style.display = 'flex';
-        els.previewEmpty.querySelector('.tau-empty-title').textContent = `预览加载出错`;
+        els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_fail_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = `${err}`;
       }
     }
@@ -648,7 +748,18 @@
   }
 
   // --- UI Event Handlers ---
-  function initUI() {
+  async function initUI() {
+    await I18N.init();
+
+    if (els.langSelector) {
+      els.langSelector.addEventListener('change', () => {
+        I18N.setLanguage(els.langSelector.value);
+        renderTable();
+        if (state.selectedPhoto) selectPhoto(state.selectedPhoto);
+        updateSpeedAndEta();
+      });
+    }
+
     els.btnBrowse.addEventListener('click', chooseFolder);
     els.btnRun.addEventListener('click', handleRunToggle);
 
@@ -694,15 +805,14 @@
       if (item) selectPhoto(item);
     });
 
-    // Export CSV — the command is queued to the engine; the actual write is
-    // confirmed by the "export_done" event (or "error" on failure).
+    // Export CSV
     els.btnExportCsv.addEventListener('click', async () => {
       if (state.photos.length === 0) return;
       try {
         await invokeTauri('export_csv', { dir: state.inputDir });
-        els.stageStatus.textContent = '正在导出 scores.csv ...';
+        els.stageStatus.textContent = I18N.t('telemetry.exporting_csv');
       } catch (err) {
-        alert(`导出失败: ${err}`);
+        alert(I18N.t('dialog.export_failed', { err }));
       }
     });
 
@@ -716,7 +826,7 @@
       els.logConsole.textContent = '';
     });
 
-    // Keyboard Shortcuts (Cmd+O to browse, Space/Enter to run)
+    // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
@@ -725,8 +835,6 @@
     });
 
     initSplitter();
-    // Listeners must exist before loadSavedParams — it auto-triggers a scan
-    // of the saved directory, and a fast engine reply would otherwise be lost.
     setupEventListeners();
     loadSavedParams();
   }

@@ -58,7 +58,9 @@ tests/
 │   ├── test_precision_heif.py     # 24 张 HEIF 真实相机文件精度守护
 │   └── test_precision_raw.py      # 20 张 ARW + 20 张 NEF 原始 RAW 精度守护
 │
-├── test_gui/                      # 【Layer 2】开发态 GUI 自动化交互测试（预留待接入）
+├── test_gui/                      # 【Layer 2】开发态 GUI 自动化交互与本地化测试
+│   ├── test_i18n.py               # 多语言字典完整性、键对齐、DOM 标签与协议状态枚举映射断言
+│   └── test_gui_state.py          # GUI 前端状态机与 i18n 模版插值、切换与否决本地化单测
 │
 ├── test_package/                  # 【Layer 3】打包与交付产物测试
 │   └── test_package.py            # 验证打包后的 CLI (dist/engine/auto_culling_cli) 精度与源码 100% 一致

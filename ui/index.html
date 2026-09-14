@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoCulling</title>
+  <title data-i18n="app.title">AutoCulling</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,21 +24,26 @@
 
       <div class="tau-dir-box">
         <div class="tau-input-icon">📁</div>
-        <input type="text" id="inputDir" class="tau-dir-input" placeholder="选择或粘贴待筛照片文件夹路径..." spellcheck="false">
+        <input type="text" id="inputDir" class="tau-dir-input" placeholder="选择或粘贴待筛照片文件夹路径..." data-i18n-attr="placeholder:topbar.placeholder_dir" spellcheck="false">
         <button id="btnBrowse" class="tau-btn tau-btn-secondary">
-          <span>浏览目录</span>
+          <span data-i18n="topbar.btn_browse">浏览目录</span>
           <kbd class="tau-kbd">⌘O</kbd>
         </button>
       </div>
 
       <div class="tau-actions">
+        <select id="langSelector" class="tau-select tau-lang-select" title="Language / 语言">
+          <option value="auto" data-i18n="topbar.lang_auto">🌐 自动 (系统)</option>
+          <option value="zh-CN" data-i18n="topbar.lang_zh">🇨🇳 简体中文</option>
+          <option value="en-US" data-i18n="topbar.lang_en">🇺🇸 English</option>
+        </select>
         <button id="btnRun" class="tau-btn tau-btn-primary" disabled>
-          <span id="btnRunText">⚡️开始筛选</span>
+          <span id="btnRunText" data-i18n="topbar.btn_run">⚡️开始筛选</span>
         </button>
-        <button id="btnExportCsv" class="tau-btn tau-btn-glass" title="导出打分统计 CSV" disabled>
-          <span>导出 CSV</span>
+        <button id="btnExportCsv" class="tau-btn tau-btn-glass" title="导出打分统计 CSV" data-i18n-attr="title:topbar.title_export_csv" disabled>
+          <span data-i18n="topbar.btn_export_csv">导出 CSV</span>
         </button>
-        <button id="btnToggleLog" class="tau-btn tau-btn-icon" title="查看运行日志">
+        <button id="btnToggleLog" class="tau-btn tau-btn-icon" title="查看运行日志" data-i18n-attr="title:topbar.title_log">
           <span>📜</span>
         </button>
       </div>
@@ -48,8 +53,8 @@
     <section class="tau-config-panel">
       <div class="tau-panel-header">
         <div class="tau-panel-title">
-          <span class="tau-tag-pill">ENGINE CONFIG</span>
-          <span class="tau-panel-subtitle">推理参数与评分策略</span>
+          <span class="tau-tag-pill" data-i18n="config.panel_title">ENGINE CONFIG</span>
+          <span class="tau-panel-subtitle" data-i18n="config.panel_subtitle">推理参数与评分策略</span>
         </div>
       </div>
 
@@ -57,80 +62,80 @@
         <!-- Col 1: Burst & Concurrency -->
         <div class="tau-card">
           <div class="tau-card-header">
-            <span class="tau-card-title">连拍与并发控制</span>
+            <span class="tau-card-title" data-i18n="config.card_pipeline">连拍与并发控制</span>
             <span class="tau-card-tag">PIPELINE</span>
           </div>
           
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pTopN">Top-N 数量</label>
+              <label class="tau-label" for="pTopN" data-i18n="config.label_top_n">Top-N 数量</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">Top-N 保留上限</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_top_n_title">Top-N 保留上限</span>
                     <span class="tau-tt-badge">DEFAULT: 11</span>
                   </div>
-                  <div class="tau-tt-desc">每组连拍序列中允许评星保留的最大张数。超出部分自动按综合分数降序否决淘汰。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_top_n_desc">每组连拍序列中允许评星保留的最大张数。超出部分自动按综合分数降序否决淘汰。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 控制成片精简度与单组保留量<br>
-                    <span class="tau-tt-label">范围:</span> 1 ~ 50 整数 (步长 1)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_top_n_impact">控制成片精简度与单组保留量</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_top_n_range">1 ~ 50 整数 (步长 1)</span>
                   </div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap">
               <input type="number" id="pTopN" class="tau-input" value="11" min="1" max="50" step="1">
-              <span class="tau-unit">张</span>
+              <span class="tau-unit" data-i18n="config.unit_images">张</span>
             </div>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pWorkers">解码线程数</label>
+              <label class="tau-label" for="pWorkers" data-i18n="config.label_workers">解码线程数</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">并发解码线程</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_workers_title">并发解码线程</span>
                     <span class="tau-tt-badge">DEFAULT: 4</span>
                   </div>
-                  <div class="tau-tt-desc">多核并行图像解码工作线程数。调大可提升吞吐量，但占用更多 CPU 与内存。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_workers_desc">多核并行图像解码工作线程数。调大可提升吞吐量，但占用更多 CPU 与内存。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 决定图像加载吞吐量 (img/s)<br>
-                    <span class="tau-tt-label">范围:</span> 1 ~ 16 线程 (步长 1)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_workers_impact">决定图像加载吞吐量 (img/s)</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_workers_range">1 ~ 16 线程 (步长 1)</span>
                   </div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap">
               <input type="number" id="pWorkers" class="tau-input" value="4" min="1" max="16" step="1">
-              <span class="tau-unit">cores</span>
+              <span class="tau-unit" data-i18n="config.unit_cores">cores</span>
             </div>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pP4">P4 朝向策略</label>
+              <label class="tau-label" for="pP4" data-i18n="config.label_p4">P4 朝向策略</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">P4 车辆朝向否决策略</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_p4_title">P4 车辆朝向否决策略</span>
                     <span class="tau-tt-badge">DEFAULT: never</span>
                   </div>
-                  <div class="tau-tt-desc">车辆朝向智能判定。always 始终否决尾部正后视角；auto 仅在目录名含 F1/GP 关键词时生效。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_p4_desc">车辆朝向智能判定。always 始终否决尾部正后视角；auto 仅在目录名含 F1/GP 关键词时生效。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 过滤无美感的后尾追拍<br>
-                    <span class="tau-tt-label">范围:</span> always / auto / never
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_p4_impact">过滤无美感的后尾追拍</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_p4_range">always / auto / never</span>
                   </div>
                 </div>
               </span>
             </div>
             <select id="pP4" class="tau-select">
-              <option value="never" selected>从不检测 (never)</option>
-              <option value="always">始终检测 (always)</option>
-              <option value="auto">智能判定 (auto)</option>
+              <option value="never" data-i18n="config.p4_never" selected>从不检测 (never)</option>
+              <option value="always" data-i18n="config.p4_always">始终检测 (always)</option>
+              <option value="auto" data-i18n="config.p4_auto">智能判定 (auto)</option>
             </select>
           </div>
 
@@ -138,34 +143,34 @@
             <label class="tau-toggle-label">
               <input type="checkbox" id="pRecursive" class="tau-checkbox">
               <span class="tau-toggle-custom"></span>
-              <span class="tau-toggle-text">递归子文件夹</span>
+              <span class="tau-toggle-text" data-i18n="config.label_recursive">递归子文件夹</span>
             </label>
             <span class="tau-tip-wrap">
               <span class="tau-info-icon">?</span>
               <div class="tau-tooltip">
                 <div class="tau-tt-head">
-                  <span class="tau-tt-title">递归遍历扫描</span>
+                  <span class="tau-tt-title" data-i18n="config.tip_recursive_title">递归遍历扫描</span>
                   <span class="tau-tt-badge">DEFAULT: OFF</span>
                 </div>
-                <div class="tau-tt-desc">深度遍历所选目录下的所有多层级子目录并载入照片。</div>
-                <div class="tau-tt-meta"><span class="tau-tt-label">范围:</span> 开启 / 关闭</div>
+                <div class="tau-tt-desc" data-i18n="config.tip_recursive_desc">深度遍历所选目录下的所有多层级子目录并载入照片。</div>
+                <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
               </div>
             </span>
 
             <label class="tau-toggle-label">
               <input type="checkbox" id="pForce" class="tau-checkbox">
               <span class="tau-toggle-custom"></span>
-              <span class="tau-toggle-text">强制覆盖重评</span>
+              <span class="tau-toggle-text" data-i18n="config.label_force">强制覆盖重评</span>
             </label>
             <span class="tau-tip-wrap">
               <span class="tau-info-icon">?</span>
               <div class="tau-tooltip">
                 <div class="tau-tt-head">
-                  <span class="tau-tt-title">强制重新评分</span>
+                  <span class="tau-tt-title" data-i18n="config.tip_force_title">强制重新评分</span>
                   <span class="tau-tt-badge">DEFAULT: OFF</span>
                 </div>
-                <div class="tau-tt-desc">覆盖已存在 XMP/EXIF 评级。关闭时将直接保留人工已打分照片以节省时间。</div>
-                <div class="tau-tt-meta"><span class="tau-tt-label">范围:</span> 开启 / 关闭</div>
+                <div class="tau-tt-desc" data-i18n="config.tip_force_desc">覆盖已存在 XMP/EXIF 评级。关闭时将直接保留人工已打分照片以节省时间。</div>
+                <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
               </div>
             </span>
           </div>
@@ -174,48 +179,48 @@
         <!-- Col 2: Weights & Scoring -->
         <div class="tau-card">
           <div class="tau-card-header">
-            <span class="tau-card-title">锐度与综合权重</span>
+            <span class="tau-card-title" data-i18n="config.card_scoring">锐度与综合权重</span>
             <span class="tau-card-tag">SCORING</span>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pSharp">锐度阈值 (P0)</label>
+              <label class="tau-label" for="pSharp" data-i18n="config.label_sharp">锐度阈值 (P0)</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">P0 锐度否决硬阈值</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_sharp_title">P0 锐度否决硬阈值</span>
                     <span class="tau-tt-badge">DEFAULT: 0.05</span>
                   </div>
-                  <div class="tau-tt-desc">高频细节比率下限。低于此值直接判定模糊失焦并彻底淘汰。调高过滤微糊，调低包容摇摄拉丝。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_sharp_desc">高频细节比率下限。低于此值直接判定模糊失焦并彻底淘汰。调高过滤微糊，调低包容摇摄拉丝。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 绝对画质清晰度底线<br>
-                    <span class="tau-tt-label">范围:</span> 0.01 ~ 0.30 (步长 0.01)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_sharp_impact">绝对画质清晰度底线</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_sharp_range">0.01 ~ 0.30 (步长 0.01)</span>
                   </div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap">
               <input type="number" id="pSharp" class="tau-input" value="0.05" min="0.01" max="0.5" step="0.01">
-              <span class="tau-unit">ratio</span>
+              <span class="tau-unit" data-i18n="config.unit_ratio">ratio</span>
             </div>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pWSharp">锐度权重</label>
+              <label class="tau-label" for="pWSharp" data-i18n="config.label_w_sharp">锐度权重</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">锐度得分加权系数</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_w_sharp_title">锐度得分加权系数</span>
                     <span class="tau-tt-badge">DEFAULT: 1.5</span>
                   </div>
-                  <div class="tau-tt-desc">总分计算公式: 锐度分 × 锐度权重。提升该权重更倾向保留极致清晰的主体画质。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_w_sharp_desc">总分计算公式: 锐度分 × 锐度权重。提升该权重更倾向保留极致清晰的主体画质。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 锐度在总分中的比重<br>
-                    <span class="tau-tt-label">范围:</span> 0.1 ~ 5.0 (步长 0.1)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_w_sharp_impact">锐度在总分中的比重</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_w_sharp_range">0.1 ~ 5.0 (步长 0.1)</span>
                   </div>
                 </div>
               </span>
@@ -228,18 +233,18 @@
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pWComp">构图权重</label>
+              <label class="tau-label" for="pWComp" data-i18n="config.label_w_comp">构图权重</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">构图得分加权系数</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_w_comp_title">构图得分加权系数</span>
                     <span class="tau-tt-badge">DEFAULT: 2.5</span>
                   </div>
-                  <div class="tau-tt-desc">总分计算公式: 构图分 × 构图权重。基于三分构图法则与动态主体居中/偏置美学。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_w_comp_desc">总分计算公式: 构图分 × 构图权重。基于三分构图法则与动态主体居中/偏置美学。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 构图美感在总分中的比重<br>
-                    <span class="tau-tt-label">范围:</span> 0.1 ~ 5.0 (步长 0.1)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_w_comp_impact">构图美感在总分中的比重</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_w_comp_range">0.1 ~ 5.0 (步长 0.1)</span>
                   </div>
                 </div>
               </span>
@@ -252,25 +257,25 @@
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pMinRaw">最低总分</label>
+              <label class="tau-label" for="pMinRaw" data-i18n="config.label_min_raw">最低总分</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">合格保留最低原始分</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_min_raw_title">合格保留最低原始分</span>
                     <span class="tau-tt-badge">DEFAULT: 3.1</span>
                   </div>
-                  <div class="tau-tt-desc">合格评星的最低综合总分门槛。低于此值的照片直接淘汰，不赋予任何星级。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_min_raw_desc">合格评星的最低综合总分门槛。低于此值的照片直接淘汰，不赋予任何星级。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 评星准入门槛与淘汰率<br>
-                    <span class="tau-tt-label">范围:</span> 1.0 ~ 5.0 (步长 0.1)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_min_raw_impact">评星准入门槛与淘汰率</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_min_raw_range">1.0 ~ 5.0 (步长 0.1)</span>
                   </div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap">
               <input type="number" id="pMinRaw" class="tau-input" value="3.1" min="1.0" max="10.0" step="0.1">
-              <span class="tau-unit">score</span>
+              <span class="tau-unit" data-i18n="config.unit_score">score</span>
             </div>
           </div>
         </div>
@@ -278,24 +283,24 @@
         <!-- Col 3: Detection & Output -->
         <div class="tau-card">
           <div class="tau-card-header">
-            <span class="tau-card-title">模型检测与输出</span>
+            <span class="tau-card-title" data-i18n="config.card_inference">模型检测与输出</span>
             <span class="tau-card-tag">INFERENCE</span>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pConf">检测置信度</label>
+              <label class="tau-label" for="pConf" data-i18n="config.label_conf">检测置信度</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">YOLO 目标检测阈值</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_conf_title">YOLO 目标检测阈值</span>
                     <span class="tau-tt-badge">DEFAULT: 0.25</span>
                   </div>
-                  <div class="tau-tt-desc">车辆与赛车检测置信度。调高防背景误检，调低提升远景微小目标的检出率。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_conf_desc">车辆与赛车检测置信度。调高防背景误检，调低提升远景微小目标的检出率。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 目标检出灵敏度<br>
-                    <span class="tau-tt-label">范围:</span> 0.05 ~ 0.90 (步长 0.05)
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_conf_impact">目标检出灵敏度</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_conf_range">0.05 ~ 0.90 (步长 0.05)</span>
                   </div>
                 </div>
               </span>
@@ -308,45 +313,45 @@
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pScale">解码缩放长边</label>
+              <label class="tau-label" for="pScale" data-i18n="config.label_scale">解码缩放长边</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">推理降采样长边</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_scale_title">推理降采样长边</span>
                     <span class="tau-tt-badge">DEFAULT: 1280</span>
                   </div>
-                  <div class="tau-tt-desc">推理与锐度计算前的降采样分辨率。0 为原始尺寸。分辨率越小处理越快。</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_scale_desc">推理与锐度计算前的降采样分辨率。0 为原始尺寸。分辨率越小处理越快。</div>
                   <div class="tau-tt-meta">
-                    <span class="tau-tt-label">影响:</span> 平衡解码速度与细节识别度<br>
-                    <span class="tau-tt-label">范围:</span> 0 (原图) 或 640 ~ 2560 px
+                    <span class="tau-tt-label" data-i18n="config.tip_label_impact">影响:</span> <span data-i18n="config.tip_scale_impact">平衡解码速度与细节识别度</span><br>
+                    <span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_scale_range">0 (原图) 或 640 ~ 2560 px</span>
                   </div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap">
               <input type="number" id="pScale" class="tau-input" value="1280" min="0" max="4000" step="128">
-              <span class="tau-unit">px</span>
+              <span class="tau-unit" data-i18n="config.unit_px">px</span>
             </div>
           </div>
 
           <div class="tau-field">
             <div class="tau-field-meta">
-              <label class="tau-label" for="pRfKey">Roboflow Key</label>
+              <label class="tau-label" for="pRfKey" data-i18n="config.label_rf_key">Roboflow Key</label>
               <span class="tau-tip-wrap">
                 <span class="tau-info-icon">?</span>
                 <div class="tau-tooltip">
                   <div class="tau-tt-head">
-                    <span class="tau-tt-title">云端推理 API Key</span>
+                    <span class="tau-tt-title" data-i18n="config.tip_rf_key_title">云端推理 API Key</span>
                     <span class="tau-tt-badge">DEFAULT: 留空 (本地)</span>
                   </div>
-                  <div class="tau-tt-desc">可选。填写后调用 Roboflow 云端专用检测模型，留空默认使用本地极速 ONNX 引擎。</div>
-                  <div class="tau-tt-meta"><span class="tau-tt-label">范围:</span> 任意有效 API Key 字符串</div>
+                  <div class="tau-tt-desc" data-i18n="config.tip_rf_key_desc">可选。填写后调用 Roboflow 云端专用检测模型，留空默认使用本地极速 ONNX 引擎。</div>
+                  <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_rf_key_range">任意有效 API Key 字符串</span></div>
                 </div>
               </span>
             </div>
             <div class="tau-input-wrap tau-rf-wrap">
-              <input type="password" id="pRfKey" class="tau-input tau-rf-input" placeholder="留空使用本地 ONNX...">
+              <input type="password" id="pRfKey" class="tau-input tau-rf-input" placeholder="留空使用本地 ONNX..." data-i18n-attr="placeholder:config.placeholder_rf_key">
             </div>
           </div>
 
@@ -354,34 +359,34 @@
             <label class="tau-toggle-label">
               <input type="checkbox" id="pAutocrop" class="tau-checkbox" checked>
               <span class="tau-toggle-custom"></span>
-              <span class="tau-toggle-text">自动裁剪 XMP</span>
+              <span class="tau-toggle-text" data-i18n="config.label_autocrop">自动裁剪 XMP</span>
             </label>
             <span class="tau-tip-wrap">
               <span class="tau-info-icon">?</span>
               <div class="tau-tooltip">
                 <div class="tau-tt-head">
-                  <span class="tau-tt-title">Lightroom 自动构图裁剪</span>
+                  <span class="tau-tt-title" data-i18n="config.tip_autocrop_title">Lightroom 自动构图裁剪</span>
                   <span class="tau-tt-badge">DEFAULT: ON</span>
                 </div>
-                <div class="tau-tt-desc">根据目标检测位置在 XMP sidecar 中写入最佳 3:2 / 2:3 构图裁剪框。</div>
-                <div class="tau-tt-meta"><span class="tau-tt-label">范围:</span> 开启 / 关闭</div>
+                <div class="tau-tt-desc" data-i18n="config.tip_autocrop_desc">根据目标检测位置在 XMP sidecar 中写入最佳 3:2 / 2:3 构图裁剪框。</div>
+                <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
               </div>
             </span>
 
             <label class="tau-toggle-label">
               <input type="checkbox" id="pDryRun" class="tau-checkbox">
               <span class="tau-toggle-custom"></span>
-              <span class="tau-toggle-text">试运行 (Dry-Run)</span>
+              <span class="tau-toggle-text" data-i18n="config.label_dry_run">试运行 (Dry-Run)</span>
             </label>
             <span class="tau-tip-wrap">
               <span class="tau-info-icon">?</span>
               <div class="tau-tooltip">
                 <div class="tau-tt-head">
-                  <span class="tau-tt-title">试运行模式 (Dry-Run)</span>
+                  <span class="tau-tt-title" data-i18n="config.tip_dry_run_title">试运行模式 (Dry-Run)</span>
                   <span class="tau-tt-badge">DEFAULT: OFF</span>
                 </div>
-                <div class="tau-tt-desc">仅在界面展示打分与统计，不修改任何磁盘照片文件或 XMP 元数据。</div>
-                <div class="tau-tt-meta"><span class="tau-tt-label">范围:</span> 开启 / 关闭</div>
+                <div class="tau-tt-desc" data-i18n="config.tip_dry_run_desc">仅在界面展示打分与统计，不修改任何磁盘照片文件或 XMP 元数据。</div>
+                <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
               </div>
             </span>
           </div>
@@ -394,21 +399,21 @@
       <div class="tau-telemetry-left">
         <div class="tau-status-badge">
           <span class="tau-badge-dot"></span>
-          <span id="stageStatus" class="tau-badge-text">就绪</span>
+          <span id="stageStatus" class="tau-badge-text" data-i18n="telemetry.ready">就绪</span>
         </div>
         <div class="tau-stat-pill" id="speedEtaStat">
-          <span class="tau-stat-label">SPEED:</span> <span class="tau-stat-val">--</span>
+          <span class="tau-stat-label" data-i18n="telemetry.speed">SPEED:</span> <span class="tau-stat-val">--</span>
           <span class="tau-stat-sep">·</span>
-          <span class="tau-stat-label">ETA:</span> <span class="tau-stat-val">--</span>
+          <span class="tau-stat-label" data-i18n="telemetry.eta">ETA:</span> <span class="tau-stat-val">--</span>
         </div>
       </div>
 
       <div class="tau-telemetry-right">
-        <span id="frameStat" class="tau-frame-stat">待选目录中...</span>
+        <span id="frameStat" class="tau-frame-stat" data-i18n="telemetry.waiting_dir">待选目录中...</span>
         <div class="tau-filter-tabs">
-          <button class="tau-tab active" data-filter="all">ALL (<span id="countAll">0</span>)</button>
-          <button class="tau-tab tau-tab-keep" data-filter="keep">KEEP ★ (<span id="countKeep">0</span>)</button>
-          <button class="tau-tab tau-tab-reject" data-filter="reject">REJECT ✕ (<span id="countReject">0</span>)</button>
+          <button class="tau-tab active" data-filter="all"><span data-i18n="telemetry.tab_all">ALL</span> (<span id="countAll">0</span>)</button>
+          <button class="tau-tab tau-tab-keep" data-filter="keep"><span data-i18n="telemetry.tab_keep">KEEP ★</span> (<span id="countKeep">0</span>)</button>
+          <button class="tau-tab tau-tab-reject" data-filter="reject"><span data-i18n="telemetry.tab_reject">REJECT ✕</span> (<span id="countReject">0</span>)</button>
         </div>
       </div>
     </section>
@@ -426,13 +431,13 @@
           <table id="photoTable" class="tau-table">
             <thead>
               <tr>
-                <th data-sort="name" class="sortable">FILE NAME <span class="tau-sort-icon">↕</span></th>
-                <th data-sort="rating" class="sortable tau-th-num" style="width: 80px;">RATING <span class="tau-sort-icon">↕</span></th>
-                <th data-sort="sharp" class="sortable tau-th-num" style="width: 75px;">SHARP <span class="tau-sort-icon">↕</span></th>
-                <th data-sort="comp" class="sortable tau-th-num" style="width: 75px;">COMP <span class="tau-sort-icon">↕</span></th>
-                <th data-sort="raw" class="sortable tau-th-num" style="width: 75px;">RAW <span class="tau-sort-icon">↕</span></th>
-                <th data-sort="veto" class="sortable">REASON / VETO <span class="tau-sort-icon">↕</span></th>
-                <th style="width: 80px;" class="tau-th-center">STATUS</th>
+                <th data-sort="name" class="sortable"><span data-i18n="table.col_filename">FILE NAME</span> <span class="tau-sort-icon">↕</span></th>
+                <th data-sort="rating" class="sortable tau-th-num" style="width: 80px;"><span data-i18n="table.col_rating">RATING</span> <span class="tau-sort-icon">↕</span></th>
+                <th data-sort="sharp" class="sortable tau-th-num" style="width: 75px;"><span data-i18n="table.col_sharp">SHARP</span> <span class="tau-sort-icon">↕</span></th>
+                <th data-sort="comp" class="sortable tau-th-num" style="width: 75px;"><span data-i18n="table.col_comp">COMP</span> <span class="tau-sort-icon">↕</span></th>
+                <th data-sort="raw" class="sortable tau-th-num" style="width: 75px;"><span data-i18n="table.col_raw">RAW</span> <span class="tau-sort-icon">↕</span></th>
+                <th data-sort="veto" class="sortable"><span data-i18n="table.col_reason">REASON / VETO</span> <span class="tau-sort-icon">↕</span></th>
+                <th style="width: 80px;" class="tau-th-center" data-i18n="table.col_status">STATUS</th>
               </tr>
             </thead>
             <tbody id="tableBody">
@@ -440,7 +445,7 @@
                 <td colspan="7">
                   <div class="tau-empty-state">
                     <span class="tau-empty-icon">📁</span>
-                    <p>选择待筛选照片目录以加载图像序列</p>
+                    <p data-i18n="table.empty_no_dir">选择待筛选照片目录以加载图像序列</p>
                   </div>
                 </td>
               </tr>
@@ -450,7 +455,7 @@
       </div>
 
       <!-- Draggable Splitter Divider -->
-      <div class="tau-resizer" id="splitResizer" title="左右拖动调整列表与缩略图比例">
+      <div class="tau-resizer" id="splitResizer" title="左右拖动调整列表与缩略图比例" data-i18n-attr="title:workspace.resizer_tip">
         <div class="tau-resizer-line"></div>
       </div>
 
@@ -459,18 +464,18 @@
         <div class="tau-preview-card">
           <div class="tau-preview-header">
             <div class="tau-ph-left">
-              <span class="tau-ph-badge">INSPECTION</span>
-              <span id="previewTitle" class="tau-ph-title">照片预览与检测框</span>
+              <span class="tau-ph-badge" data-i18n="preview.badge_inspection">INSPECTION</span>
+              <span id="previewTitle" class="tau-ph-title" data-i18n="preview.title">照片预览与检测框</span>
             </div>
           </div>
 
           <div class="tau-preview-body" id="previewContainer">
-            <img id="previewImg" alt="缩略图" style="display: none;">
+            <img id="previewImg" alt="缩略图" data-i18n-attr="alt:preview.img_alt" style="display: none;">
             <div id="previewEmpty" class="tau-preview-empty">
               <div class="tau-grid-backdrop"></div>
               <span class="tau-empty-symbol">❖</span>
-              <p class="tau-empty-title">等待选择照片</p>
-              <p class="tau-empty-desc">在左侧列表中点击任意行查看高清缩略图及 AI 目标检测框</p>
+              <p class="tau-empty-title" data-i18n="preview.empty_title">等待选择照片</p>
+              <p class="tau-empty-desc" data-i18n="preview.empty_desc">在左侧列表中点击任意行查看高清缩略图及 AI 目标检测框</p>
             </div>
           </div>
 
@@ -490,9 +495,9 @@
       <div class="tau-log-header">
         <div class="tau-lh-title">
           <span class="tau-pulse-dot tau-dot-cyan"></span>
-          <span>TERMINAL STREAM</span>
+          <span data-i18n="drawer.title">TERMINAL STREAM</span>
         </div>
-        <button id="btnClearLog" class="tau-btn tau-btn-glass tau-btn-xs">CLEAR</button>
+        <button id="btnClearLog" class="tau-btn tau-btn-glass tau-btn-xs" data-i18n="drawer.btn_clear">CLEAR</button>
       </div>
       <pre id="logConsole" class="tau-log-console"></pre>
     </div>
