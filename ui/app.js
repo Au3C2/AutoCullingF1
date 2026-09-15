@@ -112,14 +112,20 @@
         this.currentLang = pref === 'en-US' ? 'en-US' : 'zh-CN';
       }
       document.documentElement.lang = this.currentLang;
+      this.updateSwitchUI();
       this.applyDOM();
+    },
+
+    updateSwitchUI() {
+      const switcher = document.getElementById('langSwitch');
+      if (switcher) {
+        switcher.setAttribute('data-active', this.currentLang);
+      }
     },
 
     async init() {
       await this.loadLocales();
       const saved = localStorage.getItem('ac-ui-lang') || 'auto';
-      const selector = document.getElementById('langSelector');
-      if (selector) selector.value = saved;
       this.setLanguage(saved);
     },
   };
@@ -177,7 +183,7 @@
     logConsole: $('logConsole'),
     btnClearLog: $('btnClearLog'),
     systemPulse: $('systemPulse'),
-    langSelector: $('langSelector'),
+    langSwitch: $('langSwitch'),
   };
 
   // --- Parameter Bindings & Persistence ---
@@ -751,12 +757,29 @@
   async function initUI() {
     await I18N.init();
 
-    if (els.langSelector) {
-      els.langSelector.addEventListener('change', () => {
-        I18N.setLanguage(els.langSelector.value);
+    if (els.langSwitch) {
+      const toggleLang = (target) => {
+        const next = target || (I18N.currentLang === 'zh-CN' ? 'en-US' : 'zh-CN');
+        I18N.setLanguage(next);
         renderTable();
         if (state.selectedPhoto) selectPhoto(state.selectedPhoto);
         updateSpeedAndEta();
+      };
+
+      els.langSwitch.addEventListener('click', (e) => {
+        const opt = e.target.closest('.tau-lang-opt');
+        if (opt && opt.dataset.lang) {
+          toggleLang(opt.dataset.lang);
+        } else {
+          toggleLang();
+        }
+      });
+
+      els.langSwitch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleLang();
+        }
       });
     }
 

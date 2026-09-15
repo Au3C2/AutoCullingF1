@@ -20,6 +20,7 @@ is_win = sys.platform == "win32"
 onedir = os.environ.get("CULL_ONEDIR") == "1"
 
 _MODEL_STAGE = Path("build") / "_bundle_models"
+_ICON_PATH = "src-tauri/icons/icon.ico" if is_win else ("src-tauri/icons/icon.icns" if Path("src-tauri/icons/icon.icns").exists() else None)
 
 
 def _stage_models() -> list[tuple[str, str]]:
@@ -116,6 +117,7 @@ if onedir:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        icon=_ICON_PATH,
     )
     cli_exe = EXE(
         pyz,
@@ -136,6 +138,7 @@ if onedir:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        icon=_ICON_PATH,
     )
     coll = COLLECT(
         exe,
@@ -169,4 +172,5 @@ else:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        icon=_ICON_PATH,
     )

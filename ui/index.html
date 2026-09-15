@@ -41,17 +41,10 @@
         <button id="btnToggleLog" class="tau-btn tau-btn-icon" title="查看运行日志" data-i18n-attr="title:topbar.title_log">
           <span>📜</span>
         </button>
-        <div class="tau-lang-picker" title="Language / 语言">
-          <svg class="tau-globe-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="2" y1="12" x2="22" y2="12"></line>
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-          </svg>
-          <select id="langSelector" class="tau-select tau-lang-select" aria-label="Language / 语言">
-            <option value="auto" data-i18n="topbar.lang_auto">Auto</option>
-            <option value="zh-CN" data-i18n="topbar.lang_zh">CN</option>
-            <option value="en-US" data-i18n="topbar.lang_en">EN</option>
-          </select>
+        <div class="tau-lang-switch" id="langSwitch" role="button" tabindex="0" title="切换语言 (中 / EN)" data-i18n-attr="title:topbar.lang_toggle" aria-label="Language switch: 中 / EN">
+          <span class="tau-lang-opt" data-lang="zh-CN">中</span>
+          <span class="tau-lang-slider"></span>
+          <span class="tau-lang-opt" data-lang="en-US">EN</span>
         </div>
       </div>
     </header>
