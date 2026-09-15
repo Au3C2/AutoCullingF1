@@ -267,8 +267,8 @@ gates pass); performance must be proven on the non-darwin runner.
 
 - Pipeline: `python packaging/build_gui.py` → PyInstaller onedir (`engine.spec`,
   `CULL_ONEDIR=1`) → stage to `src-tauri/resources/engine/` → `tauri build`
-  (`--bundles nsis` on Windows, `app` on darwin) → collect artifacts + `.sha256`
-  into `dist/`. `--skip-engine` (alias `--skip-sidecar`) skips the PyInstaller step.
+  (`--bundles nsis` on Windows, `app` on darwin) → collect artifacts into `dist/`.
+  `--skip-engine` (alias `--skip-sidecar`) skips the PyInstaller step.
 - Install layout is FLAT on both platforms — one directory, no nested `sidecar/`:
   `auto_culling.exe` (GUI) + `auto_culling_cli.exe` (console CLI) +
   `auto_culling_engine.exe` (windowed engine, spawned by the GUI over Stdio JSON
@@ -340,7 +340,7 @@ have been removed.
 3. **release** (`.github/workflows/release.yml`) — tag push `v*` / manual
    dispatch. Per platform: precision gate (`build.py --onedir`) + perf gate +
    GUI build (`build_gui.py`) + warm-start smoke; publishes a draft release
-   with setup/portable/dmg + per-artifact `.sha256`. CLI is bundled inside
+   with setup/portable/dmg. CLI is bundled inside
    every GUI package. Release re-runs its own precision/perf gates.
 
 Shared facts:

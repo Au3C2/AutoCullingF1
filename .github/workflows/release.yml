@@ -98,7 +98,6 @@ jobs:
           if-no-files-found: error
           path: |
             dist/AutoCulling_*.dmg*
-            dist/*.sha256
             build/ci_*.json
 
   build-windows:
@@ -181,7 +180,6 @@ jobs:
           path: |
             dist/AutoCulling_*.exe*
             dist/AutoCulling_*.zip*
-            dist/*.sha256
             build/ci_*.json
 
   create-draft-release:
@@ -202,8 +200,7 @@ jobs:
           find artifacts -name 'AutoCulling_*.dmg' -exec cp -v {} release_assets/ \;
           find artifacts -name 'AutoCulling_*.exe' -exec cp -v {} release_assets/ \;
           find artifacts -name 'AutoCulling_*.zip' -exec cp -v {} release_assets/ \;
-          find artifacts -name '*.sha256' -exec cp -v {} release_assets/ \;
-          echo "Staged release assets:"; ls -lh release_assets/; cat release_assets/*.sha256 2>/dev/null || true
+          echo "Staged release assets:"; ls -lh release_assets/
       - name: Derive tag + what changed vs last release
         id: tag
         run: |
@@ -262,8 +259,6 @@ jobs:
             package (same engine, console entry point):
             - Windows: `<install dir>\auto_culling_cli.exe`
             - macOS:   `AutoCulling.app/Contents/Resources/auto_culling_cli`
-
-            Each package ships with a `.sha256` — verify with `shasum -a 256 <file>` / `Get-FileHash -Algorithm SHA256`.
 
             ```powershell
             # Windows — CLI batch culling (portable unzip or default install dir)

@@ -109,6 +109,18 @@ def main() -> int:
     print(f"Engine: {engine.name}")
     print(f"Bundle: {total_mb:.1f} MiB ({artifact_dir / 'lib'}/)")
     print(f"\nUse in gates:\n  CULL_EXE={cli}")
+
+    # On Windows, notify Shell of association/icon change to refresh Explorer cache
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            shell32 = ctypes.OleDLL("shell32")
+            shell32.SHChangeNotify.restype = None
+            # SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0x0000
+            shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
+        except Exception:
+            pass
+
     return 0
 
 

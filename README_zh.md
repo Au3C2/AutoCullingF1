@@ -30,9 +30,6 @@
 | Windows | `AutoCulling_v*_win_x64_portable.zip` | 免安装——解压到任意位置，运行 `auto_culling.exe` |
 | macOS（Apple Silicon） | `AutoCulling_v*_macos_arm64.dmg` | 打开 DMG，将 `AutoCulling.app` 拖入 Applications |
 
-每个安装包都附带 `.sha256` 校验文件——用 `Get-FileHash -Algorithm SHA256`（Windows）
-或 `shasum -a 256`（macOS）验证。
-
 启动 `auto_culling.exe`（Windows）或 `AutoCulling.app`（macOS），选择相机直出的
 文件夹并运行——星级、拒绝标记与裁剪参数随扫描进度实时写入。应用内置完整 AI 引擎，
 安装目录为**平铺自包含结构**：`auto_culling.exe`（GUI）、`auto_culling_cli.exe`
@@ -91,7 +88,7 @@ python packaging/build_gui.py    # 调试 GUI 时可加 --skip-engine 跳过 PyI
 - **Windows**：`AutoCulling_v*_win_x64_setup.exe`（NSIS）+ `AutoCulling_v*_win_x64_portable.zip`
 - **macOS**：`AutoCulling_v*_macos_arm64.dmg` + `AutoCulling.app`
 
-每个产物自动生成 `.sha256`。CI（`.github/workflows/guards-gui.yml`）在每次 push
+CI（`.github/workflows/gui-test.yml`）在每次 push
 时构建相同的安装包并对其运行安装/启动测试。
 
 ### 常用参数
