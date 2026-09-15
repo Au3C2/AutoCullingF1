@@ -10,9 +10,7 @@
     "btn_export_csv": "导出 CSV",
     "title_export_csv": "导出打分统计 CSV",
     "title_log": "查看运行日志",
-    "lang_auto": "🌐 自动 (系统)",
-    "lang_zh": "🇨🇳 简体中文",
-    "lang_en": "🇺🇸 English"
+    "lang_toggle": "切换语言 (中 / EN)"
   },
   "config": {
     "panel_title": "ENGINE CONFIG",
