@@ -9,7 +9,6 @@ Produces:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import platform
 import re
@@ -139,14 +138,6 @@ def build_tauri_gui() -> None:
     subprocess.run([*tauri_cli, "--bundles", bundle_type], cwd=str(ROOT), check=True)
 
 
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def build_macos_dmg(dist_dir: Path, ver: str) -> Path | None:
     """Deterministic DMG assembly from a pre-baked Finder layout.
 
@@ -273,13 +264,6 @@ def organize_dist_artifacts() -> list[Path]:
                         z.write(f, str(f.relative_to(engine_stage)))
             print(f"Output Portable ZIP: {portable_zip} ({portable_zip.stat().st_size / 1024 / 1024:.1f} MB)")
             collected_artifacts.append(portable_zip)
-
-    # Generate SHA256 checksum files
-    for artifact in collected_artifacts:
-        sha = sha256_file(artifact)
-        sha_file = dist_dir / f"{artifact.name}.sha256"
-        sha_file.write_text(f"{sha}  {artifact.name}\n", encoding="utf-8")
-        print(f"SHA256: {sha_file.name} -> {sha}")
 
     return collected_artifacts
 

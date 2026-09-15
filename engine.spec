@@ -12,15 +12,25 @@ import shutil
 import sys
 from pathlib import Path
 
-is_win = sys.platform == "win32"
+is_win = sys.platform == "win32" or sys.platform == "cygwin" or os.name == "nt"
 # CULL_ONEDIR=1 produces the directory form. The onefile form re-extracts the
 # whole 160 MB bundle to a fresh temp dir on EVERY launch (15-25 s macOS
 # signature-verification tax; inode-keyed cache never hits across runs). The
 # GUI ships the onedir form via Tauri resources — instant start.
 onedir = os.environ.get("CULL_ONEDIR") == "1"
 
+_SPEC_ROOT = Path(SPECPATH).resolve() if "SPECPATH" in globals() else Path(".").resolve()
+_ICO_PATH = _SPEC_ROOT / "src-tauri" / "icons" / "icon.ico"
+_ICNS_PATH = _SPEC_ROOT / "src-tauri" / "icons" / "icon.icns"
+
+if is_win:
+    _ICON_PATH = str(_ICO_PATH) if _ICO_PATH.exists() else None
+elif sys.platform == "darwin":
+    _ICON_PATH = str(_ICNS_PATH) if _ICNS_PATH.exists() else (str(_ICO_PATH) if _ICO_PATH.exists() else None)
+else:
+    _ICON_PATH = None
+
 _MODEL_STAGE = Path("build") / "_bundle_models"
-_ICON_PATH = "src-tauri/icons/icon.ico" if is_win else ("src-tauri/icons/icon.icns" if Path("src-tauri/icons/icon.icns").exists() else None)
 
 
 def _stage_models() -> list[tuple[str, str]]:
