@@ -32,9 +32,6 @@ Download a package from [GitHub Releases](https://github.com/Au3C2/AutoCullingF1
 | Windows | `AutoCulling_v*_win_x64_portable.zip` | No install — unzip anywhere and run `auto_culling.exe` |
 | macOS (Apple Silicon) | `AutoCulling_v*_macos_arm64.dmg` | Open the DMG and drag `AutoCulling.app` to Applications |
 
-Every package ships with a `.sha256` sidecar — verify with
-`Get-FileHash -Algorithm SHA256` (Windows) or `shasum -a 256` (macOS).
-
 Launch `auto_culling.exe` (Windows) or `AutoCulling.app` (macOS), pick the folder
 straight off the camera, and run — ratings, reject flags and crop parameters are
 written as the scan progresses. The app bundles the full AI engine, so the install
@@ -96,7 +93,7 @@ and collects the artifacts into `dist/`:
 - **Windows**: `AutoCulling_v*_win_x64_setup.exe` (NSIS) + `AutoCulling_v*_win_x64_portable.zip`
 - **macOS**: `AutoCulling_v*_macos_arm64.dmg` + `AutoCulling.app`
 
-Each artifact gets a `.sha256` automatically. CI (`.github/workflows/guards-gui.yml`)
+CI (`.github/workflows/gui-test.yml`)
 builds the same packages on every push and runs the install/launch tests against them.
 
 ### Useful options
