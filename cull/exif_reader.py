@@ -157,10 +157,12 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             with ThreadPoolExecutor(max_workers=nproc) as pool:
                 shard_results = list(pool.map(_run_shard, chunks))
             return [entry for shard in shard_results for entry in shard]
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
         pass  # fall through to the -@ - path, which raises properly
 
     # Fallback: very large batches via -@ - (read filenames from stdin).
+    # OSError (e.g. WinError 206 filename-too-long on low-core Windows where
+    # a single shard carries the whole batch) must also fall through.
     cmd = [*args, "-@", "-"]
 
     # Build newline-separated file list for stdin
@@ -242,9 +244,14 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def read_exif(paths: list[Path]) -> list[ExifData]:
     """Read EXIF metadata for a list of image paths via exiftool.
-    Processes in batches of 500 to provide progress feedback.
+    Processes in batches of 400 to provide progress feedback.
+
+    400 (not 500) keeps every batch inside the <=400-file branch of
+    _run_exiftool, so each batch is sharded across parallel exiftool
+    processes — a sequential single-process 500-file batch was the dominant
+    GUI scan latency on Windows (~10-20 ms/file per RAW).
     """
-    batch_size = 500
+    batch_size = 400
     all_raw: list[dict] = []
     
     for i in range(0, len(paths), batch_size):

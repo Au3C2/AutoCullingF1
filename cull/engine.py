@@ -123,7 +123,16 @@ class CullingEngine:
             if progress_callback:
                 progress_callback("Renaming images...", 0.2)
             new_map = rename_images(self.image_paths, dry_run=self.config.dry_run)
-            self.image_paths = sorted(list(new_map.values()))
+            if not self.config.dry_run:
+                self.image_paths = sorted(list(new_map.values()))
+                if self.config.log_full_paths:
+                    from cull.protocol import emit
+                    emit({
+                        "type": "renamed",
+                        "map": {str(k): str(v) for k, v in new_map.items() if k != v}
+                    })
+            else:
+                log.info("[dry-run] Simulated rename for %d files; physical files remain unchanged", len(new_map))
 
         if cancel_event and cancel_event.is_set():
             return
