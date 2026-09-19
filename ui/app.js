@@ -158,6 +158,7 @@
 
     // Feature 4: Table chunked slice & Anti-race
     previewSeq: 0,
+    previewLoadedPath: null,
     chunkSize: 120,
     visibleChunks: 1,
 
@@ -657,6 +658,7 @@
       resetZoom();
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
+      state.previewLoadedPath = null;
       els.previewEmpty.style.display = 'flex';
       els.previewTitle.textContent = I18N.t('preview.title');
       els.previewScoreDetails.style.display = 'none';
@@ -1262,17 +1264,28 @@
 
   function updateTableRow(item) {
     if (state.viewMode === 'grouped') {
-      // In grouped view, scores affect group headers and stats, so batch-rerender table
-      renderTable();
+      // Scores also affect the group header stats, but a full table rebuild
+      // per frame event (17-37 fps) is far too expensive. Update the row in
+      // place like flat mode, then coalesce header refresh into one delayed
+      // renderTable. A missing row is normal here (collapsed group or beyond
+      // the rendered chunk) — the coalesced refresh restores consistency.
+      updateTableRowFlatInPlace(item, false);
+      scheduleGroupedRefresh();
       if (state.selectedPhoto && state.selectedPhoto.path === item.path) {
         selectPhoto(item, false);
       }
       return;
     }
 
+    updateTableRowFlatInPlace(item, true);
+  }
+
+  function updateTableRowFlatInPlace(item, renderIfMissing) {
     const row = document.getElementById(rowIdFor(item));
     if (!row) {
-      renderTable();
+      if (renderIfMissing) {
+        renderTable();
+      }
       return;
     }
 
@@ -1292,10 +1305,18 @@
     const newRow = temp.firstElementChild;
     row.replaceWith(newRow);
     newRow.classList.add('flash');
+  }
 
-    if (state.selectedPhoto && state.selectedPhoto.path === item.path) {
-      selectPhoto(item, false);
-    }
+  // Coalesced refresh of grouped-view headers/stats: at most one pending
+  // renderTable, triggered after the burst of frame events subsides.
+  function scheduleGroupedRefresh() {
+    if (state.groupedRefreshTimer) return;
+    state.groupedRefreshTimer = setTimeout(() => {
+      state.groupedRefreshTimer = null;
+      if (state.viewMode === 'grouped') {
+        renderTable();
+      }
+    }, 400);
   }
 
   // --- Feature 3: Pan & Zoom Interactions ---
@@ -1418,6 +1439,12 @@
     const currentSeq = ++state.previewSeq;
     const requestedPath = item.path;
 
+    // Same photo already rendered: skip the decode IPC (re-scoring a selected
+    // photo used to re-fetch the 640px preview on every frame event).
+    if (state.previewLoadedPath === requestedPath && els.previewImg.style.display === 'block') {
+      return;
+    }
+
     try {
       const res = await invokeTauri('preview', { path: requestedPath, size: 640 });
       // Discard stale in-flight responses
@@ -1430,6 +1457,7 @@
         els.previewImg.src = src;
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
+        state.previewLoadedPath = requestedPath;
       } else {
         els.previewImg.style.display = 'none';
         els.previewEmpty.style.display = 'flex';
@@ -1532,6 +1560,9 @@
 
   function manuallySetRating(photo, newRating) {
     if (!photo) return;
+    // Counter deltas must be symmetric: pending / decode_failed items are
+    // counted in neither total, everything already scored is counted.
+    const wasCounted = photo.status !== 'pending' && photo.status !== 'decode_failed';
     const oldRating = photo.rating;
     photo.rating = newRating;
     photo.status = 'scored';
@@ -1541,13 +1572,12 @@
       photo.veto = '';
     }
 
-    if (oldRating <= 0 && newRating > 0) {
-      state.keepCount++;
-      if (oldRating === -1) state.rejectCount = Math.max(0, state.rejectCount - 1);
-    } else if (oldRating > 0 && newRating <= 0) {
-      state.keepCount = Math.max(0, state.keepCount - 1);
-      state.rejectCount++;
-    }
+    const wasKeep = wasCounted && oldRating > 0;
+    const wasReject = wasCounted && oldRating <= 0;
+    const isKeep = newRating > 0;
+    const isReject = newRating <= 0;
+    state.keepCount = Math.max(0, state.keepCount + (isKeep ? 1 : 0) - (wasKeep ? 1 : 0));
+    state.rejectCount = Math.max(0, state.rejectCount + (isReject ? 1 : 0) - (wasReject ? 1 : 0));
 
     els.countKeep.textContent = state.keepCount;
     els.countReject.textContent = state.rejectCount;

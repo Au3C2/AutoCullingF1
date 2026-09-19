@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from cull.engine import CullingEngine, EngineConfig
 from cull.protocol import JsonLinesHandler, emit
