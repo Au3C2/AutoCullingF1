@@ -810,7 +810,11 @@
     listenTauri('scan_meta', ({ payload }) => {
       // Stale worker guard: a slow EXIF pass for a PREVIOUS directory must
       // not clear the current scan's pending flag or merge into its list.
-      if (payload && payload.dir && state.inputDir && payload.dir !== state.inputDir) return;
+      // Trailing separators are normalized: the engine echoes str(Path(dir))
+      // which strips them, while a hand-typed input may keep them.
+      const reqDir = payload && payload.dir ? String(payload.dir).replace(/[\\/]+$/, '') : '';
+      const curDir = state.inputDir ? String(state.inputDir).replace(/[\\/]+$/, '') : '';
+      if (reqDir && curDir && reqDir !== curDir) return;
       // The authoritative EXIF pass is over (success or not) — grouped view
       // may leave the flat hold and use engine groups / fallback clustering.
       state.scanPending = false;
@@ -1471,14 +1475,17 @@
       tr.querySelector('td.tau-gh-cell').innerHTML = buildGroupHeaderCellHtml(entry, isCollapsed);
     }
 
-    // Winner badges: clear and re-place on the current best scored frame.
+    // Winner badges: clear and re-place on the current best scored frame,
+    // anchored AFTER the format tag chips to match buildRowHtml's order.
     els.tableBody.querySelectorAll('.tau-winner-badge').forEach((el) => el.remove());
     for (const entry of clusters) {
       if (entry.type !== 'burst_header' || !entry.winnerPath) continue;
       const row = document.getElementById(rowIdFor({ path: entry.winnerPath }));
-      const nameText = row && row.querySelector('.tau-fname-text');
-      if (nameText) {
-        nameText.insertAdjacentHTML('afterend',
+      if (!row) continue;
+      const chips = row.querySelectorAll('.tau-fmt-tag');
+      const anchor = chips.length ? chips[chips.length - 1] : row.querySelector('.tau-fname-text');
+      if (anchor) {
+        anchor.insertAdjacentHTML('afterend',
           `<span class="tau-winner-badge">${I18N.t('burst.winner_badge')}</span>`);
       }
     }
