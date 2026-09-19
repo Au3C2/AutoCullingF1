@@ -5,8 +5,10 @@ cull_photos.py — Rule-based F1 photo culling pipeline CLI.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import logging
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -189,6 +191,45 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
         except Exception:
             pass
 
+    def _resolve_shot_meta(path: Path, exif_data: Any | None) -> tuple[int | None, str | None]:
+        # Tier 1: Real EXIF datetime
+        if exif_data and getattr(exif_data, "datetime_original", None):
+            dt = exif_data.datetime_original
+            return int(dt.timestamp() * 1000), dt.strftime("%H:%M:%S.%f")[:-3]
+
+        # Tier 2: Filename pattern matching
+        name = path.stem
+        # Pattern 1: YYYYMMDD_HHMMSS_mmm or YYYYMMDD-HHMMSS-mmm
+        m1 = re.search(r"(\d{4})[_-]?(\d{2})[_-]?(\d{2})[_-](\d{2})(\d{2})(\d{2})[_-](\d{1,3})", name)
+        if m1:
+            Y, M, D, h, m_m, s, ms = m1.groups()
+            try:
+                dt = datetime(int(Y), int(M), int(D), int(h), int(m_m), int(s), int(ms.ljust(3, "0")[:3]) * 1000)
+                return int(dt.timestamp() * 1000), dt.strftime("%H:%M:%S.%f")[:-3]
+            except Exception:
+                pass
+
+        # Pattern 2: YYYYMMDD_HHMMSS
+        m2 = re.search(r"(\d{4})[_-]?(\d{2})[_-]?(\d{2})[_-](\d{2})(\d{2})(\d{2})", name)
+        if m2:
+            Y, M, D, h, m_m, s = m2.groups()
+            try:
+                dt = datetime(int(Y), int(M), int(D), int(h), int(m_m), int(s))
+                return int(dt.timestamp() * 1000), dt.strftime("%H:%M:%S")
+            except Exception:
+                pass
+
+        # Tier 3: File system stat fallback
+        try:
+            st = path.stat()
+            mtime = getattr(st, "st_birthtime", st.st_mtime)
+            dt = datetime.fromtimestamp(mtime)
+            return int(dt.timestamp() * 1000), dt.strftime("%H:%M:%S")
+        except Exception:
+            pass
+
+        return None, None
+
     def do_scan(cmd: dict) -> None:
         raw_dir = cmd.get("dir") or (str(input_dir) if input_dir else "")
         if not raw_dir:
@@ -198,12 +239,48 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
         recursive = bool(cmd.get("recursive", args.recursive))
         try:
             shots, _standalone = CullingEngine.collect_shots(directory, recursive)
-            # Full paths (not basenames) — recursive folders can contain the
-            # same filename twice and a basename key would lose entries.
+            # Read EXIF metadata for real timestamps across all formats (ARW, HEIF, JPG, NEF)
+            items = []
+            try:
+                from cull.exif_reader import read_exif, group_bursts
+                # Exclude empty 0-byte files from exiftool call to prevent exiftool process failure
+                valid_shots = [p for p in shots if p.is_file() and p.stat().st_size > 0]
+                exif_list = read_exif(valid_shots) if valid_shots else []
+                exif_map = {e.path: e for e in exif_list}
+
+                # Authoritative burst grouping: run the engine's group_bursts on
+                # the EXIF just read so the GUI displays engine groups instead
+                # of re-implementing the clustering client-side.
+                group_map: dict[Path, str] = {}
+                try:
+                    for g in group_bursts(exif_list):
+                        for frame in g.frames:
+                            group_map[frame] = g.group_id
+                except Exception as e_group:
+                    log.debug("Scan burst grouping failed: %s", e_group)
+
+                for p in shots:
+                    e = exif_map.get(p)
+                    ts, time_str = _resolve_shot_meta(p, e)
+                    items.append({
+                        "path": str(p),
+                        "name": p.name,
+                        "timestamp": ts,
+                        "time_str": time_str,
+                        "burst_group": group_map.get(p),
+                    })
+            except Exception as e_exif:
+                log.debug("Scan EXIF read failed, falling back to tiered meta: %s", e_exif)
+                items = []
+                for p in shots:
+                    ts, time_str = _resolve_shot_meta(p, None)
+                    items.append({"path": str(p), "name": p.name, "timestamp": ts, "time_str": time_str})
+
             emit({"type": "scanned", "dir": str(directory),
                   "count": len(shots),
                   "total": len(shots),
-                  "paths": [str(p) for p in shots]})
+                  "paths": [str(p) for p in shots],
+                  "items": items})
         except Exception as exc:
             emit({"type": "scan_error", "message": str(exc)})
 
