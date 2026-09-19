@@ -11,7 +11,7 @@ camera: it groups burst sequences, scores every frame with a multi-stage AI pipe
 keeps the best shots per burst, and writes Lightroom-compatible star ratings, reject
 flags and auto-crops — no manual triage required.
 
-![Auto-Culling Desktop GUI Interface](docs/assets/gui_demo.png)
+![Auto-Culling Desktop GUI Interface](docs/assets/gui_demo_en.png)
 
 - **Input**: a folder straight off the camera — Sony ARW, Nikon NEF, Canon CR2/CR3,
   Fuji RAF, Olympus ORF, Panasonic RW2, HEIF (`.hif/.heif/.heic`), JPEG, PNG, TIFF

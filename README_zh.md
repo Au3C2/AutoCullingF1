@@ -10,7 +10,7 @@
 逐帧多阶段 AI 评分、每组精选，并直接写入 Lightroom 兼容的星级/拒绝标记与自动裁剪
 参数——无需人工初筛。
 
-![Auto-Culling 桌面 GUI 界面](docs/assets/gui_demo.png)
+![Auto-Culling 桌面 GUI 界面](docs/assets/gui_demo_zh.png)
 
 - **输入**：相机直出文件夹——索尼 ARW、尼康 NEF、佳能 CR2/CR3、富士 RAF、奥之心 ORF、
   松下 RW2、HEIF（`.hif/.heif/.heic`）、JPEG、PNG、TIFF
