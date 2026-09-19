@@ -256,4 +256,27 @@ assert.deepStrictEqual(
   'Backend grouping must be rename-invariant',
 );
 
+// --- Case 9: BEST winner only among SCORED frames ---
+// Regression: after a reopen+rescan every frame is pending with raw=0; the
+// old loop (maxScore=-1, score=0>-1) pinned the BEST badge on the FIRST
+// frame of every group. Pending/decode-failed frames must never win, and an
+// all-pending group must have no winner at all.
+const pendingPhotos = [
+  { name: 'DSC001.ARW', path: '/p/DSC001.ARW', timestamp: 1000, burstGroup: 'burst_0001', raw: 0, rating: 0, status: 'pending' },
+  { name: 'DSC002.ARW', path: '/p/DSC002.ARW', timestamp: 1100, burstGroup: 'burst_0001', raw: 0, rating: 0, status: 'pending' },
+];
+const pendingResult = computeBurstClusters(pendingPhotos);
+assert.strictEqual(pendingResult[0].type, 'burst_header');
+assert.strictEqual(pendingResult[0].winnerPath, null, 'All-pending group must have no BEST winner');
+
+const mixedScorePhotos = [
+  { name: 'DSC001.ARW', path: '/m/DSC001.ARW', timestamp: 1000, burstGroup: 'burst_0001', raw: 0, rating: 0, status: 'pending' },
+  { name: 'DSC002.ARW', path: '/m/DSC002.ARW', timestamp: 1100, burstGroup: 'burst_0001', raw: 4.2, rating: 5 },
+  { name: 'DSC003.ARW', path: '/m/DSC003.ARW', timestamp: 1200, burstGroup: 'burst_0001', raw: 3.9, rating: 3 },
+  { name: 'DSC004.ARW', path: '/m/DSC004.ARW', timestamp: 1300, burstGroup: 'burst_0001', raw: 9.9, rating: 0, status: 'decode_failed' },
+];
+const mixedResult = computeBurstClusters(mixedScorePhotos);
+assert.strictEqual(mixedResult[0].winnerPath, '/m/DSC002.ARW',
+  'Winner must be the best SCORED frame; pending and decode_failed frames are excluded');
+
 console.log('OK Feature 6 test_grouping_logic.js passed successfully.');

@@ -242,9 +242,14 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def read_exif(paths: list[Path]) -> list[ExifData]:
     """Read EXIF metadata for a list of image paths via exiftool.
-    Processes in batches of 500 to provide progress feedback.
+    Processes in batches of 400 to provide progress feedback.
+
+    400 (not 500) keeps every batch inside the <=400-file branch of
+    _run_exiftool, so each batch is sharded across parallel exiftool
+    processes — a sequential single-process 500-file batch was the dominant
+    GUI scan latency on Windows (~10-20 ms/file per RAW).
     """
-    batch_size = 500
+    batch_size = 400
     all_raw: list[dict] = []
     
     for i in range(0, len(paths), batch_size):

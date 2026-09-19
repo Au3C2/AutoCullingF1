@@ -499,8 +499,12 @@ async fn get_optimal_workers() -> Result<u32, String> {
     #[cfg(target_os = "windows")]
     {
         // On Windows (e.g. Ryzen 5700X 8C16T), query physical cores via PowerShell or fallback to SMT heuristic
+        use std::os::windows::process::CommandExt;
         let output = Command::new("powershell")
             .args(["-NoProfile", "-Command", "(Get-CimInstance Win32_Processor).NumberOfCores"])
+            // CREATE_NO_WINDOW: without this the console host flashes briefly
+            // on app startup (the query takes ~1 s before the window closes).
+            .creation_flags(0x08000000)
             .output()
             .ok()
             .and_then(|out| String::from_utf8(out.stdout).ok())

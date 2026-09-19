@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import logging
+import os
 import platform
 import re
 import subprocess
@@ -136,6 +137,27 @@ def _build_config(args: argparse.Namespace, input_dir: Path) -> EngineConfig:
     return config
 
 
+def _sibling_ext_index(directory: Path, recursive: bool) -> dict[tuple[str, str], set[str]]:
+    """One os.walk pass over *directory*: (parent dir, lowercase stem) → set
+    of lowercase file extensions sharing that stem.
+
+    The engine collapses RAW+cooked pairs onto the cooked file, so the shot
+    list alone cannot tell the GUI which formats exist on disk. This index
+    restores that (e.g. DSC00827.heif + DSC00827.ARW + DSC00827.xmp) so the
+    GUI can render one format tag per sibling format.
+    """
+    index: dict[tuple[str, str], set[str]] = {}
+    for root, _dirs, files in os.walk(directory):
+        for fname in files:
+            stem, dot, ext = fname.rpartition(".")
+            if not dot or not ext:
+                continue
+            index.setdefault((root.lower(), stem.lower()), set()).add(ext.lower())
+        if not recursive:
+            break
+    return index
+
+
 def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
     """Resident JSON Lines engine for the Tauri GUI."""
     import base64
@@ -240,48 +262,67 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
         recursive = bool(cmd.get("recursive", args.recursive))
         try:
             shots, _standalone = CullingEngine.collect_shots(directory, recursive)
-            # Read EXIF metadata for real timestamps across all formats (ARW, HEIF, JPG, NEF)
+            # Sibling format index: one fast walk, no file reads — lets the GUI
+            # show every format present per shot ([HEIF][RAW][XML], ...).
+            ext_index = _sibling_ext_index(directory, recursive)
+
+            def _sibling_exts(p: Path) -> list[str]:
+                key = (str(p.parent).lower(), p.stem.lower())
+                exts = ext_index.get(key)
+                return sorted(exts) if exts else [p.suffix.lower()]
+
+            # Phase 1 — emit the file list IMMEDIATELY with fast metadata
+            # (filename pattern / stat fallback) so the GUI renders the photo
+            # table without waiting on exiftool. For a 10k-file directory the
+            # EXIF pass below takes tens of seconds; blocking the list behind
+            # it made the GUI appear frozen after a drag-and-drop.
             items = []
-            try:
-                from cull.exif_reader import read_exif, group_bursts
-                # Exclude empty 0-byte files from exiftool call to prevent exiftool process failure
-                valid_shots = [p for p in shots if p.is_file() and p.stat().st_size > 0]
-                exif_list = read_exif(valid_shots) if valid_shots else []
-                exif_map = {e.path: e for e in exif_list}
-
-                # Authoritative burst grouping: run the engine's group_bursts on
-                # the EXIF just read so the GUI displays engine groups instead
-                # of re-implementing the clustering client-side.
-                group_map: dict[Path, str] = {}
-                try:
-                    for g in group_bursts(exif_list):
-                        for frame in g.frames:
-                            group_map[frame] = g.group_id
-                except Exception as e_group:
-                    log.debug("Scan burst grouping failed: %s", e_group)
-
-                for p in shots:
-                    e = exif_map.get(p)
-                    ts, time_str = _resolve_shot_meta(p, e)
-                    items.append({
-                        "path": str(p),
-                        "name": p.name,
-                        "timestamp": ts,
-                        "time_str": time_str,
-                        "burst_group": group_map.get(p),
-                    })
-            except Exception as e_exif:
-                log.debug("Scan EXIF read failed, falling back to tiered meta: %s", e_exif)
-                items = []
-                for p in shots:
-                    ts, time_str = _resolve_shot_meta(p, None)
-                    items.append({"path": str(p), "name": p.name, "timestamp": ts, "time_str": time_str})
-
+            for p in shots:
+                ts, time_str = _resolve_shot_meta(p, None)
+                items.append({"path": str(p), "name": p.name, "timestamp": ts,
+                              "time_str": time_str, "exts": _sibling_exts(p)})
             emit({"type": "scanned", "dir": str(directory),
                   "count": len(shots),
                   "total": len(shots),
                   "paths": [str(p) for p in shots],
                   "items": items})
+
+            # Phase 2 — EXIF timestamps + authoritative burst grouping in the
+            # background; the result arrives as a separate 'scan_meta' event
+            # that the GUI merges in place (no list reset, no scroll jump).
+            def _exif_worker() -> None:
+                try:
+                    from cull.exif_reader import read_exif, group_bursts
+                    # Exclude empty 0-byte files from exiftool call to prevent exiftool process failure
+                    valid_shots = [p for p in shots if p.is_file() and p.stat().st_size > 0]
+                    exif_list = read_exif(valid_shots) if valid_shots else []
+                    exif_map = {e.path: e for e in exif_list}
+
+                    group_map: dict[Path, str] = {}
+                    try:
+                        for g in group_bursts(exif_list):
+                            for frame in g.frames:
+                                group_map[frame] = g.group_id
+                    except Exception as e_group:
+                        log.debug("Scan burst grouping failed: %s", e_group)
+
+                    meta_items = []
+                    for p in shots:
+                        e = exif_map.get(p)
+                        ts, time_str = _resolve_shot_meta(p, e)
+                        meta_items.append({
+                            "path": str(p),
+                            "timestamp": ts,
+                            "time_str": time_str,
+                            "burst_group": group_map.get(p),
+                            "exts": _sibling_exts(p),
+                        })
+                    emit({"type": "scan_meta", "dir": str(directory), "items": meta_items})
+                except Exception as e_exif:
+                    log.debug("Scan EXIF read failed, keeping tiered meta: %s", e_exif)
+                    emit({"type": "scan_meta", "dir": str(directory), "items": []})
+
+            threading.Thread(target=_exif_worker, daemon=True).start()
         except Exception as exc:
             emit({"type": "scan_error", "message": str(exc)})
 

@@ -141,6 +141,12 @@
 
     // Feature 6: View mode & burst grouping
     viewMode: localStorage.getItem('ac-view-mode') || 'grouped', // 'grouped' | 'flat'
+    // True between the fast 'scanned' event and the async 'scan_meta' event
+    // (engine EXIF + authoritative burst groups). While pending, grouped view
+    // renders FLAT: the client-side fallback clustering would otherwise show
+    // wrong groups (filename-less cameras fall back to identical file mtimes)
+    // that visibly re-shuffle seconds later when scan_meta lands.
+    scanPending: false,
     collapsedGroups: new Set(),
 
     // Feature 2: Collapsible config
@@ -156,11 +162,9 @@
       startY: 0,
     },
 
-    // Feature 4: Table chunked slice & Anti-race
+    // Feature 4: Anti-race preview tracker
     previewSeq: 0,
     previewLoadedPath: null,
-    chunkSize: 120,
-    visibleChunks: 1,
 
     // Feature 7: Context menu
     contextPhoto: null,
@@ -611,6 +615,7 @@
             timestamp: it.timestamp || null,
             timeStr: it.time_str || null,
             burstGroup: it.burst_group || null,
+            exts: Array.isArray(it.exts) ? it.exts : null,
             rating: 0,
             sharp: 0,
             comp: 0,
@@ -646,7 +651,7 @@
       state.keepCount = 0;
       state.rejectCount = 0;
       state.failedCount = 0;
-      state.visibleChunks = 1;
+      state.scanPending = true;
 
       els.stageStatus.textContent = I18N.t('telemetry.photos_discovered', { count });
       els.frameStat.textContent = I18N.t('telemetry.photos_pending', { count });
@@ -782,8 +787,46 @@
 
     listenTauri('scan_error', ({ payload }) => {
       const msg = payload && payload.message ? payload.message : JSON.stringify(payload);
+      state.scanPending = false;
       appendLog(`[Scan Error] ${msg}`);
       els.stageStatus.textContent = I18N.t('telemetry.scan_error', { err: msg });
+    });
+
+    // Phase-2 scan result: engine EXIF timestamps + authoritative burst
+    // groups, computed asynchronously AFTER 'scanned' so the photo list
+    // renders immediately on drag-and-drop. Merged in place — selection,
+    // counters and scroll position are untouched. A run in progress skips
+    // the rebuild: rows stream in via 'frame' events and a full renderTable
+    // would fight the per-frame in-place updates.
+    listenTauri('scan_meta', ({ payload }) => {
+      // The authoritative EXIF pass is over (success or not) — grouped view
+      // may leave the flat hold and use engine groups / fallback clustering.
+      state.scanPending = false;
+      const items = Array.isArray(payload && payload.items) ? payload.items : [];
+      if (items.length === 0) {
+        renderTable();
+        return;
+      }
+      let updated = 0;
+      for (const it of items) {
+        const item = state.photoMap.get(String(it.path));
+        if (!item) continue;
+        if (it.timestamp !== undefined) item.timestamp = it.timestamp;
+        if (it.time_str !== undefined) item.timeStr = it.time_str;
+        if (it.burst_group !== undefined) item.burstGroup = it.burst_group;
+        if (Array.isArray(it.exts) && it.exts.length > 0) item.exts = it.exts;
+        updated++;
+      }
+      if (updated === 0) {
+        renderTable();
+        return;
+      }
+      appendLog(`[Scan] EXIF metadata + burst groups updated (${updated} photos)`);
+      if (state.isRunning) return;
+      const container = els.tableContainer;
+      const prevScrollTop = container ? container.scrollTop : 0;
+      renderTable();
+      if (container) container.scrollTop = prevScrollTop;
     });
 
     listenTauri('export_done', ({ payload }) => {
@@ -891,14 +934,18 @@
   function buildBurstEntry(cluster, groupId) {
     let keep = 0;
     let reject = 0;
-    let best = cluster[0];
+    let best = null;
     let maxScore = -1;
 
     for (const p of cluster) {
       if (p.rating > 0) keep++;
       else if (p.rating <= 0 && p.status !== 'pending') reject++;
 
-      const score = p.raw || 0;
+      // Winner (BEST badge) is only meaningful among SCORED frames. Before
+      // this guard, unscored frames (raw=0 > maxScore=-1) made the FIRST
+      // frame of every group wear a BEST badge right after a rescan.
+      const scored = p.status !== 'pending' && p.status !== 'decode_failed';
+      const score = scored ? (p.raw || 0) : -1;
       if (score > maxScore) {
         maxScore = score;
         best = p;
@@ -1087,7 +1134,7 @@
 
   function getVisiblePhotosList() {
     const filtered = getFilteredPhotos();
-    if (state.viewMode === 'flat') {
+    if (state.viewMode === 'flat' || state.scanPending) {
       return filtered;
     }
 
@@ -1132,12 +1179,23 @@
   }
 
   function renderFlatTable(filtered) {
-    const sliceCount = state.visibleChunks * state.chunkSize;
-    const slice = filtered.slice(0, sliceCount);
-    els.tableBody.innerHTML = slice.map((item) => buildRowHtml(item)).join('');
+    // Render ALL rows. The previous chunked slicing (120 rows per chunk,
+    // grown on scroll) made the scrollbar reflect only the rendered slice,
+    // so it did not track the real list position until the user hit the
+    // bottom. Grouped mode already renders every row; flat mode now does
+    // too — per-frame updates go through updateTableRowFlatInPlace, so the
+    // full rebuild only happens on scan/filter/sort/language changes.
+    els.tableBody.innerHTML = filtered.map((item) => buildRowHtml(item)).join('');
   }
 
   function renderGroupedTable(filtered) {
+    // While the engine's EXIF pass is still running (scanPending), client-side
+    // clustering would produce wrong, mtime-guessed groups that visibly
+    // re-shuffle when scan_meta lands — hold the flat layout instead.
+    if (state.scanPending) {
+      renderFlatTable(filtered);
+      return;
+    }
     const clusters = computeBurstClusters(filtered);
     let html = '';
 
@@ -1198,6 +1256,46 @@
     return `row-${item.path.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   }
 
+  // Display format tag for the filename cell. Mirrors the engine's format
+  // sets (cull/loader.py RAW_EXTS / COOKED_EXTS); camera RAW families
+  // collapse into a single "RAW" tag so the list reads by format class, not
+  // by brand-specific extension.
+  const FORMAT_TAG_MAP = {
+    arw: 'RAW', nef: 'RAW', cr2: 'RAW', cr3: 'RAW',
+    orf: 'RAW', rw2: 'RAW', raf: 'RAW', dng: 'RAW',
+    hif: 'HEIF', heif: 'HEIF', heic: 'HEIC',
+    jpg: 'JPG', jpeg: 'JPG', png: 'PNG', tif: 'TIFF', tiff: 'TIFF',
+    xmp: 'XML', xml: 'XML',
+  };
+  const RAW_FORMAT_TAG = 'RAW';
+
+  function formatTagFor(name) {
+    const m = /\.([a-zA-Z0-9]+)$/.exec(String(name));
+    if (!m) return null;
+    return FORMAT_TAG_MAP[m[1].toLowerCase()] || m[1].toUpperCase();
+  }
+
+  // Tags for every format present on disk for a shot (engine sends sibling
+  // extensions, e.g. DSC00827 → [".arw", ".heif", ".xmp"]). Unknown
+  // extensions are skipped; output follows the fixed display order:
+  // cooked image formats, then RAW, then sidecars.
+  const FORMAT_TAG_ORDER = ['HEIF', 'HEIC', 'JPG', 'PNG', 'TIFF', 'RAW', 'XML'];
+
+  function formatTagsForExts(exts) {
+    const tags = new Set();
+    for (const e of exts || []) {
+      const m = /\.?([a-zA-Z0-9]+)$/.exec(String(e));
+      if (!m) continue;
+      const tag = FORMAT_TAG_MAP[m[1].toLowerCase()];
+      if (tag) tags.add(tag);
+    }
+    return [...tags].sort((a, b) => FORMAT_TAG_ORDER.indexOf(a) - FORMAT_TAG_ORDER.indexOf(b));
+  }
+
+  function stemOf(name) {
+    return String(name).replace(/\.[^.]+$/, '');
+  }
+
   function esc(value) {
     return String(value).replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -1247,10 +1345,21 @@
       options.isSingle ? 'tau-single-row' : '',
     ].filter(Boolean).join(' ');
 
+    // Extension(s) replaced by format tag chips; the full name stays in the
+    // cell title (hover) and in item.name for sorting/copying. When the
+    // engine sent sibling extensions (exts), one tag per on-disk format is
+    // shown ([HEIF][RAW]...); otherwise fall back to the row's own extension.
+    const fmtTags = (Array.isArray(item.exts) && item.exts.length > 0)
+      ? formatTagsForExts(item.exts)
+      : [formatTagFor(item.name)].filter(Boolean);
+    const fmtTagHtml = fmtTags
+      .map((t) => `<span class="tau-fmt-tag${t === RAW_FORMAT_TAG ? ' tau-fmt-raw' : ''}">${esc(t)}</span>`)
+      .join('');
+
     return `
       <tr id="${rowIdFor(item)}" data-path="${esc(item.path)}" class="${rowClasses}">
         <td title="${esc(item.name)}" style="font-family: var(--tau-font-mono); font-weight: 500;">
-          <span class="tau-fname-text">${esc(item.name)}</span>${suffixBadge}
+          <span class="tau-fname-text">${esc(stemOf(item.name))}</span>${fmtTagHtml}${suffixBadge}
         </td>
         <td class="tau-th-num">${ratingDisplay}</td>
         <td class="tau-th-num" style="font-family: var(--tau-font-mono);">${num(item.sharp, 3)}</td>
@@ -1267,8 +1376,8 @@
       // Scores also affect the group header stats, but a full table rebuild
       // per frame event (17-37 fps) is far too expensive. Update the row in
       // place like flat mode, then coalesce header refresh into one delayed
-      // renderTable. A missing row is normal here (collapsed group or beyond
-      // the rendered chunk) — the coalesced refresh restores consistency.
+      // renderTable. A missing row is normal here (collapsed group) — the
+      // coalesced refresh restores consistency.
       updateTableRowFlatInPlace(item, false);
       scheduleGroupedRefresh();
       if (state.selectedPhoto && state.selectedPhoto.path === item.path) {
@@ -1418,7 +1527,7 @@
       row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
-    els.previewTitle.textContent = item.name;
+    els.previewTitle.textContent = stemOf(item.name);
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
 
@@ -1790,22 +1899,6 @@
     });
   }
 
-  // --- Chunked Table Infinite Scroll ---
-  function initTableScroll() {
-    if (!els.tableContainer) return;
-    els.tableContainer.addEventListener('scroll', () => {
-      if (state.viewMode !== 'flat') return;
-      const { scrollTop, scrollHeight, clientHeight } = els.tableContainer;
-      if (scrollTop + clientHeight >= scrollHeight - 80) {
-        const maxChunks = Math.ceil(state.photos.length / state.chunkSize);
-        if (state.visibleChunks < maxChunks) {
-          state.visibleChunks++;
-          renderTable();
-        }
-      }
-    });
-  }
-
   // --- UI Event Handlers ---
   async function initUI() {
     await I18N.init();
@@ -1865,7 +1958,6 @@
         document.querySelectorAll('.tau-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         state.filter = btn.getAttribute('data-filter');
-        state.visibleChunks = 1;
         renderTable();
       });
     });
@@ -1935,7 +2027,6 @@
     initKeyboardHotkeys();
     initContextMenu();
     initDragAndDrop();
-    initTableScroll();
     setupEventListeners();
     loadSavedParams();
   }
