@@ -6,6 +6,7 @@
     "placeholder_dir": "Select or paste photo directory path...",
     "btn_browse": "Browse",
     "btn_run": "⚡️Start Culling",
+    "btn_run_dry": "⚡️Dry-Run",
     "btn_cancel": "Cancel Culling",
     "btn_export_csv": "Export CSV",
     "title_export_csv": "Export scoring statistics to CSV",
@@ -90,7 +91,44 @@
     "tip_autocrop_desc": "Writes optimal 3:2 / 2:3 crop coordinates into XMP sidecars based on detected subject bounding box.",
     "label_dry_run": "Dry-Run Mode",
     "tip_dry_run_title": "Dry-Run Simulation Mode",
-    "tip_dry_run_desc": "Displays scores and statistics in UI without modifying any disk photo files or XMP metadata."
+    "tip_dry_run_desc": "Displays scores and statistics in UI without modifying any disk photo files or XMP metadata.",
+    "label_rename": "Auto-Rename",
+    "tip_rename_title": "Rename based on EXIF capture time",
+    "tip_rename_desc": "Renames photos to standard IMG_YYYYMMDD_HHMMSS_mmm format and synchronizes XMP sidecars.",
+    "btn_toggle_collapse": "Collapse / Expand Engine Config",
+    "btn_reset_defaults": "Reset Defaults",
+    "summary_title": "Active Config Summary"
+  },
+  "view": {
+    "mode_grouped": "Grouped",
+    "mode_flat": "Flat",
+    "btn_toggle_view": "Toggle View (Grouped / Flat)"
+  },
+  "burst": {
+    "group_title": "Burst #{id}",
+    "group_stats": "{count} shots · {keep} Kept · {reject} Discarded",
+    "single_badge": "SINGLE",
+    "winner_badge": "BEST",
+    "topn_badge": "TOP-N VETO",
+    "topn_desc": "Qualified quality, but discarded due to burst Top-N quota limit",
+    "all_rejected": "ALL REJECTED",
+    "has_keeps": "HAS KEPT",
+    "toggle_expand": "Toggle expand/collapse for this burst",
+    "collapse_all": "Collapse All",
+    "expand_all": "Expand All"
+  },
+  "context": {
+    "show_in_folder": "Show in File Manager",
+    "copy_path": "Copy Full File Path",
+    "copy_name": "Copy File Name",
+    "mark_keep_5": "Rate 5★ (Keep)",
+    "mark_keep_3": "Rate 3★ (Keep)",
+    "mark_reject": "Mark Rejected",
+    "copied_feedback": "Copied to clipboard"
+  },
+  "dragdrop": {
+    "drop_title": "Drop Folder to Load Photos",
+    "drop_subtitle": "Drag and drop any photo directory here to start scanning"
   },
   "telemetry": {
     "ready": "Ready",
@@ -102,9 +140,11 @@
     "tab_reject": "REJECT ✕",
     "scanning_dir": "Scanning directory...",
     "starting_engine": "Starting engine...",
+    "dry_run_running": "Dry-Run scoring in progress (no disk files or XMP modified)...",
     "cancelling": "Cancelling...",
     "cancelled": "Culling cancelled",
     "completed": "Completed",
+    "dry_run_completed": "Dry-Run completed · UI scores updated without disk modifications",
     "completed_summary": "Done · Kept {keep} · Rejected {reject}{failed}",
     "failed_part": " · Failed {failed}",
     "run_error": "Execution error",
@@ -140,7 +180,8 @@
     "empty_desc": "Click any row in the list to inspect high-resolution preview and AI detection boxes",
     "error_load_title": "Unable to load preview",
     "error_fail_title": "Preview load error",
-    "badge_inspection": "INSPECTION"
+    "badge_inspection": "INSPECTION",
+    "zoom_tip": "Scroll: Zoom · Drag: Pan · Double Click: Reset"
   },
   "drawer": {
     "title": "TERMINAL STREAM",
@@ -166,6 +207,8 @@
   },
   "dialog": {
     "alert_select_dir": "Please select a photo directory first",
-    "export_failed": "Export failed: {err}"
+    "export_failed": "Export failed: {err}",
+    "dry_run_warn": "[Mode Notice]\nDry-Run mode is enabled.\n\nScores will be computed and displayed in the UI only. The system will NOT write, rename, or modify any photo files, XMP sidecars, or embedded metadata on disk.",
+    "rename_warn": "[File Modification Notice]\nCapture time renaming is enabled.\n\nUpon starting, file names on disk will be directly renamed to IMG_YYYYMMDD_HHMMSS_mmm format. Associated RAW, HEIF/JPG, and XMP sidecar files will be renamed in sync."
   }
 }

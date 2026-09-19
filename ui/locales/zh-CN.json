@@ -6,6 +6,7 @@
     "placeholder_dir": "选择或粘贴待筛照片文件夹路径...",
     "btn_browse": "浏览目录",
     "btn_run": "⚡️开始筛选",
+    "btn_run_dry": "⚡️试运行",
     "btn_cancel": "取消筛选",
     "btn_export_csv": "导出 CSV",
     "title_export_csv": "导出打分统计 CSV",
@@ -88,9 +89,46 @@
     "label_autocrop": "自动裁剪 XMP",
     "tip_autocrop_title": "Lightroom 自动构图裁剪",
     "tip_autocrop_desc": "根据目标检测位置在 XMP sidecar 中写入最佳 3:2 / 2:3 构图裁剪框。",
-    "label_dry_run": "试运行 (Dry-Run)",
-    "tip_dry_run_title": "试运行模式 (Dry-Run)",
-    "tip_dry_run_desc": "仅在界面展示打分与统计，不修改任何磁盘照片文件或 XMP 元数据。"
+    "label_dry_run": "试运行模式",
+    "tip_dry_run_title": "试运行模式",
+    "tip_dry_run_desc": "仅在界面展示打分与统计，不修改任何磁盘照片文件或 XMP 元数据。",
+    "label_rename": "拍摄时间重命名",
+    "tip_rename_title": "EXIF 拍摄时间重命名",
+    "tip_rename_desc": "将照片重命名为标准 IMG_YYYYMMDD_HHMMSS_mmm 规范格式，并自动同步同名 XMP 副档。",
+    "btn_toggle_collapse": "折叠/展开参数面板",
+    "btn_reset_defaults": "恢复默认参数",
+    "summary_title": "当前生效配置"
+  },
+  "view": {
+    "mode_grouped": "连拍聚合",
+    "mode_flat": "平铺明细",
+    "btn_toggle_view": "切换视图 (连拍/平铺)"
+  },
+  "burst": {
+    "group_title": "连拍组 #{id}",
+    "group_stats": "共 {count} 张 · 保留 {keep} · 淘汰 {reject}",
+    "single_badge": "单张",
+    "winner_badge": "BEST",
+    "topn_badge": "TOP-N 截断",
+    "topn_desc": "画质合格，但受组内 Top-N 额度限制淘汰",
+    "all_rejected": "全组淘汰",
+    "has_keeps": "含保留帧",
+    "toggle_expand": "展开/折叠该组",
+    "collapse_all": "全部折叠",
+    "expand_all": "全部展开"
+  },
+  "context": {
+    "show_in_folder": "在文件管理器中显示",
+    "copy_path": "复制完整文件路径",
+    "copy_name": "复制文件名",
+    "mark_keep_5": "评定为 5★ (保留)",
+    "mark_keep_3": "评定为 3★ (保留)",
+    "mark_reject": "标记为淘汰 (REJECT)",
+    "copied_feedback": "已复制到剪贴板"
+  },
+  "dragdrop": {
+    "drop_title": "释放以载入照片文件夹",
+    "drop_subtitle": "将待筛选目录拖放至此处即可启动智能识别"
   },
   "telemetry": {
     "ready": "就绪",
@@ -102,9 +140,11 @@
     "tab_reject": "REJECT ✕",
     "scanning_dir": "正在扫描目录...",
     "starting_engine": "正在启动引擎...",
+    "dry_run_running": "正在试运行评分 (不修改任何磁盘照片或 XMP)...",
     "cancelling": "正在取消筛选...",
     "cancelled": "筛选已取消",
     "completed": "已完成",
+    "dry_run_completed": "试运行完成 · 仅更新界面评分，磁盘文件与 XMP 保持原样",
     "completed_summary": "完成 · 保留 {keep} · 丢弃 {reject}{failed}",
     "failed_part": " · 失败 {failed}",
     "run_error": "运行出错",
@@ -140,7 +180,8 @@
     "empty_desc": "在左侧列表中点击任意行查看高清缩略图及 AI 目标检测框",
     "error_load_title": "无法加载预览",
     "error_fail_title": "预览加载出错",
-    "badge_inspection": "INSPECTION"
+    "badge_inspection": "INSPECTION",
+    "zoom_tip": "滚轮缩放 · 拖拽平移 · 双击复位"
   },
   "drawer": {
     "title": "TERMINAL STREAM",
@@ -166,6 +207,8 @@
   },
   "dialog": {
     "alert_select_dir": "请先选择待筛照片目录",
-    "export_failed": "导出失败: {err}"
+    "export_failed": "导出失败: {err}",
+    "dry_run_warn": "【模式提示】\n已启用试运行模式。\n\n系统仅在界面中计算与展示评分结果，不会对磁盘上的任何照片原图、XMP 伴侣文件或内置元数据进行任何写入或修改。",
+    "rename_warn": "【操作提示】\n已启用拍摄时间重命名。\n\n筛选执行时，系统将直接修改磁盘上的物理文件名（统一规范为 IMG_YYYYMMDD_HHMMSS_mmm 格式），配套的 RAW、HEIF/JPG 及 XMP 副档将同步重命名。"
   }
 }

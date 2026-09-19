@@ -429,6 +429,109 @@ async fn secret_get(_app: AppHandle, key: String) -> Result<Option<String>, Stri
 }
 
 #[tauri::command]
+async fn show_in_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("Path does not exist: {path}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .args(["/select,", &p.to_string_lossy()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-R")
+            .arg(p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        if let Some(parent) = p.parent() {
+            Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_optimal_workers() -> Result<u32, String> {
+    #[cfg(target_os = "macos")]
+    {
+        // 1. Apple Silicon hybrid architecture: check efficiency cores (hw.perflevel1.logicalcpu)
+        let e_cores = Command::new("sysctl")
+            .args(["-n", "hw.perflevel1.logicalcpu"])
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(0);
+
+        if e_cores > 0 {
+            log_line(&format!("detected Apple Silicon efficiency cores: {e_cores}"));
+            return Ok(e_cores);
+        }
+
+        // 2. Non-hybrid / Intel Mac: fallback to physical CPU cores
+        let phys_cores = Command::new("sysctl")
+            .args(["-n", "hw.physicalcpu"])
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(4);
+
+        log_line(&format!("detected macOS physical cores: {phys_cores}"));
+        return Ok(std::cmp::max(1, phys_cores));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows (e.g. Ryzen 5700X 8C16T), query physical cores via PowerShell or fallback to SMT heuristic
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "(Get-CimInstance Win32_Processor).NumberOfCores"])
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .and_then(|s| s.trim().parse::<u32>().ok());
+
+        if let Some(cores) = output {
+            if cores > 0 {
+                log_line(&format!("detected Windows physical cores: {cores}"));
+                return Ok(cores);
+            }
+        }
+
+        let logical = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(4);
+        let default_val = if logical >= 8 { logical / 2 } else { std::cmp::max(2, logical) };
+        log_line(&format!("fallback Windows cores from logical {logical}: {default_val}"));
+        return Ok(default_val);
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let logical = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(4);
+        let default_val = if logical >= 8 { logical / 2 } else { std::cmp::max(2, logical) };
+        Ok(default_val)
+    }
+}
+
+#[tauri::command]
 async fn secret_set(_app: AppHandle, key: String, value: String) -> Result<(), String> {
     log_line(&format!("secret_set called: {key} (len {})", value.len()));
     let entry = secret_entry(&key)?;
@@ -512,7 +615,9 @@ fn main() {
             preview,
             export_csv,
             secret_get,
-            secret_set
+            secret_set,
+            show_in_folder,
+            get_optimal_workers
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

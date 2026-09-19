@@ -50,11 +50,20 @@
     </header>
 
     <!-- Configuration Panel (3-Column Cyber Grid) -->
-    <section class="tau-config-panel">
+    <section class="tau-config-panel" id="configPanel">
       <div class="tau-panel-header">
         <div class="tau-panel-title">
           <span class="tau-tag-pill" data-i18n="config.panel_title">ENGINE CONFIG</span>
           <span class="tau-panel-subtitle" data-i18n="config.panel_subtitle">推理参数与评分策略</span>
+          <div class="tau-config-summary-bar" id="configSummaryBar" style="display: none;"></div>
+        </div>
+        <div class="tau-panel-controls">
+          <button id="btnResetDefaults" class="tau-btn tau-btn-glass tau-btn-xs" title="恢复默认参数" data-i18n-attr="title:config.btn_reset_defaults">
+            <span data-i18n="config.btn_reset_defaults">恢复默认</span>
+          </button>
+          <button id="btnToggleConfig" class="tau-btn tau-btn-icon tau-btn-xs" title="折叠/展开参数面板" data-i18n-attr="title:config.btn_toggle_collapse">
+            <span id="configToggleIcon">▲</span>
+          </button>
         </div>
       </div>
 
@@ -170,6 +179,23 @@
                   <span class="tau-tt-badge">DEFAULT: OFF</span>
                 </div>
                 <div class="tau-tt-desc" data-i18n="config.tip_force_desc">覆盖已存在 XMP/EXIF 评级。关闭时将直接保留人工已打分照片以节省时间。</div>
+                <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
+              </div>
+            </span>
+
+            <label class="tau-toggle-label">
+              <input type="checkbox" id="pRename" class="tau-checkbox">
+              <span class="tau-toggle-custom"></span>
+              <span class="tau-toggle-text" data-i18n="config.label_rename">拍摄时间重命名</span>
+            </label>
+            <span class="tau-tip-wrap">
+              <span class="tau-info-icon">?</span>
+              <div class="tau-tooltip">
+                <div class="tau-tt-head">
+                  <span class="tau-tt-title" data-i18n="config.tip_rename_title">EXIF 拍摄时间重命名</span>
+                  <span class="tau-tt-badge">DEFAULT: OFF</span>
+                </div>
+                <div class="tau-tt-desc" data-i18n="config.tip_rename_desc">将照片重命名为标准 IMG_YYYYMMDD_HHMMSS_mmm 规范格式，并自动同步同名 XMP 副档。</div>
                 <div class="tau-tt-meta"><span class="tau-tt-label" data-i18n="config.tip_label_range">范围:</span> <span data-i18n="config.tip_toggle_range">开启 / 关闭</span></div>
               </div>
             </span>
@@ -376,13 +402,13 @@
             <label class="tau-toggle-label">
               <input type="checkbox" id="pDryRun" class="tau-checkbox">
               <span class="tau-toggle-custom"></span>
-              <span class="tau-toggle-text" data-i18n="config.label_dry_run">试运行 (Dry-Run)</span>
+              <span class="tau-toggle-text" data-i18n="config.label_dry_run">试运行模式</span>
             </label>
             <span class="tau-tip-wrap">
               <span class="tau-info-icon">?</span>
               <div class="tau-tooltip">
                 <div class="tau-tt-head">
-                  <span class="tau-tt-title" data-i18n="config.tip_dry_run_title">试运行模式 (Dry-Run)</span>
+                  <span class="tau-tt-title" data-i18n="config.tip_dry_run_title">试运行模式</span>
                   <span class="tau-tt-badge">DEFAULT: OFF</span>
                 </div>
                 <div class="tau-tt-desc" data-i18n="config.tip_dry_run_desc">仅在界面展示打分与统计，不修改任何磁盘照片文件或 XMP 元数据。</div>
@@ -414,6 +440,12 @@
           <button class="tau-tab active" data-filter="all"><span data-i18n="telemetry.tab_all">ALL</span> (<span id="countAll">0</span>)</button>
           <button class="tau-tab tau-tab-keep" data-filter="keep"><span data-i18n="telemetry.tab_keep">KEEP ★</span> (<span id="countKeep">0</span>)</button>
           <button class="tau-tab tau-tab-reject" data-filter="reject"><span data-i18n="telemetry.tab_reject">REJECT ✕</span> (<span id="countReject">0</span>)</button>
+        </div>
+        <div class="tau-view-switch">
+          <button id="btnViewMode" class="tau-btn tau-btn-glass tau-btn-xs" title="切换视图 (连拍/平铺)" data-i18n-attr="title:view.btn_toggle_view">
+            <span id="viewModeIcon">⊞</span>
+            <span id="viewModeText" data-i18n="view.mode_grouped">连拍聚合</span>
+          </button>
         </div>
       </div>
     </section>
@@ -467,6 +499,12 @@
               <span class="tau-ph-badge" data-i18n="preview.badge_inspection">INSPECTION</span>
               <span id="previewTitle" class="tau-ph-title" data-i18n="preview.title">照片预览与检测框</span>
             </div>
+            <div class="tau-ph-right" id="previewZoomControls" style="display: none;">
+              <span class="tau-zoom-pill" id="zoomLevelIndicator">100%</span>
+              <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="双击或点击复位 (1:1)" data-i18n-attr="title:preview.zoom_tip">
+                <span>⟲</span>
+              </button>
+            </div>
           </div>
 
           <div class="tau-preview-body" id="previewContainer">
@@ -500,6 +538,44 @@
         <button id="btnClearLog" class="tau-btn tau-btn-glass tau-btn-xs" data-i18n="drawer.btn_clear">CLEAR</button>
       </div>
       <pre id="logConsole" class="tau-log-console"></pre>
+    </div>
+
+    <!-- Floating Cyber Context Menu -->
+    <div class="tau-context-menu" id="contextMenu" style="display: none;">
+      <div class="tau-ctx-item" id="ctxShowInFolder">
+        <span class="tau-ctx-icon">📂</span>
+        <span data-i18n="context.show_in_folder">在文件管理器中显示</span>
+      </div>
+      <div class="tau-ctx-item" id="ctxCopyPath">
+        <span class="tau-ctx-icon">📋</span>
+        <span data-i18n="context.copy_path">复制完整文件路径</span>
+      </div>
+      <div class="tau-ctx-item" id="ctxCopyName">
+        <span class="tau-ctx-icon">🏷️</span>
+        <span data-i18n="context.copy_name">复制文件名</span>
+      </div>
+      <div class="tau-ctx-divider"></div>
+      <div class="tau-ctx-item" id="ctxMarkKeep5">
+        <span class="tau-ctx-icon">★</span>
+        <span data-i18n="context.mark_keep_5">评定为 5★ (保留)</span>
+      </div>
+      <div class="tau-ctx-item" id="ctxMarkKeep3">
+        <span class="tau-ctx-icon">☆</span>
+        <span data-i18n="context.mark_keep_3">评定为 3★ (保留)</span>
+      </div>
+      <div class="tau-ctx-item tau-ctx-danger" id="ctxMarkReject">
+        <span class="tau-ctx-icon">✕</span>
+        <span data-i18n="context.mark_reject">标记为淘汰 (REJECT)</span>
+      </div>
+    </div>
+
+    <!-- Fullscreen Drag & Drop Overlay -->
+    <div class="tau-drag-overlay" id="dragDropOverlay" style="display: none;">
+      <div class="tau-drag-card">
+        <div class="tau-drag-icon">📥</div>
+        <div class="tau-drag-title" data-i18n="dragdrop.drop_title">释放以载入照片文件夹</div>
+        <div class="tau-drag-desc" data-i18n="dragdrop.drop_subtitle">将待筛选目录拖放至此处即可启动智能识别</div>
+      </div>
     </div>
   </div>
 
