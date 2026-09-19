@@ -203,7 +203,8 @@
     "sharpness_fail": "Sharpness below hard threshold",
     "min_raw_fail": "Composite score below keep cutoff",
     "p4_orient_fail": "P4 rejected rear perspective",
-    "fence_detected": "Fence occlusion detected"
+    "fence_detected": "Fence occlusion detected",
+    "manual_reject": "Manually rejected"
   },
   "dialog": {
     "alert_select_dir": "Please select a photo directory first",

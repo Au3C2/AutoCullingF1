@@ -68,6 +68,7 @@
         no_detection: 'veto.no_detection',
         decode_failed: 'veto.decode_failed',
         manual_metadata: 'veto.manual_metadata',
+        manual_reject: 'veto.manual_reject',
         burst_group_topn: 'veto.burst_group_topn',
       };
       if (map[veto]) return this.t(map[veto]);
@@ -547,6 +548,10 @@
     els.btnRun.classList.add('tau-btn-primary');
     els.btnRun.classList.remove('tau-btn-cancel');
     els.btnExportCsv.disabled = state.photos.length === 0;
+    // Final consistency pass after the mid-run in-place refreshes: winner
+    // badges settle on final scores, auto-collapse rules apply, headers
+    // show final stats.
+    renderTable();
 
     const isDry = $('pDryRun')?.checked || false;
     if (!statusText && isDry) {
@@ -693,6 +698,10 @@
       item.status = payload.status;
 
       if (payload.status === 'topn_final') {
+        // The protocol strips the veto text on Top-N re-emits, but a Top-N
+        // re-emit always ends rejected (select_best_n downgrades to -1) —
+        // reconstruct the veto so the REASON column / Top-N chip render.
+        if (payload.rating < 0) item.veto = 'burst_group_topn';
         updateTableRow(item);
         return;
       }
@@ -799,6 +808,9 @@
     // the rebuild: rows stream in via 'frame' events and a full renderTable
     // would fight the per-frame in-place updates.
     listenTauri('scan_meta', ({ payload }) => {
+      // Stale worker guard: a slow EXIF pass for a PREVIOUS directory must
+      // not clear the current scan's pending flag or merge into its list.
+      if (payload && payload.dir && state.inputDir && payload.dir !== state.inputDir) return;
       // The authoritative EXIF pass is over (success or not) — grouped view
       // may leave the flat hold and use engine groups / fallback clustering.
       state.scanPending = false;
@@ -971,8 +983,11 @@
     // Backend-authoritative mode: the scan event carries each photo's burst
     // group computed by the engine's group_bursts(). Grouping is a single
     // O(n) pass over stable engine ids — no client-side re-implementation.
-    const allBackendGrouped = photos.every((p) => p.burstGroup !== null && p.burstGroup !== undefined && p.burstGroup !== '');
-    if (allBackendGrouped) {
+    // Partial coverage (e.g. 0-byte files the engine's EXIF pass skipped)
+    // stays in backend mode: uncovered shots render as singles instead of
+    // degrading the WHOLE list to client-side clustering.
+    const backendGrouped = photos.filter((p) => p.burstGroup !== null && p.burstGroup !== undefined && p.burstGroup !== '');
+    if (backendGrouped.length > 0) {
       const ordered = photos.slice().sort((a, b) => {
         const ta = a.timestamp || 0;
         const tb = b.timestamp || 0;
@@ -995,6 +1010,11 @@
       };
 
       for (const p of ordered) {
+        if (p.burstGroup === null || p.burstGroup === undefined || p.burstGroup === '') {
+          flush();
+          items.push({ type: 'single', photo: p });
+          continue;
+        }
         if (current.length > 0 && p.burstGroup !== currentId) {
           flush();
         }
@@ -1227,6 +1247,14 @@
   }
 
   function buildGroupHeaderHtml(group, isCollapsed) {
+    return `
+      <tr class="tau-group-header-row ${isCollapsed ? '' : 'expanded'}" data-group-id="${esc(group.groupId)}">
+        <td colspan="7" class="tau-gh-cell">${buildGroupHeaderCellHtml(group, isCollapsed)}</td>
+      </tr>
+    `;
+  }
+
+  function buildGroupHeaderCellHtml(group, isCollapsed) {
     const keepPercent = group.count > 0 ? ((group.keepCount / group.count) * 100).toFixed(0) : 0;
     const rejectPercent = group.count > 0 ? ((group.rejectCount / group.count) * 100).toFixed(0) : 0;
     const tagText = group.hasKeeps ? I18N.t('burst.has_keeps') : I18N.t('burst.all_rejected');
@@ -1234,21 +1262,17 @@
     const timeDisplay = group.timeRange ? `<span class="tau-gh-time">${esc(group.timeRange)}</span>` : '';
 
     return `
-      <tr class="tau-group-header-row ${isCollapsed ? '' : 'expanded'}" data-group-id="${group.groupId}">
-        <td colspan="7" class="tau-gh-cell">
-          <div class="tau-gh-wrap">
-            <span class="tau-gh-toggle">${isCollapsed ? '▶' : '▼'}</span>
-            <span class="tau-gh-title">${I18N.t('burst.group_title', { id: group.groupId.replace('burst_', '') })}</span>
-            ${timeDisplay}
-            <span class="tau-gh-stats">${I18N.t('burst.group_stats', { count: group.count, keep: group.keepCount, reject: group.rejectCount })}</span>
-            <div class="tau-micro-bar" title="Keep ${keepPercent}% / Discard ${rejectPercent}%">
-              <div class="tau-bar-keep" style="width: ${keepPercent}%;"></div>
-              <div class="tau-bar-reject" style="width: ${rejectPercent}%;"></div>
-            </div>
-            <span class="tau-chip ${tagClass}" style="font-size: 9px; padding: 0 4px;">${tagText}</span>
-          </div>
-        </td>
-      </tr>
+      <div class="tau-gh-wrap">
+        <span class="tau-gh-toggle">${isCollapsed ? '▶' : '▼'}</span>
+        <span class="tau-gh-title">${I18N.t('burst.group_title', { id: group.groupId.replace('burst_', '') })}</span>
+        ${timeDisplay}
+        <span class="tau-gh-stats">${I18N.t('burst.group_stats', { count: group.count, keep: group.keepCount, reject: group.rejectCount })}</span>
+        <div class="tau-micro-bar" title="Keep ${keepPercent}% / Discard ${rejectPercent}%">
+          <div class="tau-bar-keep" style="width: ${keepPercent}%;"></div>
+          <div class="tau-bar-reject" style="width: ${rejectPercent}%;"></div>
+        </div>
+        <span class="tau-chip ${tagClass}" style="font-size: 9px; padding: 0 4px;">${tagText}</span>
+      </div>
     `;
   }
 
@@ -1417,15 +1441,47 @@
   }
 
   // Coalesced refresh of grouped-view headers/stats: at most one pending
-  // renderTable, triggered after the burst of frame events subsides.
+  // refresh, triggered after the burst of frame events subsides. During a
+  // run the refresh must NOT rebuild the tbody: render-all makes a full
+  // renderTable cost hundreds of ms at 10k rows while frames stream at
+  // 17-37 fps, so the old 400ms coalesced rebuild ran continuously. Rows
+  // are already updated in place per frame; mid-run only headers and
+  // winner badges are refreshed. finishRun does the final full render.
   function scheduleGroupedRefresh() {
     if (state.groupedRefreshTimer) return;
     state.groupedRefreshTimer = setTimeout(() => {
       state.groupedRefreshTimer = null;
-      if (state.viewMode === 'grouped') {
+      if (state.viewMode !== 'grouped') return;
+      if (state.isRunning) {
+        refreshGroupedHeadersInPlace();
+      } else {
         renderTable();
       }
     }, 400);
+  }
+
+  function refreshGroupedHeadersInPlace() {
+    const clusters = computeBurstClusters(getFilteredPhotos());
+    for (const entry of clusters) {
+      if (entry.type !== 'burst_header') continue;
+      const tr = els.tableBody.querySelector(
+        `tr.tau-group-header-row[data-group-id="${CSS.escape(entry.groupId)}"]`);
+      if (!tr) continue;
+      const isCollapsed = !tr.classList.contains('expanded');
+      tr.querySelector('td.tau-gh-cell').innerHTML = buildGroupHeaderCellHtml(entry, isCollapsed);
+    }
+
+    // Winner badges: clear and re-place on the current best scored frame.
+    els.tableBody.querySelectorAll('.tau-winner-badge').forEach((el) => el.remove());
+    for (const entry of clusters) {
+      if (entry.type !== 'burst_header' || !entry.winnerPath) continue;
+      const row = document.getElementById(rowIdFor({ path: entry.winnerPath }));
+      const nameText = row && row.querySelector('.tau-fname-text');
+      if (nameText) {
+        nameText.insertAdjacentHTML('afterend',
+          `<span class="tau-winner-badge">${I18N.t('burst.winner_badge')}</span>`);
+      }
+    }
   }
 
   // --- Feature 3: Pan & Zoom Interactions ---

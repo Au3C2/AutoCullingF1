@@ -21,6 +21,7 @@ TEST_SCRIPTS = [
     "test_preview_zoom.js",
     "test_table_performance.js",
     "test_grouping_logic.js",
+    "test_format_tag.js",
     "test_context_menu.js",
     "test_dom_elements_sync.js",
     "test_app_js_syntax.js",

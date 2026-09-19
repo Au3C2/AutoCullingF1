@@ -157,10 +157,12 @@ def _run_exiftool(paths: list[Path]) -> list[dict]:
             with ThreadPoolExecutor(max_workers=nproc) as pool:
                 shard_results = list(pool.map(_run_shard, chunks))
             return [entry for shard in shard_results for entry in shard]
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
         pass  # fall through to the -@ - path, which raises properly
 
     # Fallback: very large batches via -@ - (read filenames from stdin).
+    # OSError (e.g. WinError 206 filename-too-long on low-core Windows where
+    # a single shard carries the whole batch) must also fall through.
     cmd = [*args, "-@", "-"]
 
     # Build newline-separated file list for stdin

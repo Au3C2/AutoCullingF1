@@ -203,7 +203,8 @@
     "sharpness_fail": "清晰度低于锐度硬阈值",
     "min_raw_fail": "综合得分低于保留门槛",
     "p4_orient_fail": "P4 判定后视角追拍淘汰",
-    "fence_detected": "检出围栏遮挡干扰"
+    "fence_detected": "检出围栏遮挡干扰",
+    "manual_reject": "手动淘汰"
   },
   "dialog": {
     "alert_select_dir": "请先选择待筛照片目录",

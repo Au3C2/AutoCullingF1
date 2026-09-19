@@ -279,4 +279,24 @@ const mixedResult = computeBurstClusters(mixedScorePhotos);
 assert.strictEqual(mixedResult[0].winnerPath, '/m/DSC002.ARW',
   'Winner must be the best SCORED frame; pending and decode_failed frames are excluded');
 
+// --- Case 10: PARTIAL backend coverage stays in backend mode ---
+// Regression: 0-byte files are skipped by the engine's EXIF pass and carry
+// burstGroup=null. The old photos.every() check degraded the WHOLE list to
+// client-side clustering on a single uncovered file; now uncovered shots
+// render as singles inside the backend-ordered sequence.
+const partialPhotos = [
+  { name: 'DSC001.ARW', path: '/x/DSC001.ARW', timestamp: 1000, burstGroup: 'burst_0001', raw: 4.2, rating: 5 },
+  { name: 'DSC002.ARW', path: '/x/DSC002.ARW', timestamp: 1100, burstGroup: 'burst_0001', raw: 3.9, rating: 3 },
+  { name: 'DSC003.ARW', path: '/x/DSC003.ARW', timestamp: 1200, burstGroup: null, raw: 0, rating: 0, status: 'pending' },
+  { name: 'DSC004.ARW', path: '/x/DSC004.ARW', timestamp: 1300, burstGroup: 'burst_0002', raw: 2.0, rating: -1 },
+];
+const partialResult = computeBurstClusters(partialPhotos);
+assert.strictEqual(partialResult.length, 3, 'Partial coverage: burst(2), single, single');
+assert.strictEqual(partialResult[0].groupId, 'burst_0001');
+assert.strictEqual(partialResult[1].type, 'single');
+assert.strictEqual(partialResult[1].photo.path, '/x/DSC003.ARW');
+// burst_0002 has a single member — a one-frame engine group renders as a single
+assert.strictEqual(partialResult[2].type, 'single');
+assert.strictEqual(partialResult[2].photo.path, '/x/DSC004.ARW');
+
 console.log('OK Feature 6 test_grouping_logic.js passed successfully.');
