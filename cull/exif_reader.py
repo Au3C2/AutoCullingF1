@@ -303,8 +303,15 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
         width = raw.get("ExifImageWidth") or raw.get("ImageWidth")
         height = raw.get("ExifImageHeight") or raw.get("ImageHeight")
 
-        release = raw.get("ReleaseMode") or raw.get("ReleaseMode2") or raw.get("ShootingMode")
-        shutter_cnt = raw.get("ShutterCount")
+        release = raw.get("ReleaseMode") if raw.get("ReleaseMode") is not None else (
+            raw.get("ReleaseMode2") if raw.get("ReleaseMode2") is not None else raw.get("ShootingMode")
+        )
+        shutter_cnt = None
+        if raw.get("ShutterCount") is not None:
+            try:
+                shutter_cnt = int(raw["ShutterCount"])
+            except (ValueError, TypeError):
+                shutter_cnt = None
 
         results.append(ExifData(
             path=path,
@@ -312,7 +319,7 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
             sequence_image_number=seq_num,
             burst_group_id=burst_id,
             release_mode=str(release) if release is not None else None,
-            shutter_count=int(shutter_cnt) if shutter_cnt is not None else None,
+            shutter_count=shutter_cnt,
             image_width=int(width) if width is not None else None,
             image_height=int(height) if height is not None else None,
             rating=int(raw.get("Rating")) if raw.get("Rating") is not None else None,
