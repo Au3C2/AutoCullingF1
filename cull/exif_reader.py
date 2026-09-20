@@ -79,6 +79,7 @@ class ExifData:
     sequence_image_number: int | None = None   # Sony A7C2
     burst_group_id: int | None = None          # Nikon Z6III
     release_mode: str | None = None            # e.g. "Continuous", "Single"
+    shutter_count: int | None = None           # Camera total shutter activations
     image_width: int | None = None
     image_height: int | None = None
     rating: int | None = None          # XMP:Rating
@@ -105,8 +106,10 @@ _EXIFTOOL_FIELDS = [
     "DateTimeOriginal",
     "SequenceImageNumber",
     "BurstGroupID",
+    "ReleaseMode",           # Sony / Generic
     "ReleaseMode2",          # Sony
     "ShootingMode",          # Nikon
+    "ShutterCount",          # Sony / Nikon mechanical+electronic activations
     "ImageWidth",
     "ImageHeight",
     "ExifImageWidth",
@@ -300,14 +303,23 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
         width = raw.get("ExifImageWidth") or raw.get("ImageWidth")
         height = raw.get("ExifImageHeight") or raw.get("ImageHeight")
 
-        release = raw.get("ReleaseMode2") or raw.get("ShootingMode")
+        release = raw.get("ReleaseMode") if raw.get("ReleaseMode") is not None else (
+            raw.get("ReleaseMode2") if raw.get("ReleaseMode2") is not None else raw.get("ShootingMode")
+        )
+        shutter_cnt = None
+        if raw.get("ShutterCount") is not None:
+            try:
+                shutter_cnt = int(raw["ShutterCount"])
+            except (ValueError, TypeError):
+                shutter_cnt = None
 
         results.append(ExifData(
             path=path,
             datetime_original=_parse_datetime(dt_str),
             sequence_image_number=seq_num,
             burst_group_id=burst_id,
-            release_mode=release,
+            release_mode=str(release) if release is not None else None,
+            shutter_count=shutter_cnt,
             image_width=int(width) if width is not None else None,
             image_height=int(height) if height is not None else None,
             rating=int(raw.get("Rating")) if raw.get("Rating") is not None else None,
@@ -322,16 +334,31 @@ def read_exif(paths: list[Path]) -> list[ExifData]:
 # Public API: group_bursts
 # ---------------------------------------------------------------------------
 
-_GAP_SECONDS = 2.0   # frames separated by more than this are in different groups
+_CONTINUOUS_GAP_SECONDS = 0.8  # Max gap within continuous burst sequence
+_GENERIC_GAP_SECONDS = 2.0     # Time gap fallback between adjacent frames
+
+
+def _is_single_shot(release_mode: str | None) -> bool:
+    """Return True if release_mode indicates single shot capture."""
+    if not release_mode:
+        return False
+    # ReleaseMode text like "Single", "Normal" or numeric 0
+    val = release_mode.strip().lower()
+    return "single" in val or val == "normal" or val == "0"
 
 
 def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
     """Group a list of ExifData entries into burst sequences.
 
     Detection strategy (in priority order):
-    1. **Sony A7C2** — ``SequenceImageNumber`` resets to 1 → new burst starts.
-    2. **Nikon Z6III** — ``BurstGroupID`` changes → new burst starts.
-    3. **Generic** — time gap between adjacent frames > ``_GAP_SECONDS``.
+    0. **Single Shot Guard** — if either frame is explicitly Single/Normal mode,
+       do not merge them into a burst.
+    1. **Nikon Z6III** — ``BurstGroupID`` changes → new burst starts.
+    2. **Sony (SequenceImageNumber & ShutterCount)**:
+       - SequenceImageNumber resets to 1 or non-increasing (curr.seq <= prev.seq).
+       - Shutter count jump: delta shutter count > delta sequence number.
+       - SubSec time gap > ``_CONTINUOUS_GAP_SECONDS`` (shutter released).
+    3. **Generic Fallback** — time gap between adjacent frames > ``_GENERIC_GAP_SECONDS``.
 
     The input list should be sorted by filename (or capture time) before
     calling this function.
@@ -371,20 +398,12 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
     for curr in exif_list[1:]:
         new_group = False
 
-        # --- Strategy 1: Sony A7C2 SequenceImageNumber ---
-        # SequenceImageNumber resets to 1 at the start of every new burst (or
-        # single shot).  Treat *any* reset to 1 as a new group boundary —
-        # including the case where the previous frame was also a single shot
-        # with seq == 1.  Exception: the very first frame in the list always
-        # opens the first group rather than closing a non-existent previous one.
-        if (
-            prev.sequence_image_number is not None
-            and curr.sequence_image_number is not None
-        ):
-            if curr.sequence_image_number == 1:
-                new_group = True
+        # --- Rule 0: Explicit Single Shot Guard ---
+        # If either adjacent frame is explicitly single shot mode, separate them
+        if _is_single_shot(curr.release_mode) or _is_single_shot(prev.release_mode):
+            new_group = True
 
-        # --- Strategy 2: Nikon BurstGroupID ---
+        # --- Strategy 1: Nikon BurstGroupID ---
         elif (
             prev.burst_group_id is not None
             and curr.burst_group_id is not None
@@ -392,14 +411,38 @@ def group_bursts(exif_list: list[ExifData]) -> list[BurstGroup]:
             if curr.burst_group_id != prev.burst_group_id:
                 new_group = True
 
-        # --- Strategy 3: Time gap fallback ---
+        # --- Strategy 2: Sony SequenceImageNumber & ShutterCount & SubSec Gap ---
+        elif (
+            prev.sequence_image_number is not None
+            and curr.sequence_image_number is not None
+        ):
+            # 2.1 Explicit reset to 1 or non-increasing sequence (handles missing first frame)
+            if curr.sequence_image_number == 1 or curr.sequence_image_number <= prev.sequence_image_number:
+                new_group = True
+            # 2.2 Shutter count jump verification
+            elif (
+                prev.shutter_count is not None
+                and curr.shutter_count is not None
+                and (curr.shutter_count - prev.shutter_count) > (curr.sequence_image_number - prev.sequence_image_number)
+            ):
+                new_group = True
+            # 2.3 Time gap in burst mode (> _CONTINUOUS_GAP_SECONDS means shutter was released)
+            elif (
+                prev.datetime_original is not None
+                and curr.datetime_original is not None
+            ):
+                gap = (curr.datetime_original - prev.datetime_original).total_seconds()
+                if gap > _CONTINUOUS_GAP_SECONDS:
+                    new_group = True
+
+        # --- Strategy 3: Generic time gap fallback ---
         else:
             if (
                 prev.datetime_original is not None
                 and curr.datetime_original is not None
             ):
                 gap = (curr.datetime_original - prev.datetime_original).total_seconds()
-                if gap > _GAP_SECONDS:
+                if gap > _GENERIC_GAP_SECONDS:
                     new_group = True
             else:
                 # No timing info at all → treat each file as its own group
