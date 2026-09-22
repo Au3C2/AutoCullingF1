@@ -191,6 +191,7 @@ Further reading: [`results/performance_baseline.md`](results/performance_baselin
 - [x] **Intuitive photography terminology**: refactored engine parameters to align with photography mental models.
 
 ### Mid-term (v1.0)
+- [ ] **Lazy-load full-res images & scalable vector BBoxes/labels**: asynchronously fetch full-resolution RAW/JPEG slices when zooming in deeply (>150%), with vector detection overlays for critical focus verification.
 - [ ] **Unsupervised racecar clustering & bulk team tagging**: cluster cars based on visual embeddings and color histograms, allowing one-click bulk IPTC tagging per team/driver.
 - [ ] **Multi-photo side-by-side comparison view (Survey View)**: inspect 2 to 4 burst frames simultaneously with synchronized pan and zoom.
 - [ ] **Physical export pipeline**: copy selected 3-5 star RAW/cooked files directly to a designated export folder.

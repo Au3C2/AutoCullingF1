@@ -71,6 +71,21 @@ function computeCropFocus(crop, containerW = 800, containerH = 600) {
   };
 }
 
+// Helper function for mouse-centered zoom transformation
+function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
+  if (newLevel <= 1.0) {
+    return { level: 1.0, panX: 0, panY: 0 };
+  }
+  const ratio = newLevel / oldLevel;
+  const newPanX = mouseDx - (mouseDx - oldPanX) * ratio;
+  const newPanY = mouseDy - (mouseDy - oldPanY) * ratio;
+  return {
+    level: newLevel,
+    panX: parseFloat(newPanX.toFixed(1)),
+    panY: parseFloat(newPanY.toFixed(1)),
+  };
+}
+
 // 2. Test Crop Center Adaptive Focus Calculation
 function testCropFocusCalculation() {
   // Centered moderate crop
@@ -83,7 +98,21 @@ function testCropFocusCalculation() {
   const focusRight = computeCropFocus([0.3, 0.6, 0.7, 1.0], 800, 600);
   assert(focusRight.panX < 0, 'Off-center right crop must pan leftwards (negative panX)');
   assert(focusRight.level >= 1.2, 'Crop focus must zoom in');
-  console.log('✓ testCropFocusCalculation passed');
+
+  // Test Mouse-centered zoom calculation
+  // 1. Center mouse: dx=0, dy=0, level 1.0 -> 2.0 -> panX=0, panY=0
+  const z1 = computeMouseCenteredZoom(1.0, 2.0, 0, 0, 0, 0);
+  assert.strictEqual(z1.level, 2.0);
+  assert.strictEqual(z1.panX, 0);
+  assert.strictEqual(z1.panY, 0);
+
+  // 2. Off-center mouse: dx=100, dy=50, level 1.0 -> 2.0 -> panX must shift by -100
+  const z2 = computeMouseCenteredZoom(1.0, 2.0, 0, 0, 100, 50);
+  assert.strictEqual(z2.level, 2.0);
+  assert.strictEqual(z2.panX, -100);
+  assert.strictEqual(z2.panY, -50);
+
+  console.log('✓ testCropFocusCalculation & MouseCenteredZoom passed');
 }
 
 // 3. Test Zoom Slider Steps (100, 150, 200, 250), Reset to 100%, and Input Clamp (100-250)

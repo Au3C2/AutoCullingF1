@@ -679,7 +679,10 @@
       els.progressBar.style.width = '0%';
       updateSaveButtonState();
       state.selectedPhoto = null;
-      resetZoom();
+      state.zoom.mode = 'auto';
+      state.zoom.level = 1.0;
+      state.zoom.panX = 0;
+      state.zoom.panY = 0;
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
@@ -1605,6 +1608,20 @@
     };
   }
 
+  function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
+    if (newLevel <= 1.0) {
+      return { level: 1.0, panX: 0, panY: 0 };
+    }
+    const ratio = newLevel / oldLevel;
+    const newPanX = mouseDx - (mouseDx - oldPanX) * ratio;
+    const newPanY = mouseDy - (mouseDy - oldPanY) * ratio;
+    return {
+      level: newLevel,
+      panX: parseFloat(newPanX.toFixed(1)),
+      panY: parseFloat(newPanY.toFixed(1)),
+    };
+  }
+
   function initPanZoom() {
     if (!els.previewContainer) return;
 
@@ -1669,21 +1686,26 @@
       });
     }
 
-    // Wheel Zoom
+    // Wheel Zoom: centered on mouse position
     els.previewContainer.addEventListener('wheel', (e) => {
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       e.preventDefault();
       const step = 0.25;
+      const delta = e.deltaY < 0 ? step : -step;
+      const oldLevel = state.zoom.level;
+      const newLevel = Math.max(1.0, Math.min(2.5, parseFloat((oldLevel + delta).toFixed(2))));
+
+      if (newLevel === oldLevel) return;
+
+      const rect = els.previewContainer.getBoundingClientRect();
+      const mouseDx = (e.clientX - rect.left) - rect.width / 2;
+      const mouseDy = (e.clientY - rect.top) - rect.height / 2;
+
+      const z = computeMouseCenteredZoom(oldLevel, newLevel, state.zoom.panX, state.zoom.panY, mouseDx, mouseDy);
       state.zoom.mode = 'manual';
-      if (e.deltaY < 0) {
-        state.zoom.level = Math.min(2.5, parseFloat((state.zoom.level + step).toFixed(2)));
-      } else {
-        state.zoom.level = Math.max(1.0, parseFloat((state.zoom.level - step).toFixed(2)));
-      }
-      if (state.zoom.level === 1.0) {
-        state.zoom.panX = 0;
-        state.zoom.panY = 0;
-      }
+      state.zoom.level = z.level;
+      state.zoom.panX = z.panX;
+      state.zoom.panY = z.panY;
       applyZoomTransform();
     }, { passive: false });
 
@@ -1713,18 +1735,24 @@
       state.zoom.isPanning = false;
     });
 
-    // Double Click toggle Auto and 1.0x
+    // Double Click toggle: 2.0x centered on mouse position, or reset to 100%
     els.previewContainer.addEventListener('dblclick', (e) => {
       e.preventDefault();
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
-      if (state.zoom.level > 1.0) {
-        state.zoom.mode = 'manual';
-        state.zoom.level = 1.0;
-        state.zoom.panX = 0;
-        state.zoom.panY = 0;
-        applyZoomTransform();
-      } else {
+      if (state.zoom.level > 1.05) {
         resetZoom();
+      } else {
+        const rect = els.previewContainer.getBoundingClientRect();
+        const mouseDx = (e.clientX - rect.left) - rect.width / 2;
+        const mouseDy = (e.clientY - rect.top) - rect.height / 2;
+
+        const z = computeMouseCenteredZoom(state.zoom.level, 2.0, state.zoom.panX, state.zoom.panY, mouseDx, mouseDy);
+        state.zoom.mode = 'manual';
+        state.zoom.level = z.level;
+        state.zoom.panX = z.panX;
+        state.zoom.panY = z.panY;
+        applyZoomTransform();
+        appendLog('[Zoom] Double clicked: 2.0x centered on mouse');
       }
     });
 
@@ -1884,9 +1912,13 @@
         case ' ': {
           e.preventDefault();
           if (els.previewContainer && els.previewImg.style.display !== 'none') {
-            if (state.zoom.level > 1.0) resetZoom();
-            else {
+            if (state.zoom.level > 1.05) {
+              resetZoom();
+            } else {
+              state.zoom.mode = 'manual';
               state.zoom.level = 2.0;
+              state.zoom.panX = 0;
+              state.zoom.panY = 0;
               applyZoomTransform();
             }
           }
