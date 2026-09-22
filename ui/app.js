@@ -1761,10 +1761,13 @@
         state.zoom.panY = 0;
       }
       applyZoomTransform();
-    } else if (state.zoom.level > 1.0) {
+    } else {
+      // Manual mode: strictly preserve the current zoom level and view across photos!
+      if (state.zoom.level === 1.0) {
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
+      }
       applyZoomTransform();
-    } else if (shouldResetZoom) {
-      resetZoom();
     }
 
     const pillScored = item.status !== 'pending' && item.status !== 'decode_failed';
@@ -1997,7 +2000,7 @@
       if (state.exitPending) {
         await invokeTauri('exit_app');
       } else if (isManualClick) {
-        alert(I18N.t('dialog.save_success'));
+        showToast(I18N.t('dialog.save_success'));
       }
       return;
     }
@@ -2024,9 +2027,6 @@
       appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted to disk`);
       if (!state.exitPending) {
         showToast(I18N.t('dialog.save_success'));
-        if (isManualClick) {
-          alert(I18N.t('dialog.save_success'));
-        }
       }
     } catch (err) {
       appendLog(`[Save Error] Failed to persist metadata: ${err}`);
