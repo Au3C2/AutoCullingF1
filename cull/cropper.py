@@ -16,12 +16,18 @@ def calculate_crop(x1: float, y1: float, x2: float, y2: float, img_ar: float = 1
         x1, y1, x2, y2: Normalized detection coordinates (0-1).
         img_ar: Aspect ratio of the original image (Width/Height). Defaults to 3:2 (1.5).
     """
+    # Sanitize and clamp input coordinates to [0.0, 1.0]
+    x1 = max(0.0, min(1.0, float(x1)))
+    y1 = max(0.0, min(1.0, float(y1)))
+    x2 = max(0.0, min(1.0, float(x2)))
+    y2 = max(0.0, min(1.0, float(y2)))
+
     w_box_norm = x2 - x1
     h_box_norm = y2 - y1
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
     
-    if w_box_norm <= 0 or h_box_norm <= 0:
+    if w_box_norm <= 1e-4 or h_box_norm <= 1e-4:
         return None
 
     # Convert normalized box dimensions to "visual" dimensions based on image AR
@@ -86,6 +92,9 @@ def calculate_crop(x1: float, y1: float, x2: float, y2: float, img_ar: float = 1
     right = max(0.0, min(1.0, right))
     top = max(0.0, min(1.0, top))
     bottom = max(0.0, min(1.0, bottom))
+
+    if left >= right or top >= bottom:
+        return None
     
     return (top, left, bottom, right)
 

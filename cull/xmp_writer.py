@@ -103,9 +103,9 @@ def _update_existing_xmp(
 
     attr_str = "\n      " + " ".join(new_attrs)
 
-    # 5. Insert into first <rdf:Description tag
-    if '<rdf:Description' in content:
-        content = re.sub(r'(<rdf:Description)', fr'\1{ns_str}{attr_str}', content, count=1)
+    # 5. Insert into first non-comment <rdf:Description opening tag
+    if re.search(r'<rdf:Description\b', content):
+        content = re.sub(r'(<rdf:Description\b)', fr'\1{ns_str}{attr_str}', content, count=1)
     else:
         # Fallback: if structure is unexpected, build full template
         crop_attrs = ""

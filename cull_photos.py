@@ -469,8 +469,11 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
 
                     ext = p.suffix.lower()
                     # If file is standalone cooked (JPEG/HEIF without RAW counterpart), sync metadata directly.
-                    # Otherwise write XMP sidecar.
-                    has_raw_sibling = any(p.with_suffix(re).exists() for re in RAW_EXTS)
+                    # Otherwise write XMP sidecar. Case-insensitive sibling check for case-sensitive filesystems.
+                    has_raw_sibling = any(
+                        p.with_suffix(re).exists() or p.with_suffix(re.upper()).exists()
+                        for re in RAW_EXTS
+                    )
                     if ext in COOKED_EXTS and not has_raw_sibling:
                         sync_list.append((p, rating, crop_tuple))
                     else:

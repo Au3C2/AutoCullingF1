@@ -777,6 +777,12 @@
       state.exitPending = true;
       if (els.savingModal) els.savingModal.style.display = 'flex';
       appendLog('[Exit] Window close requested with pending metadata changes, flushing...');
+
+      // 4-second safety timeout guard: prevent UI hanging forever if disk/engine stalls
+      setTimeout(() => {
+        invokeTauri('exit_app');
+      }, 4000);
+
       flushSaveMetadata();
     });
 
