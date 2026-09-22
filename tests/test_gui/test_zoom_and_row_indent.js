@@ -86,7 +86,7 @@ function testCropFocusCalculation() {
   console.log('✓ testCropFocusCalculation passed');
 }
 
-// 3. Test Zoom Slider Steps (100, 150, 200, 250) and Input Sync
+// 3. Test Zoom Slider Steps (100, 150, 200, 250), Reset to 100%, and Input Clamp (100-250)
 function testZoomSliderAndInputSync() {
   const steps = [100, 150, 200, 250];
   function snapToStep(val) {
@@ -106,6 +106,32 @@ function testZoomSliderAndInputSync() {
   assert.strictEqual(snapToStep(140), 150);
   assert.strictEqual(snapToStep(220), 200);
   assert.strictEqual(snapToStep(240), 250);
+
+  // Test clamp logic (100 to 250)
+  function clampZoomInput(val) {
+    let v = parseInt(val, 10);
+    if (isNaN(v) || v < 100) v = 100;
+    if (v > 250) v = 250;
+    return v;
+  }
+  assert.strictEqual(clampZoomInput(80), 100);
+  assert.strictEqual(clampZoomInput(180), 180);
+  assert.strictEqual(clampZoomInput(350), 250);
+
+  // Test resetZoom always resets to 100% (level = 1.0, manual)
+  const state = { zoom: { level: 2.5, panX: 100, panY: 50, mode: 'auto' } };
+  function resetZoom() {
+    state.zoom.mode = 'manual';
+    state.zoom.level = 1.0;
+    state.zoom.panX = 0;
+    state.zoom.panY = 0;
+  }
+  resetZoom();
+  assert.strictEqual(state.zoom.level, 1.0, 'Reset zoom must strictly reset to 100%');
+  assert.strictEqual(state.zoom.mode, 'manual');
+  assert.strictEqual(state.zoom.panX, 0);
+  assert.strictEqual(state.zoom.panY, 0);
+
   console.log('✓ testZoomSliderAndInputSync passed');
 }
 

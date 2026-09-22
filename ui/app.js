@@ -187,8 +187,9 @@
     btnRunText: $('btnRunText'),
     btnSaveMetadata: $('btnSaveMetadata'),
     btnSaveMetadataText: $('btnSaveMetadataText'),
-    saveBadge: $('saveBadge'),
-    savingTag: $('savingTag'),
+    saveBtnIcon: $('saveBtnIcon'),
+    toastNotification: $('toastNotification'),
+    toastText: $('toastText'),
     btnExportCsv: $('btnExportCsv'),
     btnToggleLog: $('btnToggleLog'),
     stageStatus: $('stageStatus'),
@@ -1541,21 +1542,13 @@
 
   // --- Feature 3: Pan & Zoom Interactions ---
   function resetZoom() {
-    state.zoom.mode = 'auto';
+    state.zoom.mode = 'manual';
     state.zoom.level = 1.0;
     state.zoom.panX = 0;
     state.zoom.panY = 0;
     state.zoom.isPanning = false;
-
-    if (state.selectedPhoto && state.selectedPhoto.crop) {
-      const focus = computeCropFocus(state.selectedPhoto.crop);
-      if (focus) {
-        state.zoom.level = focus.level;
-        state.zoom.panX = focus.panX;
-        state.zoom.panY = focus.panY;
-      }
-    }
     applyZoomTransform();
+    appendLog('[Zoom] Reset to 100% (1:1 full frame)');
   }
 
   function applyZoomTransform() {
@@ -1938,20 +1931,26 @@
     scheduleIncrementalSave(300);
   }
 
+  let _toastTimer = null;
+  function showToast(msg, duration = 2400) {
+    if (!els.toastNotification) return;
+    if (els.toastText) els.toastText.textContent = msg;
+    els.toastNotification.style.display = 'flex';
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+      if (els.toastNotification) els.toastNotification.style.display = 'none';
+    }, duration);
+  }
+
   function updateSaveButtonState() {
     if (!els.btnSaveMetadata) return;
     const dirtyCount = state.dirtyPhotos.size;
-    if (dirtyCount > 0) {
+    if (dirtyCount > 0 && !state.isSaving) {
       els.btnSaveMetadata.disabled = false;
-      if (els.saveBadge) {
-        els.saveBadge.style.display = 'inline-block';
-        els.saveBadge.textContent = dirtyCount;
-      }
     } else {
       els.btnSaveMetadata.disabled = true;
-      if (els.saveBadge) els.saveBadge.style.display = 'none';
     }
-    // Button label remains fixed string without width jitter
+    // Button label remains strictly static to prevent any layout jitter
     if (els.btnSaveMetadataText) {
       els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
     }
@@ -1965,16 +1964,23 @@
     }, delayMs);
   }
 
-  async function flushSaveMetadata() {
+  async function flushSaveMetadata(isManualClick = false) {
     if (state.dirtyPhotos.size === 0) {
       if (state.exitPending) {
         await invokeTauri('exit_app');
+      } else if (isManualClick) {
+        showToast(I18N.t('dialog.save_success'));
       }
       return;
     }
     if (state.isSaving) return;
     state.isSaving = true;
-    if (els.savingTag) els.savingTag.style.display = 'inline-flex';
+
+    if (els.saveBtnIcon) {
+      els.saveBtnIcon.textContent = '';
+      els.saveBtnIcon.classList.add('spinning');
+    }
+    if (els.btnSaveMetadata) els.btnSaveMetadata.disabled = true;
 
     const itemsToSave = [];
     for (const p of state.dirtyPhotos) {
@@ -1992,11 +1998,20 @@
         if (obj) state.dirtyPhotos.delete(obj);
       }
       appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted`);
+      if (!state.exitPending) {
+        showToast(I18N.t('dialog.save_success'));
+      }
     } catch (err) {
       appendLog(`[Save Error] Failed to persist metadata: ${err}`);
+      if (!state.exitPending) {
+        alert(`${I18N.t('dialog.export_failed', { err })}`);
+      }
     } finally {
       state.isSaving = false;
-      if (els.savingTag) els.savingTag.style.display = 'none';
+      if (els.saveBtnIcon) {
+        els.saveBtnIcon.classList.remove('spinning');
+        els.saveBtnIcon.textContent = '💾';
+      }
       updateSaveButtonState();
       if (state.exitPending) {
         await invokeTauri('exit_app');
@@ -2247,7 +2262,7 @@
     if (els.btnSaveMetadata) {
       els.btnSaveMetadata.addEventListener('click', () => {
         appendLog('[Manual Save] User triggered metadata save button.');
-        flushSaveMetadata();
+        flushSaveMetadata(true);
       });
     }
 

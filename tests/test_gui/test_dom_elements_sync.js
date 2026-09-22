@@ -51,8 +51,8 @@ for (const match of attrMatches) {
 
 // 3. Check critical element IDs referenced in app.js
 const criticalIds = [
-  'inputDir', 'btnBrowse', 'btnRun', 'btnRunText', 'btnSaveMetadata', 'btnExportCsv', 'btnToggleLog',
-  'stageStatus', 'speedEtaStat', 'savingTag', 'progressBar', 'frameStat', 'countAll', 'countKeep',
+  'inputDir', 'btnBrowse', 'btnRun', 'btnRunText', 'btnSaveMetadata', 'saveBtnIcon', 'btnExportCsv', 'btnToggleLog',
+  'stageStatus', 'speedEtaStat', 'progressBar', 'frameStat', 'countAll', 'countKeep',
   'countReject', 'tableBody', 'tablePane', 'splitResizer', 'previewPane',
   'previewContainer', 'previewImg', 'previewEmpty', 'previewTitle', 'previewScoreDetails',
   'previewZoomControls', 'zoomRangeSlider', 'zoomLevelInput', 'btnResetZoom', 'pillRating', 'pillSharp',
@@ -60,7 +60,7 @@ const criticalIds = [
   'systemPulse', 'langSwitch', 'configPanel', 'btnToggleConfig', 'configToggleIcon',
   'configSummaryBar', 'btnResetDefaults', 'btnViewMode', 'viewModeIcon', 'viewModeText',
   'contextMenu', 'ctxShowInFolder', 'ctxCopyPath', 'ctxCopyName', 'ctxMarkKeep5',
-  'ctxMarkKeep3', 'ctxMarkReject', 'dragDropOverlay', 'savingModal', 'pRename'
+  'ctxMarkKeep3', 'ctxMarkReject', 'dragDropOverlay', 'savingModal', 'toastNotification', 'pRename'
 ];
 
 for (const id of criticalIds) {

@@ -36,9 +36,8 @@
           <span id="btnRunText" data-i18n="topbar.btn_run">⚡️开始筛选</span>
         </button>
         <button id="btnSaveMetadata" class="tau-btn tau-btn-glass" title="保存修改至 XMP / 图像文件" data-i18n-attr="title:topbar.title_save" disabled>
-          <span>💾</span>
+          <span id="saveBtnIcon" class="tau-btn-symbol">💾</span>
           <span id="btnSaveMetadataText" data-i18n="topbar.btn_save">保存修改</span>
-          <span id="saveBadge" class="tau-badge-counter" style="display: none;">0</span>
         </button>
         <button id="btnExportCsv" class="tau-btn tau-btn-glass" title="导出打分统计 CSV" data-i18n-attr="title:topbar.title_export_csv" disabled>
           <span data-i18n="topbar.btn_export_csv">导出 CSV</span>
@@ -437,10 +436,6 @@
           <span class="tau-stat-sep">·</span>
           <span class="tau-stat-label" data-i18n="telemetry.eta">ETA:</span> <span class="tau-stat-val">--</span>
         </div>
-        <span id="savingTag" class="tau-saving-chip" style="display: none;">
-          <span class="tau-pulse-dot tau-dot-cyan" style="width: 6px; height: 6px;"></span>
-          <span data-i18n="telemetry.saving">保存中...</span>
-        </span>
       </div>
 
       <div class="tau-telemetry-right">
@@ -533,8 +528,11 @@
                 <input type="number" id="zoomLevelInput" min="100" max="250" step="10" value="100" class="tau-zoom-input">
                 <span class="tau-zoom-unit">%</span>
               </div>
-              <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-sm" title="复位为全画幅 (1:1) / 双击图片复位" data-i18n-attr="title:preview.zoom_tip">
-                <span style="font-size: 15px; font-weight: bold; line-height: 1;">⟲</span>
+              <button id="btnResetZoom" class="tau-btn-reset-zoom" title="复位为全画幅 (100%) / 双击图片复位" data-i18n-attr="title:preview.zoom_tip">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="tau-reset-svg">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
               </button>
             </div>
           </div>
@@ -617,6 +615,12 @@
         <div class="tau-drag-title" data-i18n="modal.saving_title">正在保存元数据...</div>
         <div class="tau-drag-desc" data-i18n="modal.saving_desc">请稍候，正在将修改安全写入 XMP，保存完成后将自动关闭。</div>
       </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toastNotification" class="tau-toast" style="display: none;">
+      <span class="tau-toast-icon">✓</span>
+      <span id="toastText" class="tau-toast-text">保存完成</span>
     </div>
   </div>
 
