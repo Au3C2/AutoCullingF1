@@ -158,10 +158,16 @@
       level: 1.0,
       panX: 0,
       panY: 0,
+      locked: localStorage.getItem('ac-zoom-locked') === 'true',
       isPanning: false,
       startX: 0,
       startY: 0,
     },
+
+    // Save triggers & persistence state
+    dirtyPhotos: new Set(),
+    isSaving: false,
+    exitPending: false,
 
     // Feature 4: Anti-race preview tracker
     previewSeq: 0,
@@ -179,6 +185,9 @@
     btnBrowse: $('btnBrowse'),
     btnRun: $('btnRun'),
     btnRunText: $('btnRunText'),
+    btnSaveMetadata: $('btnSaveMetadata'),
+    btnSaveMetadataText: $('btnSaveMetadataText'),
+    saveBadge: $('saveBadge'),
     btnExportCsv: $('btnExportCsv'),
     btnToggleLog: $('btnToggleLog'),
     stageStatus: $('stageStatus'),
@@ -201,6 +210,9 @@
     previewZoomControls: $('previewZoomControls'),
     zoomLevelIndicator: $('zoomLevelIndicator'),
     btnResetZoom: $('btnResetZoom'),
+    btnLockZoom: $('btnLockZoom'),
+    lockZoomIcon: $('lockZoomIcon'),
+    savingModal: $('savingModal'),
     pillRating: $('pillRating'),
     pillSharp: $('pillSharp'),
     pillComp: $('pillComp'),
@@ -741,6 +753,31 @@
         reject: payload.reject,
         failed: failedText,
       }));
+
+      // Trigger 1: culling run done -> all results automatically saved
+      state.dirtyPhotos.clear();
+      updateSaveButtonState();
+      appendLog('[Cull] All frame ratings and crop coordinates synchronized.');
+    });
+
+    listenTauri('save_done', ({ payload }) => {
+      appendLog(`[Engine] save_done confirmed: ${payload && payload.count !== undefined ? payload.count : 0} items`);
+    });
+
+    listenTauri('save_error', ({ payload }) => {
+      appendLog(`[Engine Error] save_error: ${payload && payload.message ? payload.message : JSON.stringify(payload)}`);
+    });
+
+    // Trigger 4: intercept window close to safely flush pending metadata
+    listenTauri('app-close-requested', async () => {
+      if (state.dirtyPhotos.size === 0 && !state.isSaving) {
+        await invokeTauri('exit_app');
+        return;
+      }
+      state.exitPending = true;
+      if (els.savingModal) els.savingModal.style.display = 'flex';
+      appendLog('[Exit] Window close requested with pending metadata changes, flushing...');
+      flushSaveMetadata();
     });
 
     listenTauri('renamed', ({ payload }) => {
@@ -1576,6 +1613,25 @@
     if (els.btnResetZoom) {
       els.btnResetZoom.addEventListener('click', resetZoom);
     }
+
+    if (els.btnLockZoom) {
+      const updateLockUI = () => {
+        if (els.lockZoomIcon) {
+          els.lockZoomIcon.textContent = state.zoom.locked ? '🔒' : '🔓';
+        }
+        if (els.btnLockZoom) {
+          if (state.zoom.locked) els.btnLockZoom.classList.add('active');
+          else els.btnLockZoom.classList.remove('active');
+        }
+      };
+      updateLockUI();
+      els.btnLockZoom.addEventListener('click', () => {
+        state.zoom.locked = !state.zoom.locked;
+        localStorage.setItem('ac-zoom-locked', state.zoom.locked ? 'true' : 'false');
+        updateLockUI();
+        appendLog(`[View] Viewport lock ${state.zoom.locked ? 'enabled (zoom preserved across photos)' : 'disabled'}`);
+      });
+    }
   }
 
   // --- Photo Selection & Thumbnail Preview (Anti-Race) ---
@@ -1594,7 +1650,7 @@
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
 
-    if (shouldResetZoom) {
+    if (shouldResetZoom && (!state.zoom.locked || state.zoom.level <= 1.0)) {
       resetZoom();
     }
 
@@ -1757,7 +1813,85 @@
     updateTableRow(photo);
     selectPhoto(photo, false);
     appendLog(`[Manual] ${photo.name} rating set to ${newRating > 0 ? `${newRating}★` : 'REJECT'}`);
+
+    // Trigger 2: user modified rating -> incremental debounced save
+    markPhotoDirty(photo);
   }
+
+  // --- Metadata Persistence Engine (Save Triggers 1, 2, 3, 4) ---
+  function markPhotoDirty(photo) {
+    if (!photo) return;
+    state.dirtyPhotos.add(photo);
+    updateSaveButtonState();
+    scheduleIncrementalSave(300);
+  }
+
+  function updateSaveButtonState() {
+    if (!els.btnSaveMetadata) return;
+    const dirtyCount = state.dirtyPhotos.size;
+    if (dirtyCount > 0) {
+      els.btnSaveMetadata.disabled = false;
+      if (els.saveBadge) {
+        els.saveBadge.style.display = 'inline-block';
+        els.saveBadge.textContent = dirtyCount;
+      }
+      if (els.btnSaveMetadataText) {
+        els.btnSaveMetadataText.textContent = `${I18N.t('topbar.btn_save')} (${dirtyCount})`;
+      }
+    } else {
+      els.btnSaveMetadata.disabled = true;
+      if (els.saveBadge) els.saveBadge.style.display = 'none';
+      if (els.btnSaveMetadataText) {
+        els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
+      }
+    }
+  }
+
+  let _saveDebounceTimer = null;
+  function scheduleIncrementalSave(delayMs = 300) {
+    if (_saveDebounceTimer) clearTimeout(_saveDebounceTimer);
+    _saveDebounceTimer = setTimeout(() => {
+      flushSaveMetadata();
+    }, delayMs);
+  }
+
+  async function flushSaveMetadata() {
+    if (state.dirtyPhotos.size === 0) {
+      if (state.exitPending) {
+        await invokeTauri('exit_app');
+      }
+      return;
+    }
+    if (state.isSaving) return;
+    state.isSaving = true;
+
+    const itemsToSave = [];
+    for (const p of state.dirtyPhotos) {
+      itemsToSave.push({
+        path: p.path,
+        rating: p.rating,
+        crop: p.crop || null,
+      });
+    }
+
+    try {
+      await invokeTauri('save_metadata', { items: itemsToSave });
+      for (const it of itemsToSave) {
+        const obj = state.photoMap.get(it.path);
+        if (obj) state.dirtyPhotos.delete(obj);
+      }
+      appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted`);
+    } catch (err) {
+      appendLog(`[Save Error] Failed to persist metadata: ${err}`);
+    } finally {
+      state.isSaving = false;
+      updateSaveButtonState();
+      if (state.exitPending) {
+        await invokeTauri('exit_app');
+      }
+    }
+  }
+
 
   // --- Feature 7: Context Menu & File Integration ---
   function initContextMenu() {
@@ -1997,6 +2131,13 @@
 
     els.btnBrowse.addEventListener('click', chooseFolder);
     els.btnRun.addEventListener('click', handleRunToggle);
+
+    if (els.btnSaveMetadata) {
+      els.btnSaveMetadata.addEventListener('click', () => {
+        appendLog('[Manual Save] User triggered metadata save button.');
+        flushSaveMetadata();
+      });
+    }
 
     if (els.btnToggleConfig) {
       els.btnToggleConfig.addEventListener('click', toggleConfigPanel);

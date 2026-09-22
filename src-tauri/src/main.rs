@@ -403,6 +403,27 @@ async fn export_csv(
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn save_metadata(
+    app: AppHandle,
+    state: State<'_, Arc<Mutex<EngineState>>>,
+    items: serde_json::Value,
+) -> Result<(), String> {
+    let payload = serde_json::json!({
+        "cmd": "save_metadata",
+        "items": items
+    });
+    let mut guard = state.lock().unwrap();
+    send_engine_command(&app, &mut guard, payload)
+}
+
+#[tauri::command]
+async fn exit_app(app: AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
+
 /// Secrets (Roboflow API key) live in the OS credential store
 /// (Windows Credential Manager / macOS Keychain) — never in the webview's
 /// plaintext localStorage. The key namespace is a strict allowlist so the
@@ -611,6 +632,13 @@ fn main() {
             });
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Prevent immediate close to allow frontend to flush/prompt pending saves
+                api.prevent_close();
+                let _ = window.emit("app-close-requested", ());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             select_folder,
             scan,
@@ -618,6 +646,8 @@ fn main() {
             cancel,
             preview,
             export_csv,
+            save_metadata,
+            exit_app,
             secret_get,
             secret_set,
             show_in_folder,

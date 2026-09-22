@@ -181,6 +181,26 @@ Further reading: [`results/performance_baseline.md`](results/performance_baselin
 (measured numbers, platform baselines), [`docs/P4_LABELING.md`](docs/P4_LABELING.md)
 (P4 labeling guide).
 
+## Roadmap
+
+### Near-term (v0.5)
+- [x] **Shift-first auto-crop boundary protection**: eliminates reverse crop shrinking on edge-positioned subjects.
+- [x] **DOM-based incremental XMP writing & rating protection**: natively preserves existing Lightroom presets, copyright, and in-camera star ratings.
+- [x] **Multi-trigger persistence & exit guard**: automated culling persistence, debounced incremental saves on manual edits, explicit save button, and graceful exit prompt.
+- [x] **Viewport zoom lock**: preserves zoom level and pan coordinates across photo navigation for fast critical-focus inspection.
+- [x] **Intuitive photography terminology**: refactored engine parameters to align with photography mental models.
+
+### Mid-term (v1.0)
+- [ ] **Unsupervised racecar clustering & bulk team tagging**: cluster cars based on visual embeddings and color histograms, allowing one-click bulk IPTC tagging per team/driver.
+- [ ] **Multi-photo side-by-side comparison view (Survey View)**: inspect 2 to 4 burst frames simultaneously with synchronized pan and zoom.
+- [ ] **Physical export pipeline**: copy selected 3-5 star RAW/cooked files directly to a designated export folder.
+
+### Backlog
+- [ ] Cockpit / helmet ROI sharpness decoupling for panning shots.
+- [ ] Time-axis peak sampling for burst selection instead of absolute Top-N truncation.
+- [ ] Frequency-domain Tukey windowing and high-ISO noise floor subtraction.
+- [ ] Multi-domain modular detection support (wildlife / track & field).
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
