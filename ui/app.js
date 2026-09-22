@@ -677,6 +677,7 @@
       els.countKeep.textContent = '0';
       els.countReject.textContent = '0';
       els.progressBar.style.width = '0%';
+      updateSaveButtonState();
       state.selectedPhoto = null;
       resetZoom();
       els.previewImg.style.display = 'none';
@@ -1611,10 +1612,23 @@
     if (els.zoomRangeSlider) {
       els.zoomRangeSlider.addEventListener('input', (e) => {
         const val = parseInt(e.target.value, 10);
-        if (val <= 50) {
-          // Switch to Auto mode
+        if (val <= 75) {
+          // Switch to Auto mode (crop focus)
           state.zoom.mode = 'auto';
-          resetZoom();
+          els.zoomRangeSlider.value = 50;
+          if (state.selectedPhoto && state.selectedPhoto.crop) {
+            const focus = computeCropFocus(state.selectedPhoto.crop);
+            if (focus) {
+              state.zoom.level = focus.level;
+              state.zoom.panX = focus.panX;
+              state.zoom.panY = focus.panY;
+            }
+          } else {
+            state.zoom.level = 1.0;
+            state.zoom.panX = 0;
+            state.zoom.panY = 0;
+          }
+          applyZoomTransform();
           appendLog('[Zoom] Switched to Auto (crop focus mode)');
           return;
         }
@@ -1631,8 +1645,14 @@
       });
     }
 
-    // Number input adjustment: strictly clamp between 100 and 250
+    // Number input adjustment: strictly clamp between 100 and 250, blur on enter/change
     if (els.zoomLevelInput) {
+      els.zoomLevelInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          els.zoomLevelInput.blur();
+        }
+      });
       els.zoomLevelInput.addEventListener('change', (e) => {
         let val = parseInt(e.target.value, 10);
         if (isNaN(val) || val < 100) val = 100;
@@ -1644,6 +1664,7 @@
           state.zoom.panY = 0;
         }
         applyZoomTransform();
+        els.zoomLevelInput.blur();
         appendLog(`[Zoom] Manual input: ${val}%`);
       });
     }
@@ -1944,13 +1965,9 @@
 
   function updateSaveButtonState() {
     if (!els.btnSaveMetadata) return;
-    const dirtyCount = state.dirtyPhotos.size;
-    if (dirtyCount > 0 && !state.isSaving) {
-      els.btnSaveMetadata.disabled = false;
-    } else {
-      els.btnSaveMetadata.disabled = true;
-    }
-    // Button label remains strictly static to prevent any layout jitter
+    // Save button stays actionable whenever photos are loaded and not currently writing
+    const canSave = state.photos.length > 0 && !state.isSaving;
+    els.btnSaveMetadata.disabled = !canSave;
     if (els.btnSaveMetadataText) {
       els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
     }
@@ -1960,36 +1977,43 @@
   function scheduleIncrementalSave(delayMs = 300) {
     if (_saveDebounceTimer) clearTimeout(_saveDebounceTimer);
     _saveDebounceTimer = setTimeout(() => {
-      flushSaveMetadata();
+      flushSaveMetadata(false);
     }, delayMs);
   }
 
   async function flushSaveMetadata(isManualClick = false) {
-    if (state.dirtyPhotos.size === 0) {
+    if (state.isSaving) return;
+
+    // Determine items to persist
+    let targetPhotos = [];
+    if (state.dirtyPhotos.size > 0) {
+      targetPhotos = Array.from(state.dirtyPhotos);
+    } else if (isManualClick) {
+      // Manual click with no dirty photos: flush all scored photos
+      targetPhotos = state.photos.filter((p) => p.status !== 'pending' && p.status !== 'decode_failed');
+    }
+
+    if (targetPhotos.length === 0) {
       if (state.exitPending) {
         await invokeTauri('exit_app');
       } else if (isManualClick) {
-        showToast(I18N.t('dialog.save_success'));
+        alert(I18N.t('dialog.save_success'));
       }
       return;
     }
-    if (state.isSaving) return;
-    state.isSaving = true;
 
+    state.isSaving = true;
     if (els.saveBtnIcon) {
       els.saveBtnIcon.textContent = '';
       els.saveBtnIcon.classList.add('spinning');
     }
     if (els.btnSaveMetadata) els.btnSaveMetadata.disabled = true;
 
-    const itemsToSave = [];
-    for (const p of state.dirtyPhotos) {
-      itemsToSave.push({
-        path: p.path,
-        rating: p.rating,
-        crop: p.crop || null,
-      });
-    }
+    const itemsToSave = targetPhotos.map((p) => ({
+      path: p.path,
+      rating: p.rating,
+      crop: p.crop || null,
+    }));
 
     try {
       await invokeTauri('save_metadata', { items: itemsToSave });
@@ -1997,9 +2021,12 @@
         const obj = state.photoMap.get(it.path);
         if (obj) state.dirtyPhotos.delete(obj);
       }
-      appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted`);
+      appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted to disk`);
       if (!state.exitPending) {
         showToast(I18N.t('dialog.save_success'));
+        if (isManualClick) {
+          alert(I18N.t('dialog.save_success'));
+        }
       }
     } catch (err) {
       appendLog(`[Save Error] Failed to persist metadata: ${err}`);
