@@ -217,3 +217,33 @@ def test_json_lines_frame_status_and_veto_enum_consistency(engine_process: Engin
         # Veto should be string and if non-empty, either a code or informative message
         assert isinstance(veto, str)
 
+
+def test_json_lines_save_metadata(engine_process: EngineChannel, tmp_path: Path):
+    """Verify that save_metadata command writes XMP and emits save_done event."""
+    img_path = tmp_path / "test_shot.ARW"
+    img_path.touch()
+
+    engine_process.clear()
+    engine_process.send({
+        "cmd": "save_metadata",
+        "items": [
+            {
+                "path": str(img_path),
+                "rating": 4,
+                "crop": [0.1, 0.1, 0.9, 0.9],
+            }
+        ]
+    })
+
+    save_done_evt = engine_process.wait_for_event("save_done", timeout=10.0)
+    assert save_done_evt is not None
+    assert save_done_evt.get("count") == 1
+    assert save_done_evt.get("status") == "ok"
+
+    # Verify sidecar written
+    xmp_path = img_path.with_suffix(".xmp")
+    assert xmp_path.exists()
+    content = xmp_path.read_text(encoding="utf-8")
+    assert 'xmp:Rating="4"' in content or '<xmp:Rating>4</xmp:Rating>' in content
+
+

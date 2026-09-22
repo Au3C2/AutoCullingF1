@@ -8,6 +8,8 @@
     "btn_run": "⚡️Start Culling",
     "btn_run_dry": "⚡️Dry-Run",
     "btn_cancel": "Cancel Culling",
+    "btn_save": "Save Changes",
+    "title_save": "Safely save changes and ratings to XMP sidecars / image metadata",
     "btn_export_csv": "Export CSV",
     "title_export_csv": "Export scoring statistics to CSV",
     "title_log": "View runtime log",
@@ -181,7 +183,12 @@
     "error_load_title": "Unable to load preview",
     "error_fail_title": "Preview load error",
     "badge_inspection": "INSPECTION",
-    "zoom_tip": "Scroll: Zoom · Drag: Pan · Double Click: Reset"
+    "zoom_tip": "Scroll: Zoom · Drag: Pan · Double Click: Reset",
+    "btn_lock_zoom": "Lock zoom & pan viewport across photo changes"
+  },
+  "modal": {
+    "saving_title": "Saving Metadata...",
+    "saving_desc": "Please wait while your changes are securely written to XMP sidecars. The application will close automatically once complete."
   },
   "drawer": {
     "title": "TERMINAL STREAM",
