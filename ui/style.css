@@ -1512,10 +1512,49 @@ textarea,
   gap: 8px;
 }
 
+.tau-saving-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid var(--tau-accent-cyan);
+  border-radius: 12px;
+  color: var(--tau-accent-cyan);
+  font-family: var(--tau-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 10px var(--tau-accent-cyan-glow);
+  animation: pulseSaving 1.2s infinite ease-in-out;
+}
+
+@keyframes pulseSaving {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
 .tau-zoom-slider-box {
   display: flex;
   align-items: center;
-  width: 76px;
+  gap: 6px;
+  width: 124px;
+}
+
+.tau-zoom-auto-label {
+  font-family: var(--tau-font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--tau-accent-cyan);
+  letter-spacing: 0.02em;
+}
+
+.tau-slider-track-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 20px;
 }
 
 .tau-zoom-slider {
@@ -1523,26 +1562,58 @@ textarea,
   appearance: none;
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+.tau-slider-ticks-bar {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tau-tick-mark {
+  position: absolute;
+  top: 0;
+  width: 1.5px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 1px;
+  transform: translateX(-50%);
 }
 
 .tau-zoom-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   background: var(--tau-accent-cyan);
-  box-shadow: 0 0 6px var(--tau-accent-cyan-glow);
+  box-shadow: 0 0 8px var(--tau-accent-cyan-glow);
   cursor: pointer;
   transition: transform 0.1s ease;
 }
 
 .tau-zoom-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+  transform: scale(1.25);
+}
+
+.tau-btn-sm {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tau-zoom-input-box {

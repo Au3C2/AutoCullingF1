@@ -155,6 +155,7 @@
     "scan_error": "扫描失败: {err}",
     "photos_discovered": "已发现 {count} 张照片",
     "photos_pending": "待筛选: 共 {count} 张照片",
+    "saving": "保存中...",
     "scored_summary": "SCORED {scored}/{total} · KEEP {keep} · REJECT {reject}{failed}"
   },
   "table": {

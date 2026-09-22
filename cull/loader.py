@@ -45,7 +45,10 @@ EXTENSIONS = {".hif", ".heif", ".heic", ".nef", ".arw", ".cr2", ".cr3",
               ".orf", ".rw2", ".raf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 
 RAW_EXTS = {".arw", ".nef", ".cr2", ".cr3", ".orf", ".rw2", ".raf", ".dng"}
-COOKED_EXTS = {".jpg", ".jpeg", ".hif", ".heif", ".heic", ".png", ".tiff", ".tif"}
+HEIF_EXTS = {".hif", ".heif", ".heic"}
+# Formats that use .xmp sidecar files (RAW + modern container formats like HEIF/HIF)
+SIDECAR_EXTS = RAW_EXTS | HEIF_EXTS
+COOKED_EXTS = {".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 
 def get_resource_path(relative_path: str) -> Path:
     """Get absolute path to resource, works for dev and for PyInstaller."""

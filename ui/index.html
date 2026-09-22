@@ -437,6 +437,10 @@
           <span class="tau-stat-sep">·</span>
           <span class="tau-stat-label" data-i18n="telemetry.eta">ETA:</span> <span class="tau-stat-val">--</span>
         </div>
+        <span id="savingTag" class="tau-saving-chip" style="display: none;">
+          <span class="tau-pulse-dot tau-dot-cyan" style="width: 6px; height: 6px;"></span>
+          <span data-i18n="telemetry.saving">保存中...</span>
+        </span>
       </div>
 
       <div class="tau-telemetry-right">
@@ -505,18 +509,32 @@
               <span id="previewTitle" class="tau-ph-title" data-i18n="preview.title">照片预览与检测框</span>
             </div>
             <div class="tau-ph-right" id="previewZoomControls" style="display: none;">
-              <div class="tau-zoom-slider-box" title="预设缩放档位: 100%, 150%, 200%, 250%">
-                <input type="range" id="zoomRangeSlider" min="100" max="250" step="50" value="100" class="tau-zoom-slider">
+              <div class="tau-zoom-slider-box" title="预设缩放档位: Auto(自适应聚焦), 100%, 150%, 200%, 250%">
+                <span class="tau-zoom-auto-label">Auto</span>
+                <div class="tau-slider-track-wrap">
+                  <input type="range" id="zoomRangeSlider" min="50" max="250" step="50" value="50" class="tau-zoom-slider" list="zoomTicks">
+                  <datalist id="zoomTicks">
+                    <option value="50" label="Auto"></option>
+                    <option value="100" label="100%"></option>
+                    <option value="150" label="150%"></option>
+                    <option value="200" label="200%"></option>
+                    <option value="250" label="250%"></option>
+                  </datalist>
+                  <div class="tau-slider-ticks-bar">
+                    <span class="tau-tick-mark" style="left: 0%;"></span>
+                    <span class="tau-tick-mark" style="left: 25%;"></span>
+                    <span class="tau-tick-mark" style="left: 50%;"></span>
+                    <span class="tau-tick-mark" style="left: 75%;"></span>
+                    <span class="tau-tick-mark" style="left: 100%;"></span>
+                  </div>
+                </div>
               </div>
               <div class="tau-zoom-input-box">
-                <input type="number" id="zoomLevelInput" min="100" max="500" step="10" value="100" class="tau-zoom-input">
+                <input type="number" id="zoomLevelInput" min="100" max="250" step="10" value="100" class="tau-zoom-input">
                 <span class="tau-zoom-unit">%</span>
               </div>
-              <button id="btnLockZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="锁定缩放视口 (自动聚焦裁剪框并保持放大)" data-i18n-attr="title:preview.btn_lock_zoom">
-                <span id="lockZoomIcon">🔓</span>
-              </button>
-              <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="双击或点击复位 (1:1)" data-i18n-attr="title:preview.zoom_tip">
-                <span>⟲</span>
+              <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-sm" title="复位为全画幅 (1:1) / 双击图片复位" data-i18n-attr="title:preview.zoom_tip">
+                <span style="font-size: 15px; font-weight: bold; line-height: 1;">⟲</span>
               </button>
             </div>
           </div>

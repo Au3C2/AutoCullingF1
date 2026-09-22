@@ -158,7 +158,7 @@
       level: 1.0,
       panX: 0,
       panY: 0,
-      locked: localStorage.getItem('ac-zoom-locked') === 'true',
+      mode: 'auto', // 'auto' (focus crop) | 'manual'
       isPanning: false,
       startX: 0,
       startY: 0,
@@ -188,6 +188,7 @@
     btnSaveMetadata: $('btnSaveMetadata'),
     btnSaveMetadataText: $('btnSaveMetadataText'),
     saveBadge: $('saveBadge'),
+    savingTag: $('savingTag'),
     btnExportCsv: $('btnExportCsv'),
     btnToggleLog: $('btnToggleLog'),
     stageStatus: $('stageStatus'),
@@ -211,8 +212,6 @@
     zoomRangeSlider: $('zoomRangeSlider'),
     zoomLevelInput: $('zoomLevelInput'),
     btnResetZoom: $('btnResetZoom'),
-    btnLockZoom: $('btnLockZoom'),
-    lockZoomIcon: $('lockZoomIcon'),
     savingModal: $('savingModal'),
     pillRating: $('pillRating'),
     pillSharp: $('pillSharp'),
@@ -1542,24 +1541,38 @@
 
   // --- Feature 3: Pan & Zoom Interactions ---
   function resetZoom() {
+    state.zoom.mode = 'auto';
     state.zoom.level = 1.0;
     state.zoom.panX = 0;
     state.zoom.panY = 0;
     state.zoom.isPanning = false;
+
+    if (state.selectedPhoto && state.selectedPhoto.crop) {
+      const focus = computeCropFocus(state.selectedPhoto.crop);
+      if (focus) {
+        state.zoom.level = focus.level;
+        state.zoom.panX = focus.panX;
+        state.zoom.panY = focus.panY;
+      }
+    }
     applyZoomTransform();
   }
 
   function applyZoomTransform() {
     if (!els.previewImg) return;
-    const { level, panX, panY } = state.zoom;
+    const { level, panX, panY, mode } = state.zoom;
     els.previewImg.style.transform = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
 
     const pct = Math.round(level * 100);
     if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
-      els.zoomLevelInput.value = pct;
+      els.zoomLevelInput.value = Math.max(100, Math.min(250, pct));
     }
     if (els.zoomRangeSlider) {
-      els.zoomRangeSlider.value = Math.max(100, Math.min(250, pct));
+      if (mode === 'auto') {
+        els.zoomRangeSlider.value = 50; // Leftmost Auto slot
+      } else {
+        els.zoomRangeSlider.value = Math.max(100, Math.min(250, pct));
+      }
     }
 
     if (els.previewContainer) {
@@ -1601,31 +1614,44 @@
   function initPanZoom() {
     if (!els.previewContainer) return;
 
-    // Range slider preset step adjustments (100, 150, 200, 250)
+    // Range slider preset step adjustments (Auto=50, 100, 150, 200, 250)
     if (els.zoomRangeSlider) {
       els.zoomRangeSlider.addEventListener('input', (e) => {
         const val = parseInt(e.target.value, 10);
+        if (val <= 50) {
+          // Switch to Auto mode
+          state.zoom.mode = 'auto';
+          resetZoom();
+          appendLog('[Zoom] Switched to Auto (crop focus mode)');
+          return;
+        }
+
+        // Manual discrete step
+        state.zoom.mode = 'manual';
         state.zoom.level = parseFloat((val / 100).toFixed(2));
         if (state.zoom.level === 1.0) {
           state.zoom.panX = 0;
           state.zoom.panY = 0;
         }
         applyZoomTransform();
+        appendLog(`[Zoom] Preset step: ${val}%`);
       });
     }
 
-    // Number input adjustment
+    // Number input adjustment: strictly clamp between 100 and 250
     if (els.zoomLevelInput) {
       els.zoomLevelInput.addEventListener('change', (e) => {
         let val = parseInt(e.target.value, 10);
         if (isNaN(val) || val < 100) val = 100;
-        if (val > 500) val = 500;
+        if (val > 250) val = 250;
+        state.zoom.mode = 'manual';
         state.zoom.level = parseFloat((val / 100).toFixed(2));
         if (state.zoom.level === 1.0) {
           state.zoom.panX = 0;
           state.zoom.panY = 0;
         }
         applyZoomTransform();
+        appendLog(`[Zoom] Manual input: ${val}%`);
       });
     }
 
@@ -1634,8 +1660,9 @@
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       e.preventDefault();
       const step = 0.25;
+      state.zoom.mode = 'manual';
       if (e.deltaY < 0) {
-        state.zoom.level = Math.min(5.0, parseFloat((state.zoom.level + step).toFixed(2)));
+        state.zoom.level = Math.min(2.5, parseFloat((state.zoom.level + step).toFixed(2)));
       } else {
         state.zoom.level = Math.max(1.0, parseFloat((state.zoom.level - step).toFixed(2)));
       }
@@ -1672,48 +1699,23 @@
       state.zoom.isPanning = false;
     });
 
-    // Double Click toggle 1x and 2.5x
+    // Double Click toggle Auto and 1.0x
     els.previewContainer.addEventListener('dblclick', (e) => {
       e.preventDefault();
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       if (state.zoom.level > 1.0) {
-        resetZoom();
-      } else {
-        state.zoom.level = 2.5;
+        state.zoom.mode = 'manual';
+        state.zoom.level = 1.0;
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
         applyZoomTransform();
+      } else {
+        resetZoom();
       }
     });
 
     if (els.btnResetZoom) {
       els.btnResetZoom.addEventListener('click', resetZoom);
-    }
-
-    if (els.btnLockZoom) {
-      const updateLockUI = () => {
-        if (els.lockZoomIcon) {
-          els.lockZoomIcon.textContent = state.zoom.locked ? '🔒' : '🔓';
-        }
-        if (els.btnLockZoom) {
-          if (state.zoom.locked) els.btnLockZoom.classList.add('active');
-          else els.btnLockZoom.classList.remove('active');
-        }
-      };
-      updateLockUI();
-      els.btnLockZoom.addEventListener('click', () => {
-        state.zoom.locked = !state.zoom.locked;
-        localStorage.setItem('ac-zoom-locked', state.zoom.locked ? 'true' : 'false');
-        updateLockUI();
-        appendLog(`[View] Viewport lock ${state.zoom.locked ? 'enabled (auto focus crop box)' : 'disabled'}`);
-        if (state.zoom.locked && state.selectedPhoto && state.selectedPhoto.crop) {
-          const focus = computeCropFocus(state.selectedPhoto.crop);
-          if (focus) {
-            state.zoom.level = focus.level;
-            state.zoom.panX = focus.panX;
-            state.zoom.panY = focus.panY;
-            applyZoomTransform();
-          }
-        }
-      });
     }
   }
 
@@ -1733,17 +1735,20 @@
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
 
-    if (state.zoom.locked) {
-      // If locked, automatically focus to detected crop box if available
+    if (state.zoom.mode === 'auto') {
       const focus = item.crop ? computeCropFocus(item.crop) : null;
       if (focus) {
         state.zoom.level = focus.level;
         state.zoom.panX = focus.panX;
         state.zoom.panY = focus.panY;
-        applyZoomTransform();
-      } else if (state.zoom.level > 1.0) {
-        applyZoomTransform();
+      } else {
+        state.zoom.level = 1.0;
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
       }
+      applyZoomTransform();
+    } else if (state.zoom.level > 1.0) {
+      applyZoomTransform();
     } else if (shouldResetZoom) {
       resetZoom();
     }
@@ -1783,7 +1788,7 @@
 
         if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
           item.crop = res.crop;
-          if (state.zoom.locked) {
+          if (state.zoom.mode === 'auto') {
             const focus = computeCropFocus(res.crop);
             if (focus) {
               state.zoom.level = focus.level;
@@ -1942,15 +1947,13 @@
         els.saveBadge.style.display = 'inline-block';
         els.saveBadge.textContent = dirtyCount;
       }
-      if (els.btnSaveMetadataText) {
-        els.btnSaveMetadataText.textContent = `${I18N.t('topbar.btn_save')} (${dirtyCount})`;
-      }
     } else {
       els.btnSaveMetadata.disabled = true;
       if (els.saveBadge) els.saveBadge.style.display = 'none';
-      if (els.btnSaveMetadataText) {
-        els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
-      }
+    }
+    // Button label remains fixed string without width jitter
+    if (els.btnSaveMetadataText) {
+      els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
     }
   }
 
@@ -1971,6 +1974,7 @@
     }
     if (state.isSaving) return;
     state.isSaving = true;
+    if (els.savingTag) els.savingTag.style.display = 'inline-flex';
 
     const itemsToSave = [];
     for (const p of state.dirtyPhotos) {
@@ -1992,6 +1996,7 @@
       appendLog(`[Save Error] Failed to persist metadata: ${err}`);
     } finally {
       state.isSaving = false;
+      if (els.savingTag) els.savingTag.style.display = 'none';
       updateSaveButtonState();
       if (state.exitPending) {
         await invokeTauri('exit_app');
