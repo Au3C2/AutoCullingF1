@@ -444,6 +444,53 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
             log.warning("CSV export failed: %s", exc)
             emit({"type": "error", "message": f"CSV export failed: {exc}"})
 
+    def do_save_metadata(cmd: dict) -> None:
+        items = cmd.get("items", [])
+        if not items:
+            emit({"type": "save_done", "count": 0, "status": "ok"})
+            return
+
+        def _save_worker() -> None:
+            try:
+                from cull.xmp_writer import write_xmp_batch
+                from cull.loader import update_image_metadata_batch, COOKED_EXTS, RAW_EXTS
+
+                xmp_list = []
+                sync_list = []
+
+                for it in items:
+                    p_str = it.get("path")
+                    if not p_str:
+                        continue
+                    p = Path(p_str)
+                    rating = int(it.get("rating", 0))
+                    crop = it.get("crop")
+                    crop_tuple = tuple(crop) if crop and len(crop) == 4 else None
+
+                    ext = p.suffix.lower()
+                    # If file is standalone cooked (JPEG/HEIF without RAW counterpart), sync metadata directly.
+                    # Otherwise write XMP sidecar. Case-insensitive sibling check for case-sensitive filesystems.
+                    has_raw_sibling = any(
+                        p.with_suffix(re).exists() or p.with_suffix(re.upper()).exists()
+                        for re in RAW_EXTS
+                    )
+                    if ext in COOKED_EXTS and not has_raw_sibling:
+                        sync_list.append((p, rating, crop_tuple))
+                    else:
+                        xmp_list.append((p, rating, crop_tuple))
+
+                if xmp_list:
+                    write_xmp_batch(xmp_list, overwrite=True, dry_run=False)
+                if sync_list:
+                    update_image_metadata_batch(sync_list)
+
+                emit({"type": "save_done", "count": len(items), "status": "ok"})
+            except Exception as e:
+                log.error("do_save_metadata failed: %s", e)
+                emit({"type": "save_error", "message": str(e)})
+
+        threading.Thread(target=_save_worker, daemon=True).start()
+
     # Start the reader only after every handler exists — a command arriving
     # during the definition window used to raise NameError inside the reader
     # thread and kill it for the rest of the session.
@@ -462,6 +509,9 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
             do_preview(cmd)
         elif kind == "export_csv":
             do_export_csv(cmd)
+        elif kind == "save_metadata":
+            do_save_metadata(cmd)
+
 
 
 def run(args: argparse.Namespace) -> int:

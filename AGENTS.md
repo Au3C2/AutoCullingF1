@@ -371,14 +371,14 @@ tip SHAs recorded in the session log if recovery is ever needed.
   times (CI guards run on every push).
 - Trivial changes (docs, single-file fixes): commit directly to master
   and push.
-- Large/risky work: short-lived `feature/<topic>` branch cut FROM master,
-  merged back via PR, deleted immediately after merge. Branch lifetime
-  target: under two weeks. Any branch older than that gets merged or
-  `git cherry`-verified and deleted.
-- **Mandatory Pre-Merge Review Rule**: Before merging ANY PR into master,
-  the authoring agent MUST spawn an independent sub-agent (or dedicated
-  review agent) to perform a full code, logic, security, and regression audit
-  on the branch diff. The sub-agent's feedback must be addressed before merge.
+- **Feature & Bugfix Workflow**:
+  1. 本地从 master 切出短期 `feature/<topic>` 分支进行开发；
+  2. 开发完成并严格完成本地自验（单元测试、基线回归门禁）后，推送分支到 GitHub 并创建 Pull Request；
+  3. 派生独立的子 agent 单独进行 review，并由该子 agent 在 PR 上提交 review 意见；
+  4. 主 agent 根据 review 意见在分支上进行进一步代码改进并推送；
+  5. 交由**同一子 agent**进行复核，直到该子 agent 给出明确通过（Approve）的评价；
+  6. 子 agent 评价通过后，由主 agent 在 GitHub 上提交合入（Merge PR）；
+  7. 最后在本地拉取同步远端 master 代码，并清理删除本地及远端开发分支。
 - NEVER run a parallel lineage (two branches evolving the same feature) —
   this produced 13 orphaned commits in the `gui` branch and a 106-duplicate
   `develop`.

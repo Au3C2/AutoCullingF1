@@ -16,12 +16,18 @@ def calculate_crop(x1: float, y1: float, x2: float, y2: float, img_ar: float = 1
         x1, y1, x2, y2: Normalized detection coordinates (0-1).
         img_ar: Aspect ratio of the original image (Width/Height). Defaults to 3:2 (1.5).
     """
+    # Sanitize and clamp input coordinates to [0.0, 1.0]
+    x1 = max(0.0, min(1.0, float(x1)))
+    y1 = max(0.0, min(1.0, float(y1)))
+    x2 = max(0.0, min(1.0, float(x2)))
+    y2 = max(0.0, min(1.0, float(y2)))
+
     w_box_norm = x2 - x1
     h_box_norm = y2 - y1
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
     
-    if w_box_norm <= 0 or h_box_norm <= 0:
+    if w_box_norm <= 1e-4 or h_box_norm <= 1e-4:
         return None
 
     # Convert normalized box dimensions to "visual" dimensions based on image AR
@@ -46,37 +52,49 @@ def calculate_crop(x1: float, y1: float, x2: float, y2: float, img_ar: float = 1
     w_new_norm = w_new_vis / img_ar
     h_new_norm = h_new_vis / 1.0
 
-    # Bounds check and shrink-to-fit while maintaining aspect ratio
-    # We want to keep (cx, cy) fixed if possible.
-    
-    # Calculate half spans in normalized units
-    hw = w_new_norm / 2
-    hh = h_new_norm / 2
-    
-    # Check if we exceed image bounds relative to center
-    max_hw = min(cx, 1.0 - cx)
-    max_hh = min(cy, 1.0 - cy)
-    
-    # If the requested span is too large, we must shrink to fit the constraints
+    # Ensure crop box size is not larger than full image in visual space
+    # (i.e. scale down if it exceeds the entire frame dimensions)
+    max_w_norm = 1.0
+    max_h_norm = 1.0
     scale = 1.0
-    if hw > max_hw:
-        scale = min(scale, max_hw / hw)
-    if hh > max_hh:
-        scale = min(scale, max_hh / hh)
-        
+    if w_new_norm > max_w_norm:
+        scale = min(scale, max_w_norm / w_new_norm)
+    if h_new_norm > max_h_norm:
+        scale = min(scale, max_h_norm / h_new_norm)
+
     w_final_norm = w_new_norm * scale
     h_final_norm = h_new_norm * scale
-    
-    left = cx - w_final_norm / 2
-    right = cx + w_final_norm / 2
-    top = cy - h_final_norm / 2
-    bottom = cy + h_final_norm / 2
-    
-    # Final clamping just for safety
+
+    # Shift-first bounds resolution:
+    # Instead of forcing (cx, cy) to stay strictly at the center of the crop,
+    # shift the center inside [hw, 1.0 - hw] and [hh, 1.0 - hh] to prevent clipping edges.
+    hw = w_final_norm / 2.0
+    hh = h_final_norm / 2.0
+
+    cx_shifted = max(hw, min(1.0 - hw, cx)) if hw <= 0.5 else 0.5
+    cy_shifted = max(hh, min(1.0 - hh, cy)) if hh <= 0.5 else 0.5
+
+    left = cx_shifted - hw
+    right = cx_shifted + hw
+    top = cy_shifted - hh
+    bottom = cy_shifted + hh
+
+    # Safety margin guard: ensure detection box is strictly covered
+    # If detection box boundary slightly exceeds because of extreme edge position,
+    # clamp while maintaining valid box.
+    left = min(left, x1)
+    right = max(right, x2)
+    top = min(top, y1)
+    bottom = max(bottom, y2)
+
+    # Final clamping to valid image coordinate bounds [0.0, 1.0]
     left = max(0.0, min(1.0, left))
     right = max(0.0, min(1.0, right))
     top = max(0.0, min(1.0, top))
     bottom = max(0.0, min(1.0, bottom))
+
+    if left >= right or top >= bottom:
+        return None
     
     return (top, left, bottom, right)
 
