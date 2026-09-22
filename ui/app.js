@@ -208,7 +208,8 @@
     previewTitle: $('previewTitle'),
     previewScoreDetails: $('previewScoreDetails'),
     previewZoomControls: $('previewZoomControls'),
-    zoomLevelIndicator: $('zoomLevelIndicator'),
+    zoomRangeSlider: $('zoomRangeSlider'),
+    zoomLevelInput: $('zoomLevelInput'),
     btnResetZoom: $('btnResetZoom'),
     btnLockZoom: $('btnLockZoom'),
     lockZoomIcon: $('lockZoomIcon'),
@@ -1479,7 +1480,12 @@
     }
     row.style.display = '';
 
-    const newHtml = buildRowHtml(item);
+    const isBurstChild = row.classList.contains('tau-burst-child');
+    const isSingle = row.classList.contains('tau-single-row');
+    const isWinner = !!row.querySelector('.tau-winner-badge');
+    const isTopN = item.veto === 'burst_group_topn';
+
+    const newHtml = buildRowHtml(item, { isBurstChild, isSingle, isWinner, isTopN });
     const temp = document.createElement('tbody');
     temp.innerHTML = newHtml;
     const newRow = temp.firstElementChild;
@@ -1547,9 +1553,15 @@
     if (!els.previewImg) return;
     const { level, panX, panY } = state.zoom;
     els.previewImg.style.transform = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
-    if (els.zoomLevelIndicator) {
-      els.zoomLevelIndicator.textContent = `${Math.round(level * 100)}%`;
+
+    const pct = Math.round(level * 100);
+    if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
+      els.zoomLevelInput.value = pct;
     }
+    if (els.zoomRangeSlider) {
+      els.zoomRangeSlider.value = Math.max(100, Math.min(250, pct));
+    }
+
     if (els.previewContainer) {
       if (level > 1.0) {
         els.previewContainer.classList.add('zoomed');
@@ -1559,8 +1571,63 @@
     }
   }
 
+  function computeCropFocus(crop) {
+    if (!crop || crop.length !== 4) return null;
+    const [top, left, bottom, right] = crop;
+    const cropW = Math.max(0.01, right - left);
+    const cropH = Math.max(0.01, bottom - top);
+    const cx = (left + right) / 2.0;
+    const cy = (top + bottom) / 2.0;
+
+    // Retain 30% context around the crop box to indicate an expanded focus
+    const marginFactor = 1.30;
+    const scaleX = 1.0 / (cropW * marginFactor);
+    const scaleY = 1.0 / (cropH * marginFactor);
+    let targetScale = Math.min(scaleX, scaleY);
+    targetScale = Math.max(1.0, Math.min(2.5, parseFloat(targetScale.toFixed(2))));
+
+    const containerW = els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600;
+    const containerH = els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450;
+    const panX = (0.5 - cx) * containerW * targetScale;
+    const panY = (0.5 - cy) * containerH * targetScale;
+
+    return {
+      level: targetScale,
+      panX: parseFloat(panX.toFixed(1)),
+      panY: parseFloat(panY.toFixed(1)),
+    };
+  }
+
   function initPanZoom() {
     if (!els.previewContainer) return;
+
+    // Range slider preset step adjustments (100, 150, 200, 250)
+    if (els.zoomRangeSlider) {
+      els.zoomRangeSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.zoom.level = parseFloat((val / 100).toFixed(2));
+        if (state.zoom.level === 1.0) {
+          state.zoom.panX = 0;
+          state.zoom.panY = 0;
+        }
+        applyZoomTransform();
+      });
+    }
+
+    // Number input adjustment
+    if (els.zoomLevelInput) {
+      els.zoomLevelInput.addEventListener('change', (e) => {
+        let val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < 100) val = 100;
+        if (val > 500) val = 500;
+        state.zoom.level = parseFloat((val / 100).toFixed(2));
+        if (state.zoom.level === 1.0) {
+          state.zoom.panX = 0;
+          state.zoom.panY = 0;
+        }
+        applyZoomTransform();
+      });
+    }
 
     // Wheel Zoom
     els.previewContainer.addEventListener('wheel', (e) => {
@@ -1606,7 +1673,8 @@
     });
 
     // Double Click toggle 1x and 2.5x
-    els.previewContainer.addEventListener('dblclick', () => {
+    els.previewContainer.addEventListener('dblclick', (e) => {
+      e.preventDefault();
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       if (state.zoom.level > 1.0) {
         resetZoom();
@@ -1635,7 +1703,16 @@
         state.zoom.locked = !state.zoom.locked;
         localStorage.setItem('ac-zoom-locked', state.zoom.locked ? 'true' : 'false');
         updateLockUI();
-        appendLog(`[View] Viewport lock ${state.zoom.locked ? 'enabled (zoom preserved across photos)' : 'disabled'}`);
+        appendLog(`[View] Viewport lock ${state.zoom.locked ? 'enabled (auto focus crop box)' : 'disabled'}`);
+        if (state.zoom.locked && state.selectedPhoto && state.selectedPhoto.crop) {
+          const focus = computeCropFocus(state.selectedPhoto.crop);
+          if (focus) {
+            state.zoom.level = focus.level;
+            state.zoom.panX = focus.panX;
+            state.zoom.panY = focus.panY;
+            applyZoomTransform();
+          }
+        }
       });
     }
   }
@@ -1656,7 +1733,18 @@
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
 
-    if (shouldResetZoom && (!state.zoom.locked || state.zoom.level <= 1.0)) {
+    if (state.zoom.locked) {
+      // If locked, automatically focus to detected crop box if available
+      const focus = item.crop ? computeCropFocus(item.crop) : null;
+      if (focus) {
+        state.zoom.level = focus.level;
+        state.zoom.panX = focus.panX;
+        state.zoom.panY = focus.panY;
+        applyZoomTransform();
+      } else if (state.zoom.level > 1.0) {
+        applyZoomTransform();
+      }
+    } else if (shouldResetZoom) {
       resetZoom();
     }
 
@@ -1692,6 +1780,19 @@
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
+
+        if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
+          item.crop = res.crop;
+          if (state.zoom.locked) {
+            const focus = computeCropFocus(res.crop);
+            if (focus) {
+              state.zoom.level = focus.level;
+              state.zoom.panX = focus.panX;
+              state.zoom.panY = focus.panY;
+              applyZoomTransform();
+            }
+          }
+        }
       } else {
         els.previewImg.style.display = 'none';
         els.previewEmpty.style.display = 'flex';

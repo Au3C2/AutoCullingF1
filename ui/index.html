@@ -505,8 +505,14 @@
               <span id="previewTitle" class="tau-ph-title" data-i18n="preview.title">照片预览与检测框</span>
             </div>
             <div class="tau-ph-right" id="previewZoomControls" style="display: none;">
-              <span class="tau-zoom-pill" id="zoomLevelIndicator">100%</span>
-              <button id="btnLockZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="锁定缩放视口 (切图时保持缩放平移)" data-i18n-attr="title:preview.btn_lock_zoom">
+              <div class="tau-zoom-slider-box" title="预设缩放档位: 100%, 150%, 200%, 250%">
+                <input type="range" id="zoomRangeSlider" min="100" max="250" step="50" value="100" class="tau-zoom-slider">
+              </div>
+              <div class="tau-zoom-input-box">
+                <input type="number" id="zoomLevelInput" min="100" max="500" step="10" value="100" class="tau-zoom-input">
+                <span class="tau-zoom-unit">%</span>
+              </div>
+              <button id="btnLockZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="锁定缩放视口 (自动聚焦裁剪框并保持放大)" data-i18n-attr="title:preview.btn_lock_zoom">
                 <span id="lockZoomIcon">🔓</span>
               </button>
               <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="双击或点击复位 (1:1)" data-i18n-attr="title:preview.zoom_tip">

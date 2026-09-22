@@ -63,17 +63,36 @@ body {
   height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  /* Global desktop app baseline: disable accidental text selection on UI chrome */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-/* Non-text UI controls only — keep logs, status and result text selectable
-   (developer-facing tool). */
+/* Explicitly allow selection only on editable inputs and terminal console */
+input,
+textarea,
+.tau-log-console {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Table rows, preview container, buttons and tabs are strictly unselectable */
 .tau-btn,
 .tau-select,
 .tau-tab,
 .tau-toggle-custom,
 .tau-logo-badge,
-.tau-resizer {
-  user-select: none;
+.tau-resizer,
+.tau-table,
+.tau-table tr,
+.tau-table td,
+.tau-table th,
+.tau-preview-pane,
+.tau-preview-body,
+.tau-preview-body img {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none;
 }
 
 .tau-app {
@@ -1491,6 +1510,74 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.tau-zoom-slider-box {
+  display: flex;
+  align-items: center;
+  width: 76px;
+}
+
+.tau-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tau-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--tau-accent-cyan);
+  box-shadow: 0 0 6px var(--tau-accent-cyan-glow);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.tau-zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.tau-zoom-input-box {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.tau-zoom-input {
+  font-family: var(--tau-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tau-accent-cyan);
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 32px;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+
+.tau-zoom-input::-webkit-outer-spin-button,
+.tau-zoom-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tau-zoom-unit {
+  font-family: var(--tau-font-mono);
+  font-size: 10px;
+  color: rgba(0, 229, 255, 0.7);
+  margin-left: 1px;
 }
 
 .tau-zoom-pill {
