@@ -9,12 +9,8 @@ Implements a 3-tier passthrough and extraction pipeline:
 from __future__ import annotations
 
 import hashlib
-import io
 import logging
 import os
-import shutil
-import struct
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -26,7 +22,7 @@ from cull.loader import (
     HEIF_EXTS,
     RAW_EXTS,
     _extract_raw_tiff_direct,
-    find_embedded_jpeg_tiff,
+    load_image_rgb,
 )
 
 log = logging.getLogger(__name__)
@@ -152,9 +148,7 @@ class HighResProvider:
 
     def _resolve_tier3_fallback(self, raw_path: Path, gen_id: int) -> Optional[HighResResponse]:
         """Tier 3: Fallback when no high-res preview is embedded."""
-        # For RAWs without direct preview or unsupported TIFF, fallback to load via loader
-        from cull.loader import load_image
-        img = load_image(raw_path, scale_width=0)
+        img = load_image_rgb(raw_path, scale_width=0)
         if img is None:
             return None
 

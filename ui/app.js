@@ -1671,7 +1671,7 @@
       state.highres.loadedPath = resolvedPath;
       appendLog(`[HighRes] Seamlessly loaded: ${resolvedPath.split(/[\\/]/).pop()}`);
     } catch (err) {
-      log.debug('HighRes decode error: ' + err);
+      appendLog(`[HighRes Error] ${err}`);
     }
   }
 
@@ -1926,6 +1926,17 @@
   async function selectPhoto(item, shouldResetZoom = true) {
     if (!item) return;
     state.selectedPhoto = item;
+
+    // Discard any pending high-res requests for the previous photo
+    state.highres.activeGenId++;
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.opacity = '0';
+      els.previewHighResImg.src = '';
+    }
 
     document.querySelectorAll('#photoTable tbody tr').forEach((r) => r.classList.remove('selected'));
     const row = document.getElementById(rowIdFor(item));
