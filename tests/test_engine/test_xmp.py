@@ -106,3 +106,56 @@ def test_write_xmp_batch(tmp_path: Path):
     r2, p2 = read_xmp_rating(img2)
     assert r2 == -1
     assert p2 == -1
+
+
+def test_write_xmp_real_lightroom_files(tmp_path: Path):
+    """Test incremental write using real Lightroom Classic XMP files from test_import and test_nef."""
+    import shutil
+
+    # 1. Test with real Sony A7C2 Lightroom XMP (test_import/DSC01865.xmp)
+    sony_xmp_src = Path("test_import/DSC01865.xmp")
+    if sony_xmp_src.exists():
+        temp_img = tmp_path / "DSC01865.HIF"
+        temp_img.touch()
+        temp_xmp = tmp_path / "DSC01865.xmp"
+        shutil.copy2(sony_xmp_src, temp_xmp)
+
+        orig_content = temp_xmp.read_text(encoding="utf-8")
+        assert 'tiff:Model="ILCE-7CM2"' in orig_content
+        assert 'exif:ExposureTime="1/320"' in orig_content
+
+        # Update rating from -1 to 5 with crop
+        write_xmp(temp_img, rating=5, crop=(0.12, 0.15, 0.85, 0.88))
+
+        updated_content = temp_xmp.read_text(encoding="utf-8")
+        r, p = read_xmp_rating(temp_img)
+        assert r == 5
+        assert p == 0
+        assert 'tiff:Model="ILCE-7CM2"' in updated_content
+        assert 'exif:ExposureTime="1/320"' in updated_content
+        assert 'xmp:CreatorTool="ILCE-7CM2 v1.02"' in updated_content
+        assert 'crs:HasCrop="True"' in updated_content
+
+    # 2. Test with real Nikon Z6III Lightroom XMP (test_nef/IMG_20260315_164102_480.xmp)
+    nef_xmp_src = Path("test_nef/IMG_20260315_164102_480.xmp")
+    if nef_xmp_src.exists():
+        temp_img2 = tmp_path / "IMG_20260315_164102_480.NEF"
+        temp_img2.touch()
+        temp_xmp2 = tmp_path / "IMG_20260315_164102_480.xmp"
+        shutil.copy2(nef_xmp_src, temp_xmp2)
+
+        orig_content2 = temp_xmp2.read_text(encoding="utf-8")
+        assert 'tiff:Model="NIKON Z6_3"' in orig_content2
+        assert 'exif:ExposureTime="1/50"' in orig_content2
+
+        # Update rating to 4
+        write_xmp(temp_img2, rating=4, crop=None)
+
+        updated_content2 = temp_xmp2.read_text(encoding="utf-8")
+        r2, p2 = read_xmp_rating(temp_img2)
+        assert r2 == 4
+        assert p2 == 0
+        assert 'tiff:Model="NIKON Z6_3"' in updated_content2
+        assert 'exif:ExposureTime="1/50"' in updated_content2
+        assert 'xmp:CreatorTool="Ver.02.00"' in updated_content2
+

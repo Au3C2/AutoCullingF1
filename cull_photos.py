@@ -453,7 +453,7 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
         def _save_worker() -> None:
             try:
                 from cull.xmp_writer import write_xmp_batch
-                from cull.loader import update_image_metadata_batch, COOKED_EXTS, RAW_EXTS
+                from cull.loader import update_image_metadata_batch, COOKED_EXTS, RAW_EXTS, SIDECAR_EXTS
 
                 xmp_list = []
                 sync_list = []
@@ -468,13 +468,15 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
                     crop_tuple = tuple(crop) if crop and len(crop) == 4 else None
 
                     ext = p.suffix.lower()
-                    # If file is standalone cooked (JPEG/HEIF without RAW counterpart), sync metadata directly.
-                    # Otherwise write XMP sidecar. Case-insensitive sibling check for case-sensitive filesystems.
+                    # RAW and HEIF/HIF formats always use Lightroom-compatible .xmp sidecars.
+                    # Only standalone JPEGs have metadata synced directly into the file.
                     has_raw_sibling = any(
                         p.with_suffix(re).exists() or p.with_suffix(re.upper()).exists()
                         for re in RAW_EXTS
                     )
-                    if ext in COOKED_EXTS and not has_raw_sibling:
+                    if ext in SIDECAR_EXTS or has_raw_sibling:
+                        xmp_list.append((p, rating, crop_tuple))
+                    elif ext in COOKED_EXTS:
                         sync_list.append((p, rating, crop_tuple))
                     else:
                         xmp_list.append((p, rating, crop_tuple))

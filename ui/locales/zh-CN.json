@@ -155,6 +155,7 @@
     "scan_error": "扫描失败: {err}",
     "photos_discovered": "已发现 {count} 张照片",
     "photos_pending": "待筛选: 共 {count} 张照片",
+    "saving": "保存中...",
     "scored_summary": "SCORED {scored}/{total} · KEEP {keep} · REJECT {reject}{failed}"
   },
   "table": {
@@ -216,6 +217,7 @@
   "dialog": {
     "alert_select_dir": "请先选择待筛照片目录",
     "export_failed": "导出失败: {err}",
+    "save_success": "元数据已成功保存至磁盘",
     "dry_run_warn": "【模式提示】\n已启用试运行模式。\n\n系统仅在界面中计算与展示评分结果，不会对磁盘上的任何照片原图、XMP 伴侣文件或内置元数据进行任何写入或修改。",
     "rename_warn": "【操作提示】\n已启用拍摄时间重命名。\n\n筛选执行时，系统将直接修改磁盘上的物理文件名（统一规范为 IMG_YYYYMMDD_HHMMSS_mmm 格式），配套的 RAW、HEIF/JPG 及 XMP 副档将同步重命名。"
   }

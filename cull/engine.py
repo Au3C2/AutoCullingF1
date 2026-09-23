@@ -15,7 +15,7 @@ from typing import Callable, Any
 import numpy as np
 from cull.exif_reader import ExifData, BurstGroup, read_exif, group_bursts
 from cull.detector import CloudF1Detector, load_f1_model, load_coco_model, detect
-from cull.loader import load_image_rgb, update_image_metadata, update_image_metadata_batch, RAW_EXTS, COOKED_EXTS, EXTENSIONS
+from cull.loader import load_image_rgb, update_image_metadata, update_image_metadata_batch, RAW_EXTS, COOKED_EXTS, SIDECAR_EXTS, EXTENSIONS
 from cull.sharpness import score_sharpness
 from cull.composition import score_composition
 from cull.scorer import ImageScore, score_image, select_best_n, SHARP_THRESH, W_SHARP, W_COMP, MIN_RAW
@@ -54,7 +54,7 @@ def dedupe_raw_cooked(image_paths: list[Path]) -> tuple[list[Path], set[Path]]:
     unique = sorted(stems.values())
     standalone = {
         p for stem, p in stems.items()
-        if p.suffix.lower() in COOKED_EXTS and not has_raw.get(stem)
+        if p.suffix.lower() in COOKED_EXTS and p.suffix.lower() not in SIDECAR_EXTS and not has_raw.get(stem)
     }
     return unique, standalone
 

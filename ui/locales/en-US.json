@@ -155,6 +155,7 @@
     "scan_error": "Scan failed: {err}",
     "photos_discovered": "Discovered {count} photos",
     "photos_pending": "Pending: {count} photos total",
+    "saving": "Saving...",
     "scored_summary": "SCORED {scored}/{total} · KEEP {keep} · REJECT {reject}{failed}"
   },
   "table": {
@@ -216,6 +217,7 @@
   "dialog": {
     "alert_select_dir": "Please select a photo directory first",
     "export_failed": "Export failed: {err}",
+    "save_success": "Metadata successfully saved to disk",
     "dry_run_warn": "[Mode Notice]\nDry-Run mode is enabled.\n\nScores will be computed and displayed in the UI only. The system will NOT write, rename, or modify any photo files, XMP sidecars, or embedded metadata on disk.",
     "rename_warn": "[File Modification Notice]\nCapture time renaming is enabled.\n\nUpon starting, file names on disk will be directly renamed to IMG_YYYYMMDD_HHMMSS_mmm format. Associated RAW, HEIF/JPG, and XMP sidecar files will be renamed in sync."
   }

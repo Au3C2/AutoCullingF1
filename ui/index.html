@@ -36,9 +36,8 @@
           <span id="btnRunText" data-i18n="topbar.btn_run">⚡️开始筛选</span>
         </button>
         <button id="btnSaveMetadata" class="tau-btn tau-btn-glass" title="保存修改至 XMP / 图像文件" data-i18n-attr="title:topbar.title_save" disabled>
-          <span>💾</span>
+          <span id="saveBtnIcon" class="tau-btn-symbol">💾</span>
           <span id="btnSaveMetadataText" data-i18n="topbar.btn_save">保存修改</span>
-          <span id="saveBadge" class="tau-badge-counter" style="display: none;">0</span>
         </button>
         <button id="btnExportCsv" class="tau-btn tau-btn-glass" title="导出打分统计 CSV" data-i18n-attr="title:topbar.title_export_csv" disabled>
           <span data-i18n="topbar.btn_export_csv">导出 CSV</span>
@@ -505,12 +504,35 @@
               <span id="previewTitle" class="tau-ph-title" data-i18n="preview.title">照片预览与检测框</span>
             </div>
             <div class="tau-ph-right" id="previewZoomControls" style="display: none;">
-              <span class="tau-zoom-pill" id="zoomLevelIndicator">100%</span>
-              <button id="btnLockZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="锁定缩放视口 (切图时保持缩放平移)" data-i18n-attr="title:preview.btn_lock_zoom">
-                <span id="lockZoomIcon">🔓</span>
-              </button>
-              <button id="btnResetZoom" class="tau-btn tau-btn-icon tau-btn-xs" title="双击或点击复位 (1:1)" data-i18n-attr="title:preview.zoom_tip">
-                <span>⟲</span>
+              <div class="tau-zoom-slider-box" title="预设缩放档位: Auto(自适应聚焦), 100%, 150%, 200%, 250%">
+                <span class="tau-zoom-auto-label">Auto</span>
+                <div class="tau-slider-track-wrap">
+                  <input type="range" id="zoomRangeSlider" min="50" max="250" step="50" value="50" class="tau-zoom-slider" list="zoomTicks">
+                  <datalist id="zoomTicks">
+                    <option value="50" label="Auto"></option>
+                    <option value="100" label="100%"></option>
+                    <option value="150" label="150%"></option>
+                    <option value="200" label="200%"></option>
+                    <option value="250" label="250%"></option>
+                  </datalist>
+                  <div class="tau-slider-ticks-bar">
+                    <span class="tau-tick-mark" style="left: 0%;"></span>
+                    <span class="tau-tick-mark" style="left: 25%;"></span>
+                    <span class="tau-tick-mark" style="left: 50%;"></span>
+                    <span class="tau-tick-mark" style="left: 75%;"></span>
+                    <span class="tau-tick-mark" style="left: 100%;"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="tau-zoom-input-box">
+                <input type="number" id="zoomLevelInput" min="100" max="250" step="10" value="100" class="tau-zoom-input">
+                <span class="tau-zoom-unit">%</span>
+              </div>
+              <button id="btnResetZoom" class="tau-btn-reset-zoom" title="复位为全画幅 (100%) / 双击图片复位" data-i18n-attr="title:preview.zoom_tip">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="tau-reset-svg">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
               </button>
             </div>
           </div>
@@ -593,6 +615,12 @@
         <div class="tau-drag-title" data-i18n="modal.saving_title">正在保存元数据...</div>
         <div class="tau-drag-desc" data-i18n="modal.saving_desc">请稍候，正在将修改安全写入 XMP，保存完成后将自动关闭。</div>
       </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toastNotification" class="tau-toast" style="display: none;">
+      <span class="tau-toast-icon">✓</span>
+      <span id="toastText" class="tau-toast-text">保存完成</span>
     </div>
   </div>
 

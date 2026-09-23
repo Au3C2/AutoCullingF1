@@ -158,7 +158,7 @@
       level: 1.0,
       panX: 0,
       panY: 0,
-      locked: localStorage.getItem('ac-zoom-locked') === 'true',
+      mode: 'auto', // 'auto' (focus crop) | 'manual'
       isPanning: false,
       startX: 0,
       startY: 0,
@@ -187,7 +187,9 @@
     btnRunText: $('btnRunText'),
     btnSaveMetadata: $('btnSaveMetadata'),
     btnSaveMetadataText: $('btnSaveMetadataText'),
-    saveBadge: $('saveBadge'),
+    saveBtnIcon: $('saveBtnIcon'),
+    toastNotification: $('toastNotification'),
+    toastText: $('toastText'),
     btnExportCsv: $('btnExportCsv'),
     btnToggleLog: $('btnToggleLog'),
     stageStatus: $('stageStatus'),
@@ -208,10 +210,9 @@
     previewTitle: $('previewTitle'),
     previewScoreDetails: $('previewScoreDetails'),
     previewZoomControls: $('previewZoomControls'),
-    zoomLevelIndicator: $('zoomLevelIndicator'),
+    zoomRangeSlider: $('zoomRangeSlider'),
+    zoomLevelInput: $('zoomLevelInput'),
     btnResetZoom: $('btnResetZoom'),
-    btnLockZoom: $('btnLockZoom'),
-    lockZoomIcon: $('lockZoomIcon'),
     savingModal: $('savingModal'),
     pillRating: $('pillRating'),
     pillSharp: $('pillSharp'),
@@ -676,8 +677,12 @@
       els.countKeep.textContent = '0';
       els.countReject.textContent = '0';
       els.progressBar.style.width = '0%';
+      updateSaveButtonState();
       state.selectedPhoto = null;
-      resetZoom();
+      state.zoom.mode = 'auto';
+      state.zoom.level = 1.0;
+      state.zoom.panX = 0;
+      state.zoom.panY = 0;
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
@@ -1479,7 +1484,12 @@
     }
     row.style.display = '';
 
-    const newHtml = buildRowHtml(item);
+    const isBurstChild = row.classList.contains('tau-burst-child');
+    const isSingle = row.classList.contains('tau-single-row');
+    const isWinner = !!row.querySelector('.tau-winner-badge');
+    const isTopN = item.veto === 'burst_group_topn';
+
+    const newHtml = buildRowHtml(item, { isBurstChild, isSingle, isWinner, isTopN });
     const temp = document.createElement('tbody');
     temp.innerHTML = newHtml;
     const newRow = temp.firstElementChild;
@@ -1536,20 +1546,33 @@
 
   // --- Feature 3: Pan & Zoom Interactions ---
   function resetZoom() {
+    state.zoom.mode = 'manual';
     state.zoom.level = 1.0;
     state.zoom.panX = 0;
     state.zoom.panY = 0;
+    state.zoom.wheelAnchor = null;
     state.zoom.isPanning = false;
     applyZoomTransform();
+    appendLog('[Zoom] Reset to 100% (1:1 full frame)');
   }
 
   function applyZoomTransform() {
     if (!els.previewImg) return;
-    const { level, panX, panY } = state.zoom;
+    const { level, panX, panY, mode } = state.zoom;
     els.previewImg.style.transform = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
-    if (els.zoomLevelIndicator) {
-      els.zoomLevelIndicator.textContent = `${Math.round(level * 100)}%`;
+
+    const pct = Math.round(level * 100);
+    if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
+      els.zoomLevelInput.value = Math.max(100, Math.min(250, pct));
     }
+    if (els.zoomRangeSlider) {
+      if (mode === 'auto') {
+        els.zoomRangeSlider.value = 50; // Leftmost Auto slot
+      } else {
+        els.zoomRangeSlider.value = Math.max(100, Math.min(250, pct));
+      }
+    }
+
     if (els.previewContainer) {
       if (level > 1.0) {
         els.previewContainer.classList.add('zoomed');
@@ -1559,23 +1582,169 @@
     }
   }
 
+  function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
+    if (level <= 1.0) {
+      return { level: 1.0, panX: 0, panY: 0 };
+    }
+    const panX = -anchorDx * level;
+    const panY = -anchorDy * level;
+    return {
+      level,
+      panX: parseFloat(panX.toFixed(1)),
+      panY: parseFloat(panY.toFixed(1)),
+    };
+  }
+
+  function computeCropFocus(crop) {
+    if (!crop || crop.length !== 4) return null;
+    const [top, left, bottom, right] = crop;
+    const cropW = Math.max(0.01, right - left);
+    const cropH = Math.max(0.01, bottom - top);
+    const cx = (left + right) / 2.0;
+    const cy = (top + bottom) / 2.0;
+
+    // Retain 30% context around the crop box to indicate an expanded focus
+    const marginFactor = 1.30;
+    const scaleX = 1.0 / (cropW * marginFactor);
+    const scaleY = 1.0 / (cropH * marginFactor);
+    let targetScale = Math.min(scaleX, scaleY);
+    targetScale = Math.max(1.0, Math.min(2.5, parseFloat(targetScale.toFixed(2))));
+
+    const containerW = els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600;
+    const containerH = els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450;
+    const panX = (0.5 - cx) * containerW * targetScale;
+    const panY = (0.5 - cy) * containerH * targetScale;
+
+    return {
+      level: targetScale,
+      panX: parseFloat(panX.toFixed(1)),
+      panY: parseFloat(panY.toFixed(1)),
+    };
+  }
+
+  function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
+    if (newLevel <= 1.0) {
+      return { level: 1.0, panX: 0, panY: 0 };
+    }
+    const ratio = newLevel / oldLevel;
+    const newPanX = mouseDx - (mouseDx - oldPanX) * ratio;
+    const newPanY = mouseDy - (mouseDy - oldPanY) * ratio;
+    return {
+      level: newLevel,
+      panX: parseFloat(newPanX.toFixed(1)),
+      panY: parseFloat(newPanY.toFixed(1)),
+    };
+  }
+
   function initPanZoom() {
     if (!els.previewContainer) return;
 
-    // Wheel Zoom
+    // Range slider preset step adjustments (Auto=50, 100, 150, 200, 250)
+    if (els.zoomRangeSlider) {
+      els.zoomRangeSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (val <= 75) {
+          // Switch to Auto mode (crop focus)
+          state.zoom.mode = 'auto';
+          els.zoomRangeSlider.value = 50;
+          if (state.selectedPhoto && state.selectedPhoto.crop) {
+            const focus = computeCropFocus(state.selectedPhoto.crop);
+            if (focus) {
+              state.zoom.level = focus.level;
+              state.zoom.panX = focus.panX;
+              state.zoom.panY = focus.panY;
+            }
+          } else {
+            state.zoom.level = 1.0;
+            state.zoom.panX = 0;
+            state.zoom.panY = 0;
+          }
+          applyZoomTransform();
+          appendLog('[Zoom] Switched to Auto (crop focus mode)');
+          return;
+        }
+
+        // Manual discrete step
+        state.zoom.mode = 'manual';
+        state.zoom.level = parseFloat((val / 100).toFixed(2));
+        if (state.zoom.level === 1.0) {
+          state.zoom.panX = 0;
+          state.zoom.panY = 0;
+        }
+        applyZoomTransform();
+        appendLog(`[Zoom] Preset step: ${val}%`);
+      });
+    }
+
+    // Number input adjustment: strictly clamp between 100 and 250, blur on enter/change
+    if (els.zoomLevelInput) {
+      els.zoomLevelInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          els.zoomLevelInput.blur();
+        }
+      });
+      els.zoomLevelInput.addEventListener('change', (e) => {
+        let val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < 100) val = 100;
+        if (val > 250) val = 250;
+        state.zoom.mode = 'manual';
+        state.zoom.level = parseFloat((val / 100).toFixed(2));
+        if (state.zoom.level === 1.0) {
+          state.zoom.panX = 0;
+          state.zoom.panY = 0;
+        }
+        applyZoomTransform();
+        els.zoomLevelInput.blur();
+        appendLog(`[Zoom] Manual input: ${val}%`);
+      });
+    }
+
+    // Wheel Zoom: centered on mouse position, bringing pointed position to center and locking anchor across continuous scrolling
+    let _wheelAnchor = null;
+    let _wheelAnchorTimer = null;
+
     els.previewContainer.addEventListener('wheel', (e) => {
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       e.preventDefault();
       const step = 0.25;
-      if (e.deltaY < 0) {
-        state.zoom.level = Math.min(5.0, parseFloat((state.zoom.level + step).toFixed(2)));
-      } else {
-        state.zoom.level = Math.max(1.0, parseFloat((state.zoom.level - step).toFixed(2)));
+      const delta = e.deltaY < 0 ? step : -step;
+      const oldLevel = state.zoom.level;
+      const newLevel = Math.max(1.0, Math.min(2.5, parseFloat((oldLevel + delta).toFixed(2))));
+
+      if (newLevel === oldLevel) return;
+
+      const rect = els.previewContainer.getBoundingClientRect();
+      const mouseDx = (e.clientX - rect.left) - rect.width / 2;
+      const mouseDy = (e.clientY - rect.top) - rect.height / 2;
+
+      if (!_wheelAnchor) {
+        // First wheel event of the session: anchor to the image position under cursor
+        const curLevel = state.zoom.level || 1.0;
+        _wheelAnchor = {
+          fx: (mouseDx - state.zoom.panX) / curLevel,
+          fy: (mouseDy - state.zoom.panY) / curLevel,
+        };
       }
-      if (state.zoom.level === 1.0) {
+
+      state.zoom.mode = 'manual';
+      state.zoom.level = newLevel;
+
+      if (newLevel <= 1.0) {
         state.zoom.panX = 0;
         state.zoom.panY = 0;
+        _wheelAnchor = null;
+      } else {
+        // Bring pointed position into center during continuous wheel session
+        state.zoom.panX = -_wheelAnchor.fx * newLevel;
+        state.zoom.panY = -_wheelAnchor.fy * newLevel;
       }
+
+      if (_wheelAnchorTimer) clearTimeout(_wheelAnchorTimer);
+      _wheelAnchorTimer = setTimeout(() => {
+        _wheelAnchor = null;
+      }, 800);
+
       applyZoomTransform();
     }, { passive: false });
 
@@ -1605,38 +1774,28 @@
       state.zoom.isPanning = false;
     });
 
-    // Double Click toggle 1x and 2.5x
-    els.previewContainer.addEventListener('dblclick', () => {
+    // Double Click: bring pointed position to center and magnify 2.0x, or reset to 100%
+    els.previewContainer.addEventListener('dblclick', (e) => {
+      e.preventDefault();
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
-      if (state.zoom.level > 1.0) {
+      if (state.zoom.level > 1.05) {
         resetZoom();
       } else {
-        state.zoom.level = 2.5;
+        const rect = els.previewContainer.getBoundingClientRect();
+        const mouseDx = (e.clientX - rect.left) - rect.width / 2;
+        const mouseDy = (e.clientY - rect.top) - rect.height / 2;
+
+        state.zoom.mode = 'manual';
+        state.zoom.level = 2.0;
+        state.zoom.panX = -mouseDx * 2.0;
+        state.zoom.panY = -mouseDy * 2.0;
         applyZoomTransform();
+        appendLog('[Zoom] Double clicked: centered on mouse position and magnified 2.0x');
       }
     });
 
     if (els.btnResetZoom) {
       els.btnResetZoom.addEventListener('click', resetZoom);
-    }
-
-    if (els.btnLockZoom) {
-      const updateLockUI = () => {
-        if (els.lockZoomIcon) {
-          els.lockZoomIcon.textContent = state.zoom.locked ? '🔒' : '🔓';
-        }
-        if (els.btnLockZoom) {
-          if (state.zoom.locked) els.btnLockZoom.classList.add('active');
-          else els.btnLockZoom.classList.remove('active');
-        }
-      };
-      updateLockUI();
-      els.btnLockZoom.addEventListener('click', () => {
-        state.zoom.locked = !state.zoom.locked;
-        localStorage.setItem('ac-zoom-locked', state.zoom.locked ? 'true' : 'false');
-        updateLockUI();
-        appendLog(`[View] Viewport lock ${state.zoom.locked ? 'enabled (zoom preserved across photos)' : 'disabled'}`);
-      });
     }
   }
 
@@ -1656,8 +1815,25 @@
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
 
-    if (shouldResetZoom && (!state.zoom.locked || state.zoom.level <= 1.0)) {
-      resetZoom();
+    if (state.zoom.mode === 'auto') {
+      const focus = item.crop ? computeCropFocus(item.crop) : null;
+      if (focus) {
+        state.zoom.level = focus.level;
+        state.zoom.panX = focus.panX;
+        state.zoom.panY = focus.panY;
+      } else {
+        state.zoom.level = 1.0;
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
+      }
+      applyZoomTransform();
+    } else {
+      // Manual mode: strictly preserve the current zoom level and view across photos!
+      if (state.zoom.level === 1.0) {
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
+      }
+      applyZoomTransform();
     }
 
     const pillScored = item.status !== 'pending' && item.status !== 'decode_failed';
@@ -1692,6 +1868,19 @@
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
+
+        if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
+          item.crop = res.crop;
+          if (state.zoom.mode === 'auto') {
+            const focus = computeCropFocus(res.crop);
+            if (focus) {
+              state.zoom.level = focus.level;
+              state.zoom.panX = focus.panX;
+              state.zoom.panY = focus.panY;
+              applyZoomTransform();
+            }
+          }
+        }
       } else {
         els.previewImg.style.display = 'none';
         els.previewEmpty.style.display = 'flex';
@@ -1761,9 +1950,13 @@
         case ' ': {
           e.preventDefault();
           if (els.previewContainer && els.previewImg.style.display !== 'none') {
-            if (state.zoom.level > 1.0) resetZoom();
-            else {
+            if (state.zoom.level > 1.05) {
+              resetZoom();
+            } else {
+              state.zoom.mode = 'manual';
               state.zoom.level = 2.0;
+              state.zoom.panX = 0;
+              state.zoom.panY = 0;
               applyZoomTransform();
             }
           }
@@ -1832,24 +2025,24 @@
     scheduleIncrementalSave(300);
   }
 
+  let _toastTimer = null;
+  function showToast(msg, duration = 2400) {
+    if (!els.toastNotification) return;
+    if (els.toastText) els.toastText.textContent = msg;
+    els.toastNotification.style.display = 'flex';
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+      if (els.toastNotification) els.toastNotification.style.display = 'none';
+    }, duration);
+  }
+
   function updateSaveButtonState() {
     if (!els.btnSaveMetadata) return;
-    const dirtyCount = state.dirtyPhotos.size;
-    if (dirtyCount > 0) {
-      els.btnSaveMetadata.disabled = false;
-      if (els.saveBadge) {
-        els.saveBadge.style.display = 'inline-block';
-        els.saveBadge.textContent = dirtyCount;
-      }
-      if (els.btnSaveMetadataText) {
-        els.btnSaveMetadataText.textContent = `${I18N.t('topbar.btn_save')} (${dirtyCount})`;
-      }
-    } else {
-      els.btnSaveMetadata.disabled = true;
-      if (els.saveBadge) els.saveBadge.style.display = 'none';
-      if (els.btnSaveMetadataText) {
-        els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
-      }
+    // Save button stays actionable whenever photos are loaded and not currently writing
+    const canSave = state.photos.length > 0 && !state.isSaving;
+    els.btnSaveMetadata.disabled = !canSave;
+    if (els.btnSaveMetadataText) {
+      els.btnSaveMetadataText.textContent = I18N.t('topbar.btn_save');
     }
   }
 
@@ -1857,28 +2050,43 @@
   function scheduleIncrementalSave(delayMs = 300) {
     if (_saveDebounceTimer) clearTimeout(_saveDebounceTimer);
     _saveDebounceTimer = setTimeout(() => {
-      flushSaveMetadata();
+      flushSaveMetadata(false);
     }, delayMs);
   }
 
-  async function flushSaveMetadata() {
-    if (state.dirtyPhotos.size === 0) {
+  async function flushSaveMetadata(isManualClick = false) {
+    if (state.isSaving) return;
+
+    // Determine items to persist
+    let targetPhotos = [];
+    if (state.dirtyPhotos.size > 0) {
+      targetPhotos = Array.from(state.dirtyPhotos);
+    } else if (isManualClick) {
+      // Manual click with no dirty photos: flush all scored photos
+      targetPhotos = state.photos.filter((p) => p.status !== 'pending' && p.status !== 'decode_failed');
+    }
+
+    if (targetPhotos.length === 0) {
       if (state.exitPending) {
         await invokeTauri('exit_app');
+      } else if (isManualClick) {
+        showToast(I18N.t('dialog.save_success'));
       }
       return;
     }
-    if (state.isSaving) return;
-    state.isSaving = true;
 
-    const itemsToSave = [];
-    for (const p of state.dirtyPhotos) {
-      itemsToSave.push({
-        path: p.path,
-        rating: p.rating,
-        crop: p.crop || null,
-      });
+    state.isSaving = true;
+    if (els.saveBtnIcon) {
+      els.saveBtnIcon.textContent = '';
+      els.saveBtnIcon.classList.add('spinning');
     }
+    if (els.btnSaveMetadata) els.btnSaveMetadata.disabled = true;
+
+    const itemsToSave = targetPhotos.map((p) => ({
+      path: p.path,
+      rating: p.rating,
+      crop: p.crop || null,
+    }));
 
     try {
       await invokeTauri('save_metadata', { items: itemsToSave });
@@ -1886,11 +2094,21 @@
         const obj = state.photoMap.get(it.path);
         if (obj) state.dirtyPhotos.delete(obj);
       }
-      appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted`);
+      appendLog(`[Save] ${itemsToSave.length} metadata records safely persisted to disk`);
+      if (!state.exitPending) {
+        showToast(I18N.t('dialog.save_success'));
+      }
     } catch (err) {
       appendLog(`[Save Error] Failed to persist metadata: ${err}`);
+      if (!state.exitPending) {
+        alert(`${I18N.t('dialog.export_failed', { err })}`);
+      }
     } finally {
       state.isSaving = false;
+      if (els.saveBtnIcon) {
+        els.saveBtnIcon.classList.remove('spinning');
+        els.saveBtnIcon.textContent = '💾';
+      }
       updateSaveButtonState();
       if (state.exitPending) {
         await invokeTauri('exit_app');
@@ -2141,7 +2359,7 @@
     if (els.btnSaveMetadata) {
       els.btnSaveMetadata.addEventListener('click', () => {
         appendLog('[Manual Save] User triggered metadata save button.');
-        flushSaveMetadata();
+        flushSaveMetadata(true);
       });
     }
 
