@@ -1550,6 +1550,7 @@
     state.zoom.level = 1.0;
     state.zoom.panX = 0;
     state.zoom.panY = 0;
+    state.zoom.wheelAnchor = null;
     state.zoom.isPanning = false;
     applyZoomTransform();
     appendLog('[Zoom] Reset to 100% (1:1 full frame)');
@@ -1579,6 +1580,19 @@
         els.previewContainer.classList.remove('zoomed');
       }
     }
+  }
+
+  function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
+    if (level <= 1.0) {
+      return { level: 1.0, panX: 0, panY: 0 };
+    }
+    const panX = -anchorDx * level;
+    const panY = -anchorDy * level;
+    return {
+      level,
+      panX: parseFloat(panX.toFixed(1)),
+      panY: parseFloat(panY.toFixed(1)),
+    };
   }
 
   function computeCropFocus(crop) {
@@ -1686,7 +1700,10 @@
       });
     }
 
-    // Wheel Zoom: centered on mouse position
+    // Wheel Zoom: centered on mouse position, bringing pointed position to center and locking anchor across continuous scrolling
+    let _wheelAnchor = null;
+    let _wheelAnchorTimer = null;
+
     els.previewContainer.addEventListener('wheel', (e) => {
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
       e.preventDefault();
@@ -1701,11 +1718,33 @@
       const mouseDx = (e.clientX - rect.left) - rect.width / 2;
       const mouseDy = (e.clientY - rect.top) - rect.height / 2;
 
-      const z = computeMouseCenteredZoom(oldLevel, newLevel, state.zoom.panX, state.zoom.panY, mouseDx, mouseDy);
+      if (!_wheelAnchor) {
+        // First wheel event of the session: anchor to the image position under cursor
+        const curLevel = state.zoom.level || 1.0;
+        _wheelAnchor = {
+          fx: (mouseDx - state.zoom.panX) / curLevel,
+          fy: (mouseDy - state.zoom.panY) / curLevel,
+        };
+      }
+
       state.zoom.mode = 'manual';
-      state.zoom.level = z.level;
-      state.zoom.panX = z.panX;
-      state.zoom.panY = z.panY;
+      state.zoom.level = newLevel;
+
+      if (newLevel <= 1.0) {
+        state.zoom.panX = 0;
+        state.zoom.panY = 0;
+        _wheelAnchor = null;
+      } else {
+        // Bring pointed position into center during continuous wheel session
+        state.zoom.panX = -_wheelAnchor.fx * newLevel;
+        state.zoom.panY = -_wheelAnchor.fy * newLevel;
+      }
+
+      if (_wheelAnchorTimer) clearTimeout(_wheelAnchorTimer);
+      _wheelAnchorTimer = setTimeout(() => {
+        _wheelAnchor = null;
+      }, 800);
+
       applyZoomTransform();
     }, { passive: false });
 
@@ -1735,7 +1774,7 @@
       state.zoom.isPanning = false;
     });
 
-    // Double Click toggle: 2.0x centered on mouse position, or reset to 100%
+    // Double Click: bring pointed position to center and magnify 2.0x, or reset to 100%
     els.previewContainer.addEventListener('dblclick', (e) => {
       e.preventDefault();
       if (!els.previewImg || els.previewImg.style.display === 'none') return;
@@ -1746,13 +1785,12 @@
         const mouseDx = (e.clientX - rect.left) - rect.width / 2;
         const mouseDy = (e.clientY - rect.top) - rect.height / 2;
 
-        const z = computeMouseCenteredZoom(state.zoom.level, 2.0, state.zoom.panX, state.zoom.panY, mouseDx, mouseDy);
         state.zoom.mode = 'manual';
-        state.zoom.level = z.level;
-        state.zoom.panX = z.panX;
-        state.zoom.panY = z.panY;
+        state.zoom.level = 2.0;
+        state.zoom.panX = -mouseDx * 2.0;
+        state.zoom.panY = -mouseDy * 2.0;
         applyZoomTransform();
-        appendLog('[Zoom] Double clicked: 2.0x centered on mouse');
+        appendLog('[Zoom] Double clicked: centered on mouse position and magnified 2.0x');
       }
     });
 

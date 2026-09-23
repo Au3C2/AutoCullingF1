@@ -71,18 +71,17 @@ function computeCropFocus(crop, containerW = 800, containerH = 600) {
   };
 }
 
-// Helper function for mouse-centered zoom transformation
-function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
-  if (newLevel <= 1.0) {
+// Helper function for centering the mouse-pointed position into window center during zoom
+function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
+  if (level <= 1.0) {
     return { level: 1.0, panX: 0, panY: 0 };
   }
-  const ratio = newLevel / oldLevel;
-  const newPanX = mouseDx - (mouseDx - oldPanX) * ratio;
-  const newPanY = mouseDy - (mouseDy - oldPanY) * ratio;
+  const panX = -anchorDx * level;
+  const panY = -anchorDy * level;
   return {
-    level: newLevel,
-    panX: parseFloat(newPanX.toFixed(1)),
-    panY: parseFloat(newPanY.toFixed(1)),
+    level,
+    panX: parseFloat(panX.toFixed(1)),
+    panY: parseFloat(panY.toFixed(1)),
   };
 }
 
@@ -99,20 +98,26 @@ function testCropFocusCalculation() {
   assert(focusRight.panX < 0, 'Off-center right crop must pan leftwards (negative panX)');
   assert(focusRight.level >= 1.2, 'Crop focus must zoom in');
 
-  // Test Mouse-centered zoom calculation
-  // 1. Center mouse: dx=0, dy=0, level 1.0 -> 2.0 -> panX=0, panY=0
-  const z1 = computeMouseCenteredZoom(1.0, 2.0, 0, 0, 0, 0);
+  // Test Center-focused zoom calculation (shifting pointed position into center and zooming)
+  // 1. Center mouse: dx=0, dy=0, level 2.0 -> panX=0, panY=0
+  const z1 = computeCenterFocusedZoom(2.0, 0, 0);
   assert.strictEqual(z1.level, 2.0);
   assert.strictEqual(z1.panX, 0);
   assert.strictEqual(z1.panY, 0);
 
-  // 2. Off-center mouse: dx=100, dy=50, level 1.0 -> 2.0 -> panX must shift by -100
-  const z2 = computeMouseCenteredZoom(1.0, 2.0, 0, 0, 100, 50);
+  // 2. Off-center mouse: dx=50, dy=-30, level 2.0 -> panX=-100, panY=60
+  const z2 = computeCenterFocusedZoom(2.0, 50, -30);
   assert.strictEqual(z2.level, 2.0);
   assert.strictEqual(z2.panX, -100);
-  assert.strictEqual(z2.panY, -50);
+  assert.strictEqual(z2.panY, 60);
 
-  console.log('✓ testCropFocusCalculation & MouseCenteredZoom passed');
+  // 3. Continuous wheel zooming from 2.0 to 2.5 on same anchor: dx=50, dy=-30 -> panX=-125, panY=75
+  const z3 = computeCenterFocusedZoom(2.5, 50, -30);
+  assert.strictEqual(z3.level, 2.5);
+  assert.strictEqual(z3.panX, -125);
+  assert.strictEqual(z3.panY, 75);
+
+  console.log('✓ testCropFocusCalculation & CenterFocusedZoom passed');
 }
 
 // 3. Test Zoom Slider Steps (100, 150, 200, 250), Reset to 100%, and Input Clamp (100-250)
