@@ -193,14 +193,12 @@ Further reading: [`results/performance_baseline.md`](results/performance_baselin
 ### Mid-term (v1.0)
 - [ ] **Intelligent high-resolution data on-demand loading**: use fast thumbnails for rapid flipping, and intelligently load full-resolution RAW/JPEG data and scalable vector BBoxes/labels on deep zoom (>150%) or inspection pause for crystal-clear focus verification.
 - [ ] **Unsupervised racecar clustering & bulk team tagging**: cluster cars based on visual embeddings and color histograms, allowing one-click bulk IPTC tagging per team/driver.
-- [ ] **Multi-photo side-by-side comparison view (Survey View)**: inspect 2 to 4 burst frames simultaneously with synchronized pan and zoom.
-- [ ] **Physical export pipeline**: copy selected 3-5 star RAW/cooked files directly to a designated export folder.
+- [ ] **Time-axis peak sampling**: burst selection based on temporal local extrema and temporal NMS instead of absolute Top-N truncation.
 
 ### Backlog
+- [ ] **Multi-photo side-by-side comparison view (Survey View)**: inspect 2 to 4 burst frames simultaneously with synchronized pan and zoom.
 - [ ] Cockpit / helmet ROI sharpness decoupling for panning shots.
-- [ ] Time-axis peak sampling for burst selection instead of absolute Top-N truncation.
 - [ ] Frequency-domain Tukey windowing and high-ISO noise floor subtraction.
-- [ ] Multi-domain modular detection support (wildlife / track & field).
 
 ## License
 
