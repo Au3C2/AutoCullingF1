@@ -794,6 +794,11 @@
       if (!state.selectedPhoto || state.selectedPhoto.path !== payload.orig_path) {
         return;
       }
+      // The low-res base layer must be visible first: rendering the high-res
+      // overlay over an empty viewport would show a black canvas.
+      if (state.previewLoadedPath !== payload.orig_path) {
+        return;
+      }
       await renderHighResSeamless(payload.path, payload.gen_id);
     });
 
@@ -1648,6 +1653,7 @@
       invokeTauri('request_highres', {
         path: state.selectedPhoto.path,
         gen_id: currentGen,
+        genId: currentGen,
         roi: null
       }).catch((e) => appendLog(`[HighRes Request Error] ${e}`));
     }, delay);
@@ -1927,15 +1933,23 @@
     if (!item) return;
     state.selectedPhoto = item;
 
-    // Discard any pending high-res requests for the previous photo
-    state.highres.activeGenId++;
-    if (state.highres.debounceTimer) {
-      clearTimeout(state.highres.debounceTimer);
-      state.highres.debounceTimer = null;
-    }
-    if (els.previewHighResImg) {
-      els.previewHighResImg.style.opacity = '0';
-      els.previewHighResImg.src = '';
+    // Same photo already rendered: skip the decode IPC entirely. Frame events
+    // stream at 17-37 fps during a culling run and each one used to re-enter
+    // selectPhoto, invalidating the in-flight preview response (stale-seq
+    // discard) and leaving the viewport permanently black.
+    const isSamePhoto = state.previewLoadedPath === item.path && els.previewImg.style.display === 'block';
+
+    if (!isSamePhoto) {
+      // Discard any pending high-res requests for the previous photo
+      state.highres.activeGenId++;
+      if (state.highres.debounceTimer) {
+        clearTimeout(state.highres.debounceTimer);
+        state.highres.debounceTimer = null;
+      }
+      if (els.previewHighResImg) {
+        els.previewHighResImg.style.opacity = '0';
+        els.previewHighResImg.src = '';
+      }
     }
 
     document.querySelectorAll('#photoTable tbody tr').forEach((r) => r.classList.remove('selected'));
@@ -1979,15 +1993,10 @@
     const reasonText = item.veto ? I18N.translateVeto(item.veto) : (item.rating > 0 ? I18N.t('table.tag_passed') : I18N.t('status.queued'));
     els.pillReason.textContent = `REASON: ${reasonText}`;
 
-    // Feature 4: Anti-Race Sequence tracking
+    // Anti-Race Sequence tracking (only reached when the photo actually
+    // changed — same-photo re-entry returns above)
     const currentSeq = ++state.previewSeq;
     const requestedPath = item.path;
-
-    // Same photo already rendered: skip the decode IPC (re-scoring a selected
-    // photo used to re-fetch the 640px preview on every frame event).
-    if (state.previewLoadedPath === requestedPath && els.previewImg.style.display === 'block') {
-      return;
-    }
 
     try {
       const res = await invokeTauri('preview', { path: requestedPath, size: 640 });
@@ -2003,7 +2012,7 @@
           els.previewHighResImg.style.opacity = '0';
           els.previewHighResImg.src = '';
         }
-        if (els.previewViewport) els.previewViewport.style.display = 'inline-flex';
+        if (els.previewViewport) els.previewViewport.style.display = 'flex';
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;

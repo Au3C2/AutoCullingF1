@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -25,6 +26,22 @@ _CACHE_SIZE = 32
 _DETECTION_COLOR = (46, 204, 113)  # green #2ecc71
 _CROP_COLOR = (243, 156, 18)       # orange #f39c12
 
+# Serializes ALL preview image decodes. During a culling run the engine's
+# decode pool already saturates VideoToolbox (macOS HEIF HW decode); unbounded
+# preview worker threads each opening their own HW session/decode context
+# caused resource contention (freezes, blank previews). One decode at a time
+# keeps preview latency bounded and the HW path stable.
+_PREVIEW_DECODE_LOCK = threading.Lock()
+
+
+class _PreviewDecodeError(Exception):
+    """Raised by the cached inner loader on decode failure.
+
+    lru_cache never caches exceptions, so wrapping failures in an exception
+    prevents a transient decode error (e.g. HW decoder busy) from permanently
+    black-listing the file in the cache.
+    """
+
 
 def _fit(img: np.ndarray, max_size: int) -> np.ndarray:
     """Downscale img so longest side is <= max_size."""
@@ -38,16 +55,23 @@ def _fit(img: np.ndarray, max_size: int) -> np.ndarray:
 
 
 @lru_cache(maxsize=_CACHE_SIZE)
-def _load_cached(path_str: str, max_size: int) -> np.ndarray | None:
-    try:
+def _load_cached_inner(path_str: str, max_size: int) -> np.ndarray:
+    with _PREVIEW_DECODE_LOCK:
         path = Path(path_str)
         img = load_image_rgb(path, scale_width=max_size)
+        if img is None:
+            raise _PreviewDecodeError(path_str)
+        return _fit(img, max_size)
+
+
+def _load_cached(path_str: str, max_size: int) -> np.ndarray | None:
+    try:
+        return _load_cached_inner(path_str, max_size)
+    except _PreviewDecodeError:
+        return None
     except Exception as e:
         log.warning("Preview decode failed for %s: %s", path_str, e)
         return None
-    if img is None:
-        return None
-    return _fit(img, max_size)
 
 
 _GLOBAL_F1 = None

@@ -417,7 +417,7 @@ async fn save_metadata(
     send_engine_command(&app, &mut guard, payload)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 async fn request_highres(
     app: AppHandle,
     state: State<'_, Arc<Mutex<EngineState>>>,

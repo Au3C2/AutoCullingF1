@@ -708,6 +708,10 @@ class _PersistentExiftool:
         self._outdir = Path(tempfile.mkdtemp(prefix="raw_extract_"))
         self._ready = threading.Event()
         self._dead = False
+        # Serializes extract()/close(): the session's stdin/stdout and the
+        # shared {ready} event are NOT safe for concurrent callers (interleaved
+        # commands corrupt the session and can hang every future extraction).
+        self._lock = threading.Lock()
         threading.Thread(target=self._read_stdout, daemon=True).start()
 
     def _read_stdout(self) -> None:
@@ -725,55 +729,62 @@ class _PersistentExiftool:
             self._ready.set()
 
     def extract(self, path: Path, tag: str) -> bytes | None:
-        if self._dead:
-            return None
-        out = self._outdir / f"{path.stem}.jpg__"
-        cmd = ["-b", "-w", f"{self._outdir.as_posix()}/%f.jpg__", tag, str(path)]
-        try:
-            self.proc.stdin.write(("\n".join(cmd) + "\n-execute\n").encode("utf-8", "replace"))
-            self.proc.stdin.flush()
-        except Exception:
-            self._dead = True
-            return None
-        self._ready.clear()
-        import time
-        self._ready.wait(timeout=60.0)
-        if self._dead:
-            return None
-        try:
-            return out.read_bytes() if out.exists() else None
-        finally:
-            try: out.unlink(missing_ok=True)
-            except Exception: pass
+        with self._lock:
+            if self._dead:
+                return None
+            out = self._outdir / f"{path.stem}.jpg__"
+            cmd = ["-b", "-w", f"{self._outdir.as_posix()}/%f.jpg__", tag, str(path)]
+            # Clear the ready flag BEFORE writing the command: if the previous
+            # extraction's {ready} is still pending, clearing after the write
+            # would consume it and make this call block for the full timeout.
+            self._ready.clear()
+            try:
+                self.proc.stdin.write(("\n".join(cmd) + "\n-execute\n").encode("utf-8", "replace"))
+                self.proc.stdin.flush()
+            except Exception:
+                self._dead = True
+                return None
+            import time
+            self._ready.wait(timeout=60.0)
+            if self._dead:
+                return None
+            try:
+                return out.read_bytes() if out.exists() else None
+            finally:
+                try: out.unlink(missing_ok=True)
+                except Exception: pass
 
     def close(self) -> None:
+        with self._lock:
+            if not self._dead:
+                try:
+                    self.proc.stdin.write(b"-stay_open\nFalse\n-execute\n")
+                    self.proc.stdin.flush()
+                    self.proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    self.proc.wait(timeout=5)
+                except Exception:
+                    try: self.proc.kill()
+                    except Exception: pass
         import shutil
-        if not self._dead:
-            try:
-                self.proc.stdin.write(b"-stay_open\nFalse\n-execute\n")
-                self.proc.stdin.flush()
-                self.proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                self.proc.wait(timeout=5)
-            except Exception:
-                try: self.proc.kill()
-                except Exception: pass
         shutil.rmtree(self._outdir, ignore_errors=True)
 
 _raw_session: _PersistentExiftool | None = None
+_raw_session_lock = threading.Lock()
 
 def _get_raw_session() -> _PersistentExiftool | None:
     global _raw_session
-    if _raw_session is None:
-        try:
-            _raw_session = _PersistentExiftool()
-            import atexit
-            atexit.register(_raw_session.close)
-        except Exception:
-            _raw_session = None  # fall back to per-file spawns
-    return _raw_session
+    with _raw_session_lock:
+        if _raw_session is None:
+            try:
+                _raw_session = _PersistentExiftool()
+                import atexit
+                atexit.register(_raw_session.close)
+            except Exception:
+                _raw_session = None  # fall back to per-file spawns
+        return _raw_session
 
 
 def _extract_embedded_raw(path: Path, tags: list[str]) -> bytes | None:
