@@ -164,6 +164,19 @@
       startY: 0,
     },
 
+    // Intelligent High-Resolution on-demand state
+    highres: {
+      activeGenId: 0,
+      loadedPath: null,
+      isLoading: false,
+      debounceTimer: null,
+      lruPaths: [], // Keep max 2 active textures
+    },
+
+    // Preview request dedup: path whose 640 px preview is loaded or in
+    // flight. Null when idle/failed so a retry can be issued.
+    previewRequestedPath: null,
+
     // Save triggers & persistence state
     dirtyPhotos: new Set(),
     isSaving: false,
@@ -205,7 +218,10 @@
     splitResizer: $('splitResizer'),
     previewPane: $('previewPane'),
     previewContainer: $('previewContainer'),
+    previewViewport: $('previewViewport'),
     previewImg: $('previewImg'),
+    previewHighResImg: $('previewHighResImg'),
+    previewSvgOverlay: $('previewSvgOverlay'),
     previewEmpty: $('previewEmpty'),
     previewTitle: $('previewTitle'),
     previewScoreDetails: $('previewScoreDetails'),
@@ -686,6 +702,8 @@
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
+      state.previewRequestedPath = null;
+      if (els.previewViewport) els.previewViewport.style.display = 'none';
       els.previewEmpty.style.display = 'flex';
       els.previewTitle.textContent = I18N.t('preview.title');
       els.previewScoreDetails.style.display = 'none';
@@ -771,6 +789,27 @@
 
     listenTauri('save_error', ({ payload }) => {
       appendLog(`[Engine Error] save_error: ${payload && payload.message ? payload.message : JSON.stringify(payload)}`);
+    });
+
+    listenTauri('highres_ready', async ({ payload }) => {
+      if (!payload || !payload.path) return;
+      if (payload.gen_id !== state.highres.activeGenId) {
+        // Discard obsolete generation
+        return;
+      }
+      if (!state.selectedPhoto || state.selectedPhoto.path !== payload.orig_path) {
+        return;
+      }
+      // The low-res base layer must be visible first: rendering the high-res
+      // overlay over an empty viewport would show a black canvas.
+      if (state.previewLoadedPath !== payload.orig_path) {
+        return;
+      }
+      await renderHighResSeamless(payload.path, payload.gen_id);
+    });
+
+    listenTauri('highres_discarded', ({ payload }) => {
+      // Obsolete request discarded by engine
     });
 
     // Trigger 4: intercept window close to safely flush pending metadata
@@ -1559,7 +1598,16 @@
   function applyZoomTransform() {
     if (!els.previewImg) return;
     const { level, panX, panY, mode } = state.zoom;
-    els.previewImg.style.transform = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
+    const transformStr = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
+    
+    // Apply transform simultaneously to low-res, high-res, and vector overlays
+    els.previewImg.style.transform = transformStr;
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.transform = transformStr;
+    }
+    if (els.previewSvgOverlay) {
+      els.previewSvgOverlay.style.transform = transformStr;
+    }
 
     const pct = Math.round(level * 100);
     if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
@@ -1580,6 +1628,93 @@
         els.previewContainer.classList.remove('zoomed');
       }
     }
+
+    // Trigger intelligent high-res loading if zoomed > 150%
+    scheduleHighResEvaluation(level);
+  }
+
+  function scheduleHighResEvaluation(level, isIntent = false) {
+    if (!state.selectedPhoto) return;
+    state.highres.activeGenId++;
+    const currentGen = state.highres.activeGenId;
+
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+
+    // If zoomed <= 150%, fade out and reset high-res layer
+    if (level <= 1.5) {
+      if (els.previewHighResImg) {
+        els.previewHighResImg.style.opacity = '0';
+      }
+      return;
+    }
+
+    // Debounce timer: 30ms for direct intent (double-click/hotkey), 150ms for wheel/drag
+    const delay = isIntent ? 30 : 150;
+    state.highres.debounceTimer = setTimeout(() => {
+      state.highres.debounceTimer = null;
+      if (currentGen !== state.highres.activeGenId || !state.selectedPhoto) return;
+      invokeTauri('request_highres', {
+        path: state.selectedPhoto.path,
+        gen_id: currentGen,
+        genId: currentGen,
+        roi: null
+      }).catch((e) => appendLog(`[HighRes Request Error] ${e}`));
+    }, delay);
+  }
+
+  async function renderHighResSeamless(resolvedPath, genId) {
+    if (genId !== state.highres.activeGenId || !els.previewHighResImg) return;
+    try {
+      const assetUrl = window.__TAURI__?.core ? window.__TAURI__.core.convertFileSrc(resolvedPath) : resolvedPath;
+      const offscreen = new Image();
+      offscreen.src = assetUrl;
+      // Pre-rasterize texture offscreen to avoid UI thread lag
+      if (offscreen.decode) {
+        await offscreen.decode();
+      }
+
+      if (genId !== state.highres.activeGenId) return;
+
+      els.previewHighResImg.src = assetUrl;
+      els.previewHighResImg.style.opacity = '1';
+      state.highres.loadedPath = resolvedPath;
+      appendLog(`[HighRes] Seamlessly loaded: ${resolvedPath.split(/[\\/]/).pop()}`);
+    } catch (err) {
+      appendLog(`[HighRes Error] ${err}`);
+    }
+  }
+
+  function updateSvgVectorOverlay(boxes, imgW, imgH) {
+    if (!els.previewSvgOverlay) return;
+    els.previewSvgOverlay.innerHTML = '';
+    if (!boxes || boxes.length === 0 || !imgW || !imgH) return;
+
+    let svgHtml = '';
+    for (const b of boxes) {
+      const [x1, y1, x2, y2, label, conf] = b;
+      const nx = Math.min(x1, x2) / imgW;
+      const ny = Math.min(y1, y2) / imgH;
+      const nw = Math.abs(x2 - x1) / imgW;
+      const nh = Math.abs(y2 - y1) / imgH;
+
+      const confPct = Math.round(conf * 100);
+      const isCar = label.includes('car') || label.includes('f1');
+      const strokeColor = isCar ? '#00e5ff' : '#fbbf24';
+
+      svgHtml += `
+        <g class="tau-svg-box">
+          <rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" 
+                fill="none" stroke="${strokeColor}" stroke-width="2" 
+                vector-effect="non-scaling-stroke" />
+          <text x="${nx + 0.008}" y="${Math.max(0.03, ny - 0.008)}" 
+                fill="${strokeColor}" font-size="0.025">${label} ${confPct}%</text>
+        </g>
+      `;
+    }
+    els.previewSvgOverlay.innerHTML = svgHtml;
   }
 
   function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
@@ -1802,6 +1937,12 @@
   // --- Photo Selection & Thumbnail Preview (Anti-Race) ---
   async function selectPhoto(item, shouldResetZoom = true) {
     if (!item) return;
+    // A preview for this photo is already loaded or in flight. Frame events
+    // stream at 17-37 fps during a culling run and re-select the same photo
+    // each time; re-issuing the preview IPC per event invalidates the
+    // in-flight response (stale-seq discard) which left the viewport
+    // permanently black, and flooded the engine with per-frame decodes.
+    const isSamePreview = state.previewRequestedPath === item.path;
     state.selectedPhoto = item;
 
     document.querySelectorAll('#photoTable tbody tr').forEach((r) => r.classList.remove('selected'));
@@ -1814,6 +1955,21 @@
     els.previewTitle.textContent = stemOf(item.name);
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
+
+    if (isSamePreview) return;
+
+    state.previewRequestedPath = item.path;
+
+    // Discard any pending high-res requests for the previous photo
+    state.highres.activeGenId++;
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.opacity = '0';
+      els.previewHighResImg.src = '';
+    }
 
     if (state.zoom.mode === 'auto') {
       const focus = item.crop ? computeCropFocus(item.crop) : null;
@@ -1845,15 +2001,10 @@
     const reasonText = item.veto ? I18N.translateVeto(item.veto) : (item.rating > 0 ? I18N.t('table.tag_passed') : I18N.t('status.queued'));
     els.pillReason.textContent = `REASON: ${reasonText}`;
 
-    // Feature 4: Anti-Race Sequence tracking
+    // Anti-Race Sequence tracking (only reached when the photo actually
+    // changed — same-photo re-entry returns above)
     const currentSeq = ++state.previewSeq;
     const requestedPath = item.path;
-
-    // Same photo already rendered: skip the decode IPC (re-scoring a selected
-    // photo used to re-fetch the 640px preview on every frame event).
-    if (state.previewLoadedPath === requestedPath && els.previewImg.style.display === 'block') {
-      return;
-    }
 
     try {
       const res = await invokeTauri('preview', { path: requestedPath, size: 640 });
@@ -1865,9 +2016,20 @@
       if (res && res.data) {
         const src = res.data.startsWith('data:') ? res.data : `data:image/png;base64,${res.data}`;
         els.previewImg.src = src;
+        if (els.previewHighResImg) {
+          els.previewHighResImg.style.opacity = '0';
+          els.previewHighResImg.src = '';
+        }
+        if (els.previewViewport) els.previewViewport.style.display = 'flex';
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
+
+        if (res.boxes) {
+          updateSvgVectorOverlay(res.boxes, res.width || 640, res.height || 427);
+        } else if (els.previewSvgOverlay) {
+          els.previewSvgOverlay.innerHTML = '';
+        }
 
         if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
           item.crop = res.crop;
@@ -1882,7 +2044,12 @@
           }
         }
       } else {
+        // Preview failed: clear the in-flight marker so the next selection or
+        // frame-event re-entry can retry the request.
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
+        if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
+        if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_load_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = item.name;
@@ -1890,7 +2057,10 @@
     } catch (err) {
       if (currentSeq === state.previewSeq && state.selectedPhoto && state.selectedPhoto.path === requestedPath) {
         appendLog(`[Preview Error] ${err}`);
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
+        if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
+        if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_fail_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = `${err}`;

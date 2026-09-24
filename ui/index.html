@@ -538,7 +538,13 @@
           </div>
 
           <div class="tau-preview-body" id="previewContainer">
-            <img id="previewImg" alt="缩略图" data-i18n-attr="alt:preview.img_alt" style="display: none;">
+            <div id="previewViewport" class="tau-preview-viewport" style="display: none;">
+              <img id="previewImg" class="tau-preview-layer tau-preview-lowres" alt="缩略图" data-i18n-attr="alt:preview.img_alt">
+              <img id="previewHighResImg" class="tau-preview-layer tau-preview-highres" alt="高清原图" style="opacity: 0;">
+              <svg id="previewSvgOverlay" class="tau-preview-svg" viewBox="0 0 1 1" preserveAspectRatio="none">
+                <!-- Scalable non-scaling-stroke vector bounding boxes -->
+              </svg>
+            </div>
             <div id="previewEmpty" class="tau-preview-empty">
               <div class="tau-grid-backdrop"></div>
               <span class="tau-empty-symbol">❖</span>

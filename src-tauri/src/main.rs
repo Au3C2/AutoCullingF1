@@ -417,6 +417,24 @@ async fn save_metadata(
     send_engine_command(&app, &mut guard, payload)
 }
 
+#[tauri::command(rename_all = "snake_case")]
+async fn request_highres(
+    app: AppHandle,
+    state: State<'_, Arc<Mutex<EngineState>>>,
+    path: String,
+    gen_id: u64,
+    roi: Option<Vec<f64>>,
+) -> Result<(), String> {
+    let payload = serde_json::json!({
+        "cmd": "highres",
+        "path": path,
+        "gen_id": gen_id,
+        "roi": roi
+    });
+    let mut guard = state.lock().unwrap();
+    send_engine_command(&app, &mut guard, payload)
+}
+
 #[tauri::command]
 async fn exit_app(app: AppHandle) -> Result<(), String> {
     app.exit(0);
@@ -647,6 +665,7 @@ fn main() {
             preview,
             export_csv,
             save_metadata,
+            request_highres,
             exit_app,
             secret_get,
             secret_set,

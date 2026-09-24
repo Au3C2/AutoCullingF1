@@ -420,6 +420,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
                         "path": raw_path,
                         "data": b64_str,
                         "png": b64_str,
+                        "width": pil.width,
+                        "height": pil.height,
                         "boxes": raw_boxes,
                         "crop": raw_crop
                     })
@@ -493,6 +495,49 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
 
         threading.Thread(target=_save_worker, daemon=True).start()
 
+    from cull.highres import HighResProvider, HighResRequest
+    highres_provider = HighResProvider()
+
+    def do_highres(cmd: dict) -> None:
+        def _highres_worker() -> None:
+            raw_path = cmd.get("path", "")
+            gen_id = int(cmd.get("gen_id", 0))
+            roi = cmd.get("roi")
+            try:
+                highres_provider.update_active_generation(gen_id)
+                res = highres_provider.resolve(HighResRequest(
+                    file_path=Path(raw_path),
+                    gen_id=gen_id,
+                    roi=roi,
+                ))
+                if res is not None:
+                    emit({
+                        "type": "highres_ready",
+                        "gen_id": res.gen_id,
+                        "path": str(res.resolved_path),
+                        "orig_path": raw_path,
+                        "format": res.format,
+                        "width": res.width,
+                        "height": res.height,
+                        "tier": res.tier,
+                    })
+                else:
+                    emit({
+                        "type": "highres_discarded",
+                        "gen_id": gen_id,
+                        "orig_path": raw_path,
+                    })
+            except Exception as e:
+                log.warning("do_highres failed for %s: %s", raw_path, e)
+                emit({
+                    "type": "highres_error",
+                    "gen_id": gen_id,
+                    "orig_path": raw_path,
+                    "message": str(e),
+                })
+
+        threading.Thread(target=_highres_worker, daemon=True).start()
+
     # Start the reader only after every handler exists — a command arriving
     # during the definition window used to raise NameError inside the reader
     # thread and kill it for the rest of the session.
@@ -513,6 +558,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
             do_export_csv(cmd)
         elif kind == "save_metadata":
             do_save_metadata(cmd)
+        elif kind == "highres":
+            do_highres(cmd)
 
 
 

@@ -1180,12 +1180,58 @@ textarea,
   padding: 8px;
 }
 
-.tau-preview-body img {
+.tau-preview-viewport {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  transition: transform 0.05s ease-out;
+}
+
+.tau-preview-layer {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: 4px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.tau-preview-highres {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.tau-preview-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.tau-preview-svg rect {
+  vector-effect: non-scaling-stroke;
+}
+
+.tau-preview-svg text {
+  font-family: var(--tau-font-mono);
+  font-weight: 700;
+  paint-order: stroke fill;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 3px;
 }
 
 .tau-preview-empty {
