@@ -247,7 +247,7 @@ def get_preview_stream(path: Path) -> Tuple[int, int, int] | None:
         _preview_stream_cache[cache_key] = probe_embedded_preview(path)
     return _preview_stream_cache[cache_key]
 
-def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def _load_image_pyav(path: Path, scale_width: int = 1280, hwaccel: bool = True) -> np.ndarray | None:
     """Decode the primary preview stream via in-process libav (pyav).
 
     Spawning ffmpeg per file costs ~80-110 ms (process startup) on top of the
@@ -256,7 +256,10 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     On macOS (darwin), in-process VideoToolbox hardware decoding is used by
     default (12.4 ms vs 21.8 ms soft decode), with JPEG full-range color
     metadata alignment to guarantee 100% bit-identical RGB output (0 drift).
-    Falls back gracefully to software decode if hardware decode fails.
+    Pass ``hwaccel=False`` to force the software HEVC path — required for the
+    GUI preview pipeline, whose decodes must never contend with the culling
+    engine's VideoToolbox decode pool (concurrent HW sessions degraded engine
+    throughput and could hang).
 
     In deterministic mode (``CULL_DETERMINISTIC=1``) hardware decoders are
     disabled so macOS and Windows share the same software HEVC path.
@@ -299,7 +302,7 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
             except Exception:
                 _det = False
 
-            if not _det and sys.platform == "darwin":
+            if not _det and hwaccel and sys.platform == "darwin":
                 try:
                     hwa = av.codec.hwaccel.HWAccel("videotoolbox")
                     ctx = av.CodecContext.create(stream.codec_context.name, "r", hwaccel=hwa)
@@ -509,11 +512,12 @@ def _extract_raw_tiff_direct(path: Path) -> bytes | None:
     return None
 
 
-def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def load_image_ffmpeg(path: Path, scale_width: int = 1280, hwaccel: bool = True) -> np.ndarray | None:
     # 1. First try in-process pyav (self-probed, fastest, zero-subprocess, no window popup)
-    img_pyav = _load_image_pyav(path, scale_width=scale_width)
+    img_pyav = _load_image_pyav(path, scale_width=scale_width, hwaccel=hwaccel)
     if img_pyav is not None:
-        log.info("HEIF decode path: pyav (in-process av/VideoToolbox)")
+        log.info("HEIF decode path: pyav (in-process av/%s)",
+                 "VideoToolbox" if hwaccel else "software")
         return img_pyav
 
     # 2. Subprocess fallback only if in-process pyav is unavailable or failed
@@ -540,12 +544,13 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         except Exception: pass
     return None
 
-def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
+def load_image_rgb(path: Path, scale_width: int = 0, hwaccel: bool = True) -> np.ndarray | None:
     suffix = path.suffix.lower()
     if suffix in (".hif", ".heif", ".heic"):
-        img = load_image_ffmpeg(path, scale_width=scale_width)
+        img = load_image_ffmpeg(path, scale_width=scale_width, hwaccel=hwaccel)
         if img is not None:
-            log.info("HEIF decode path: in-process av/VideoToolbox")
+            log.info("HEIF decode path: in-process av/%s",
+                     "VideoToolbox" if hwaccel else "software")
             return img
         # Pillow Fallback
         try:

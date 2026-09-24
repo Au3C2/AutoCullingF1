@@ -27,17 +27,19 @@ def temp_cache_dir():
     shutil.rmtree(d, ignore_errors=True)
 
 
-def test_tier1_passthrough_jpg_heif(temp_cache_dir: Path):
-    """Tier 1: JPG / HIF / HEIF should be returned directly as-is with 0 transcode."""
+def test_tier1_passthrough_jpg_and_heif_preview(temp_cache_dir: Path):
+    """Tier 1: JPG passthrough as-is. HEIF: software-decoded preview stream
+    cached as JPEG (the full-res primary image must never be decoded inside
+    the webview during a culling run)."""
     provider = HighResProvider(cache_dir=temp_cache_dir)
-    
+
     # 1. Test JPG sample
     jpg_sample = Path("tests/ci/sample/seed.jpg")
     assert jpg_sample.exists()
-    
+
     req = HighResRequest(file_path=jpg_sample, gen_id=1)
     res = provider.resolve(req)
-    
+
     assert res is not None
     assert res.tier == "tier1_passthrough"
     assert res.resolved_path == jpg_sample.resolve()
@@ -46,19 +48,24 @@ def test_tier1_passthrough_jpg_heif(temp_cache_dir: Path):
     # Tier 1 must not create any new cache file
     assert len(list(temp_cache_dir.glob("*"))) == 0
 
-    # 2. Test HEIF sample
+    # 2. Test HEIF sample: preview-stream decode, cached as JPEG
     heif_sample = Path("tests/ci/sample/seed.heif")
     assert heif_sample.exists()
-    
+
     req_heif = HighResRequest(file_path=heif_sample, gen_id=2)
     res_heif = provider.resolve(req_heif)
-    
+
     assert res_heif is not None
-    assert res_heif.tier == "tier1_passthrough"
-    assert res_heif.resolved_path == heif_sample.resolve()
-    assert res_heif.format.lower() in ("heif", "hif")
+    assert res_heif.tier == "tier2_heif_preview"
+    assert res_heif.resolved_path.suffix.lower() == ".jpg"
+    assert res_heif.resolved_path.exists()
+    assert res_heif.format.lower() == "jpg"
     assert res_heif.width > 0 and res_heif.height > 0
-    assert len(list(temp_cache_dir.glob("*"))) == 0
+
+    # Second request must hit the cache (idempotent resolution)
+    res_heif2 = provider.resolve(HighResRequest(file_path=heif_sample, gen_id=3))
+    assert res_heif2 is not None
+    assert res_heif2.resolved_path == res_heif.resolved_path
 
 
 def test_tier2_raw_embedded_stream_extraction(temp_cache_dir: Path):

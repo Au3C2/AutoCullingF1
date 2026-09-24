@@ -6,6 +6,7 @@ version = 4
 name = "AutoCulling"
 version = "0.1.0"
 dependencies = [
+ "glob",
  "keyring",
  "serde",
  "serde_json",

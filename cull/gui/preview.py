@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from cull.loader import load_image_rgb
+from cull.loader import HEIF_EXTS, load_image_ffmpeg, load_image_rgb
 from cull.scorer import ImageScore
 
 log = logging.getLogger(__name__)
@@ -58,7 +58,29 @@ def _fit(img: np.ndarray, max_size: int) -> np.ndarray:
 def _load_cached_inner(path_str: str, max_size: int) -> np.ndarray:
     with _PREVIEW_DECODE_LOCK:
         path = Path(path_str)
-        img = load_image_rgb(path, scale_width=max_size)
+        if path.suffix.lower() in HEIF_EXTS:
+            # Software HEVC decode ONLY for previews: VideoToolbox sessions
+            # from preview threads contend with the culling engine's decode
+            # pool (HW sessions are a limited resource) and degrade/hang the
+            # run. The 1664x1088 preview stream decodes in ~20-40 ms soft.
+            img = load_image_ffmpeg(path, scale_width=max_size, hwaccel=False)
+            if img is None:
+                try:
+                    import pillow_heif
+                    pillow_heif.register_heif_opener()
+                    with Image.open(path) as pil_img:
+                        img = np.asarray(pil_img.convert("RGB"))
+                        h, w = img.shape[:2]
+                        if w > max_size * 1.2:
+                            new_h = int(round(h * max_size / w))
+                            img = cv2.resize(img, (max_size, new_h),
+                                             interpolation=cv2.INTER_AREA)
+                except Exception as e:
+                    log.warning("Preview HEIF software decode failed for %s: %s",
+                                path_str, e)
+                    raise _PreviewDecodeError(path_str)
+        else:
+            img = load_image_rgb(path, scale_width=max_size)
         if img is None:
             raise _PreviewDecodeError(path_str)
         return _fit(img, max_size)

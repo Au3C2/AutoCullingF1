@@ -173,6 +173,10 @@
       lruPaths: [], // Keep max 2 active textures
     },
 
+    // Preview request dedup: path whose 640 px preview is loaded or in
+    // flight. Null when idle/failed so a retry can be issued.
+    previewRequestedPath: null,
+
     // Save triggers & persistence state
     dirtyPhotos: new Set(),
     isSaving: false,
@@ -698,6 +702,8 @@
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
+      state.previewRequestedPath = null;
+      if (els.previewViewport) els.previewViewport.style.display = 'none';
       els.previewEmpty.style.display = 'flex';
       els.previewTitle.textContent = I18N.t('preview.title');
       els.previewScoreDetails.style.display = 'none';
@@ -1931,26 +1937,13 @@
   // --- Photo Selection & Thumbnail Preview (Anti-Race) ---
   async function selectPhoto(item, shouldResetZoom = true) {
     if (!item) return;
+    // A preview for this photo is already loaded or in flight. Frame events
+    // stream at 17-37 fps during a culling run and re-select the same photo
+    // each time; re-issuing the preview IPC per event invalidates the
+    // in-flight response (stale-seq discard) which left the viewport
+    // permanently black, and flooded the engine with per-frame decodes.
+    const isSamePreview = state.previewRequestedPath === item.path;
     state.selectedPhoto = item;
-
-    // Same photo already rendered: skip the decode IPC entirely. Frame events
-    // stream at 17-37 fps during a culling run and each one used to re-enter
-    // selectPhoto, invalidating the in-flight preview response (stale-seq
-    // discard) and leaving the viewport permanently black.
-    const isSamePhoto = state.previewLoadedPath === item.path && els.previewImg.style.display === 'block';
-
-    if (!isSamePhoto) {
-      // Discard any pending high-res requests for the previous photo
-      state.highres.activeGenId++;
-      if (state.highres.debounceTimer) {
-        clearTimeout(state.highres.debounceTimer);
-        state.highres.debounceTimer = null;
-      }
-      if (els.previewHighResImg) {
-        els.previewHighResImg.style.opacity = '0';
-        els.previewHighResImg.src = '';
-      }
-    }
 
     document.querySelectorAll('#photoTable tbody tr').forEach((r) => r.classList.remove('selected'));
     const row = document.getElementById(rowIdFor(item));
@@ -1962,6 +1955,21 @@
     els.previewTitle.textContent = stemOf(item.name);
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
+
+    if (isSamePreview) return;
+
+    state.previewRequestedPath = item.path;
+
+    // Discard any pending high-res requests for the previous photo
+    state.highres.activeGenId++;
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.opacity = '0';
+      els.previewHighResImg.src = '';
+    }
 
     if (state.zoom.mode === 'auto') {
       const focus = item.crop ? computeCropFocus(item.crop) : null;
@@ -2036,6 +2044,9 @@
           }
         }
       } else {
+        // Preview failed: clear the in-flight marker so the next selection or
+        // frame-event re-entry can retry the request.
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
         if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
         if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
@@ -2046,6 +2057,7 @@
     } catch (err) {
       if (currentSeq === state.previewSeq && state.selectedPhoto && state.selectedPhoto.path === requestedPath) {
         appendLog(`[Preview Error] ${err}`);
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
         if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
         if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
