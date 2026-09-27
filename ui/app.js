@@ -1687,9 +1687,17 @@
     }
   }
 
+  // Diagnostic bisection build: the SVG detection-box overlay layer is
+  // SUSPECTED of blanking sibling image layers in WKWebView compositing
+  // (black previews with only label fragments visible). Flipped OFF so the
+  // photo bitmaps can be verified in isolation. Flip to true to restore.
+  const SVG_OVERLAY_ENABLED = false;
+  window.__AC_SVG_OVERLAY_ENABLED__ = SVG_OVERLAY_ENABLED;
+
   function updateSvgVectorOverlay(boxes, imgW, imgH) {
     if (!els.previewSvgOverlay) return;
     els.previewSvgOverlay.innerHTML = '';
+    if (!SVG_OVERLAY_ENABLED) return;
     if (!boxes || boxes.length === 0 || !imgW || !imgH) return;
 
     let svgHtml = '';

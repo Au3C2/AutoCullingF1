@@ -108,11 +108,18 @@ test.describe('preview rendering pipeline', () => {
       expect(mae, `${photo.name}: mean abs tile diff`).toBeLessThan(30);
 
       if (photo.boxes.length > 0) {
-        // Detection boxes must be visible over the painted photo
-        expect(state.svgBoxCount).toBe(photo.boxes.length);
-        const svgShot = await page.locator('#previewSvgOverlay').screenshot();
-        const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
-        expect(boxPixels, `${photo.name}: box stroke pixels visible`).toBeGreaterThan(80);
+        const svgEnabled = await page.evaluate(() => window.__AC_SVG_OVERLAY_ENABLED__ !== false);
+        if (svgEnabled) {
+          // Detection boxes must be visible over the painted photo
+          expect(state.svgBoxCount).toBe(photo.boxes.length);
+          const svgShot = await page.locator('#previewSvgOverlay').screenshot();
+          const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
+          expect(boxPixels, `${photo.name}: box stroke pixels visible`).toBeGreaterThan(80);
+        } else {
+          // Diagnostic build: SVG overlay disabled — it must be empty and the
+          // photo itself must still paint (the actual point of the bisection)
+          expect(state.svgBoxCount).toBe(0);
+        }
       }
     }
 
@@ -168,11 +175,17 @@ test.describe('preview rendering pipeline', () => {
     expect(blackHoles, `black tiles at 250% zoom: ${JSON.stringify(blackHoles)}`).toHaveLength(0);
 
     // Detection boxes must remain visible on top of the high-res overlay
+    // (skipped in the diagnostic build where the SVG overlay is disabled)
+    const svgEnabled = await page.evaluate(() => window.__AC_SVG_OVERLAY_ENABLED__ !== false);
     const state = await previewState(page);
-    expect(state.svgBoxCount).toBe(photo.boxes.length);
-    const svgShot = await page.locator('#previewSvgOverlay').screenshot();
-    const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
-    expect(boxPixels, 'box stroke pixels visible at 250%').toBeGreaterThan(80);
+    if (svgEnabled) {
+      expect(state.svgBoxCount).toBe(photo.boxes.length);
+      const svgShot = await page.locator('#previewSvgOverlay').screenshot();
+      const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
+      expect(boxPixels, 'box stroke pixels visible at 250%').toBeGreaterThan(80);
+    } else {
+      expect(state.svgBoxCount).toBe(0);
+    }
   });
 
   test('returning from 250% to 100% restores the low-res view (no lingering black)', async ({ page }) => {
