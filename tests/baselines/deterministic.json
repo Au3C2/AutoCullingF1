@@ -1,9 +1,9 @@
 {
-  "_note": "Deterministic baseline \u2014 CULL_DETERMINISTIC=1 (CPU-only ORT, software decode, single-threaded kernels). Generated on Windows (2026-08-28, win32 + onnxruntime 1.23.2, opencv 4.10+, libav software HEVC). This is the cross-platform truth: every backend must align to these raw_score/rating values within tolerance. Re-generate by running scripts/generate_deterministic_baseline.py with CULL_DETERMINISTIC=1 on any platform after pipeline changes that intentionally alter scoring.",
+  "_note": "Deterministic baseline — CULL_DETERMINISTIC=1 (CPU-only ORT, software decode, single-threaded kernels). Generated on Windows (2026-08-28, win32 + onnxruntime 1.23.2, opencv 4.10+, libav software HEVC). This is the cross-platform truth: every backend must align to these raw_score/rating values within tolerance. Re-generate by running scripts/generate_deterministic_baseline.py with CULL_DETERMINISTIC=1 on any platform after pipeline changes that intentionally alter scoring. Re-locked 2026-09-27 on Windows (onnxruntime-directml 1.23.0, current libav build): heif DSC00845/DSC00879 raw_score updated for decoder-build drift; ratings unchanged; jpg/arw/nef sections bit-identical.",
   "meta": {
-    "generated": "2026-08-28",
+    "generated": "2026-09-27",
     "platform": "win32",
-    "onnxruntime": "1.23.2",
+    "onnxruntime": "1.23.0",
     "deterministic": true,
     "scale_width": 1280,
     "tolerance_rating": "exact",
@@ -42,7 +42,7 @@
     ],
     "DSC00845.heif": [
       -1,
-      2.838
+      2.577
     ],
     "DSC00849.heif": [
       1,
@@ -54,7 +54,7 @@
     ],
     "DSC00879.heif": [
       -1,
-      1.924
+      1.926
     ],
     "DSC00880.heif": [
       -1,
