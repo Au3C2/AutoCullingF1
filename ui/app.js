@@ -185,6 +185,12 @@
     // Feature 4: Anti-race preview tracker
     previewSeq: 0,
     previewLoadedPath: null,
+    // Detection boxes / crop for the canvas overlay (single source of truth;
+    // the photo bitmaps themselves carry no burned-in annotations)
+    previewBoxes: null,
+    previewCrop: null,
+    previewImgW: 0,
+    previewImgH: 0,
 
     // Feature 7: Context menu
     contextPhoto: null,
@@ -221,7 +227,7 @@
     previewViewport: $('previewViewport'),
     previewImg: $('previewImg'),
     previewHighResImg: $('previewHighResImg'),
-    previewSvgOverlay: $('previewSvgOverlay'),
+    previewBoxCanvas: $('previewBoxCanvas'),
     previewEmpty: $('previewEmpty'),
     previewTitle: $('previewTitle'),
     previewScoreDetails: $('previewScoreDetails'),
@@ -703,6 +709,8 @@
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
       state.previewRequestedPath = null;
+      state.previewBoxes = null;
+      state.previewCrop = null;
       if (els.previewViewport) els.previewViewport.style.display = 'none';
       els.previewEmpty.style.display = 'flex';
       els.previewTitle.textContent = I18N.t('preview.title');
@@ -1599,15 +1607,15 @@
     if (!els.previewImg) return;
     const { level, panX, panY, mode } = state.zoom;
     const transformStr = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
-    
-    // Apply transform simultaneously to low-res, high-res, and vector overlays
+
+    // Apply transform simultaneously to the low-res and high-res photo
+    // layers. The box overlay is NOT CSS-transformed — it redraws its
+    // geometry instead (WKWebView compositing safety, see drawBoxOverlay).
     els.previewImg.style.transform = transformStr;
     if (els.previewHighResImg) {
       els.previewHighResImg.style.transform = transformStr;
     }
-    if (els.previewSvgOverlay) {
-      els.previewSvgOverlay.style.transform = transformStr;
-    }
+    drawBoxOverlay();
 
     const pct = Math.round(level * 100);
     if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
@@ -1687,42 +1695,92 @@
     }
   }
 
-  // Diagnostic bisection build: the SVG detection-box overlay layer is
-  // SUSPECTED of blanking sibling image layers in WKWebView compositing
-  // (black previews with only label fragments visible). Flipped OFF so the
-  // photo bitmaps can be verified in isolation. Flip to true to restore.
-  const SVG_OVERLAY_ENABLED = false;
-  window.__AC_SVG_OVERLAY_ENABLED__ = SVG_OVERLAY_ENABLED;
+  // Detection-box overlay: Canvas 2D redrawn in JS on every zoom/pan change.
+  // Root-caused: a CSS-transformed SVG overlay stacked above the photo
+  // bitmaps blanks sibling layers in WKWebView compositing (black previews).
+  // The canvas element itself is never CSS-transformed — the zoom/pan
+  // transform is applied to the drawn geometry instead.
+  const BOX_COLOR_CAR = '#00e5ff';
+  const BOX_COLOR_OTHER = '#fbbf24';
+  const BOX_COLOR_CROP = '#f39c12';
+  window.__AC_BOX_OVERLAY_ENABLED__ = true;
 
-  function updateSvgVectorOverlay(boxes, imgW, imgH) {
-    if (!els.previewSvgOverlay) return;
-    els.previewSvgOverlay.innerHTML = '';
-    if (!SVG_OVERLAY_ENABLED) return;
-    if (!boxes || boxes.length === 0 || !imgW || !imgH) return;
+  function drawBoxOverlay() {
+    const canvas = els.previewBoxCanvas;
+    if (!canvas) return;
+    const vw = els.previewViewport ? els.previewViewport.offsetWidth : 0;
+    const vh = els.previewViewport ? els.previewViewport.offsetHeight : 0;
+    if (!vw || !vh) return;
 
-    let svgHtml = '';
+    // Hi-DPI backing store, resized only when the viewport geometry changes
+    const dpr = window.devicePixelRatio || 1;
+    const bw = Math.round(vw * dpr);
+    const bh = Math.round(vh * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, vw, vh);
+
+    const boxes = state.previewBoxes || [];
+    const crop = state.previewCrop || null;
+    if (boxes.length === 0 && !crop) return;
+
+    // Screen position of a normalized photo point under the current
+    // viewport transform (CSS: translate(pan) then scale about the center):
+    //   screen = center + (point - center) * level + pan
+    const { level, panX, panY } = state.zoom;
+    const toScreen = (nx, ny) => ({
+      x: vw / 2 + (nx * vw - vw / 2) * level + panX,
+      y: vh / 2 + (ny * vh - vh / 2) * level + panY,
+    });
+
+    ctx.lineWidth = 2;
+    ctx.font = '700 11px Menlo, Consolas, monospace';
+    ctx.textBaseline = 'bottom';
+
     for (const b of boxes) {
       const [x1, y1, x2, y2, label, conf] = b;
-      const nx = Math.min(x1, x2) / imgW;
-      const ny = Math.min(y1, y2) / imgH;
-      const nw = Math.abs(x2 - x1) / imgW;
-      const nh = Math.abs(y2 - y1) / imgH;
+      // Boxes arrive normalized to [0,1] photo-relative coordinates
+      const nx1 = Math.min(x1, x2);
+      const ny1 = Math.min(y1, y2);
+      const nx2 = Math.max(x1, x2);
+      const ny2 = Math.max(y1, y2);
+      const p1 = toScreen(nx1, ny1);
+      const p2 = toScreen(nx2, ny2);
+      const rx = Math.min(p1.x, p2.x);
+      const ry = Math.min(p1.y, p2.y);
+      const rw = Math.abs(p2.x - p1.x);
+      const rh = Math.abs(p2.y - p1.y);
+
+      const isCar = String(label).includes('car') || String(label).includes('f1');
+      const color = isCar ? BOX_COLOR_CAR : BOX_COLOR_OTHER;
+      ctx.strokeStyle = color;
+      ctx.strokeRect(rx, ry, rw, rh);
 
       const confPct = Math.round(conf * 100);
-      const isCar = label.includes('car') || label.includes('f1');
-      const strokeColor = isCar ? '#00e5ff' : '#fbbf24';
-
-      svgHtml += `
-        <g class="tau-svg-box">
-          <rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" 
-                fill="none" stroke="${strokeColor}" stroke-width="2" 
-                vector-effect="non-scaling-stroke" />
-          <text x="${nx + 0.008}" y="${Math.max(0.03, ny - 0.008)}" 
-                fill="${strokeColor}" font-size="0.025">${label} ${confPct}%</text>
-        </g>
-      `;
+      const text = `${label} ${confPct}%`;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      const tw = ctx.measureText(text).width;
+      const ty = Math.max(ry - 2, 14);
+      ctx.fillRect(rx, ty - 13, tw + 8, 15);
+      ctx.fillStyle = color;
+      ctx.fillText(text, rx + 4, ty);
     }
-    els.previewSvgOverlay.innerHTML = svgHtml;
+
+    if (crop && crop.length === 4) {
+      const [top, left, bottom, right] = crop;
+      const p1 = toScreen(left, top);
+      const p2 = toScreen(right, bottom);
+      ctx.strokeStyle = BOX_COLOR_CROP;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(Math.min(p1.x, p2.x), Math.min(p1.y, p2.y),
+                     Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+      ctx.setLineDash([]);
+    }
+    window.__AC_BOX_OVERLAY_STATS__ = { boxes: boxes.length, crop: !!crop };
   }
 
   function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
@@ -2012,6 +2070,11 @@
       els.previewHighResImg.style.opacity = '0';
       els.previewHighResImg.src = '';
     }
+    // Stale-photo annotation guard: box data belongs to the previous photo
+    // until its own preview response arrives
+    state.previewBoxes = null;
+    state.previewCrop = null;
+    drawBoxOverlay();
 
     if (state.zoom.mode === 'auto') {
       const focus = item.crop ? computeCropFocus(item.crop) : null;
@@ -2076,10 +2139,13 @@
         }
 
         if (res.boxes) {
-          updateSvgVectorOverlay(res.boxes, res.width || 640, res.height || 427);
-        } else if (els.previewSvgOverlay) {
-          els.previewSvgOverlay.innerHTML = '';
+          state.previewBoxes = res.boxes;
+          state.previewImgW = res.width || 640;
+          state.previewImgH = res.height || 427;
+        } else {
+          state.previewBoxes = null;
         }
+        state.previewCrop = (res.crop && Array.isArray(res.crop) && res.crop.length === 4) ? res.crop : null;
 
         if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
           item.crop = res.crop;
@@ -2093,13 +2159,15 @@
             }
           }
         }
+        drawBoxOverlay();
       } else {
         // Preview failed: clear the in-flight marker so the next selection or
         // frame-event re-entry can retry the request.
         if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
         if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
-        if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
+        state.previewBoxes = null;
+        state.previewCrop = null;
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_load_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = item.name;
@@ -2110,7 +2178,8 @@
         if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
         if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
-        if (els.previewSvgOverlay) els.previewSvgOverlay.innerHTML = '';
+        state.previewBoxes = null;
+        state.previewCrop = null;
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_fail_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = `${err}`;

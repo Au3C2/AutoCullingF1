@@ -108,9 +108,20 @@ def main() -> int:
 
         boxes = []
         if getattr(score, "detections", None):
+            # Normalized [0,1] photo-relative coordinates (same convention as
+            # the GUI preview payload — see cull_photos.do_preview)
+            img_w = float(getattr(score, "img_w", 0) or 0)
+            img_h = float(getattr(score, "img_h", 0) or 0)
+            if img_w <= 0 or img_h <= 0:
+                img_w, img_h = 1.0, 1.0
             for det in score.detections:
-                boxes.append([float(det.x1), float(det.y1), float(det.x2), float(det.y2),
-                              str(det.label), float(det.conf)])
+                boxes.append([
+                    max(0.0, min(1.0, float(det.x1) / img_w)),
+                    max(0.0, min(1.0, float(det.y1) / img_h)),
+                    max(0.0, min(1.0, float(det.x2) / img_w)),
+                    max(0.0, min(1.0, float(det.y2) / img_h)),
+                    str(det.label), float(det.conf),
+                ])
         crop = [float(x) for x in score.crop] if getattr(score, "crop", None) else None
 
         # High-res cache asset (Tier 2 / HEIF preview stream / Tier 3)

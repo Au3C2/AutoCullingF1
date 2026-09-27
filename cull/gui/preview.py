@@ -1,11 +1,14 @@
-"""preview.py — fast thumbnail rendering with detection/crop overlays for the GUI.
+"""preview.py — fast thumbnail rendering for the GUI.
 
-Decoding and overlay drawing happen in background thread; safe for cross-platform.
+Decoding happens in background thread; safe for cross-platform.
+NOTE: detection/crop overlays are NOT burned into the preview bitmap — the
+frontend draws them on a canvas overlay (single annotation source of truth;
+burned-in boxes double-draw under the canvas and vanish on the high-res
+layer, which confused the zoom inspection flow).
 """
 
 from __future__ import annotations
 
-import io
 import logging
 import threading
 from functools import lru_cache
@@ -13,7 +16,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from cull.loader import HEIF_EXTS, load_image_ffmpeg, load_image_rgb
 from cull.scorer import ImageScore
@@ -22,9 +25,6 @@ log = logging.getLogger(__name__)
 
 MAX_PREVIEW = 640
 _CACHE_SIZE = 32
-
-_DETECTION_COLOR = (46, 204, 113)  # green #2ecc71
-_CROP_COLOR = (243, 156, 18)       # orange #f39c12
 
 # Serializes ALL preview image decodes. During a culling run the engine's
 # decode pool already saturates VideoToolbox (macOS HEIF HW decode); unbounded
@@ -114,7 +114,7 @@ def _get_preview_detectors():
 
 
 def render_pil(score: ImageScore, max_size: int = MAX_PREVIEW) -> Image.Image | None:
-    """Render score.path with bounding box and crop overlays."""
+    """Render score.path as a clean photo bitmap (no burned-in overlays)."""
     resolved_path_str = str(Path(score.path).resolve())
     img = _load_cached(resolved_path_str, max_size)
     if img is None:
@@ -123,32 +123,4 @@ def render_pil(score: ImageScore, max_size: int = MAX_PREVIEW) -> Image.Image | 
     if img is None:
         return None
 
-    h, w = img.shape[:2]
-    pil = Image.fromarray(img).convert("RGB")
-
-    detections = getattr(score, "detections", None)
-    crop = getattr(score, "crop", None)
-
-    # Only draw bounding boxes and crops if the image was actually evaluated by culling!
-    if detections or crop:
-        draw = ImageDraw.Draw(pil)
-        fx = w / max(1, getattr(score, "img_w", w) or w)
-        fy = h / max(1, getattr(score, "img_h", h) or h)
-        if detections:
-            for det in detections:
-                draw.rectangle(
-                    [det.x1 * fx, det.y1 * fy, det.x2 * fx, det.y2 * fy],
-                    outline=_DETECTION_COLOR, width=3,
-                )
-                label = getattr(det, "label", "car")
-                conf = getattr(det, "conf", 0.0)
-                txt = f"{label} {conf:.2f}" if conf > 0 else label
-                draw.text((det.x1 * fx + 3, det.y1 * fy + 3), txt, fill=_DETECTION_COLOR)
-        if crop is not None:
-            top, left, bottom, right = crop
-            draw.rectangle(
-                [left * w, top * h, right * w, bottom * h],
-                outline=_CROP_COLOR, width=2,
-            )
-
-    return pil
+    return Image.fromarray(img).convert("RGB")

@@ -52,7 +52,7 @@ async function previewState(page) {
   return page.evaluate(() => {
     const img = document.getElementById('previewImg');
     const viewport = document.getElementById('previewViewport');
-    const svg = document.getElementById('previewSvgOverlay');
+    const canvas = document.getElementById('previewBoxCanvas');
     const highres = document.getElementById('previewHighResImg');
     return {
       naturalWidth: img?.naturalWidth || 0,
@@ -60,7 +60,7 @@ async function previewState(page) {
       imgComplete: img ? img.complete : false,
       viewportW: viewport?.offsetWidth || 0,
       viewportH: viewport?.offsetHeight || 0,
-      svgBoxCount: svg ? svg.querySelectorAll('rect').length : -1,
+      boxStats: window.__AC_BOX_OVERLAY_STATS__ || null,
       highresNaturalWidth: highres?.naturalWidth || 0,
       highresOpacity: highres ? getComputedStyle(highres).opacity : 'n/a',
       previewRequestedPath: null,
@@ -94,32 +94,37 @@ test.describe('preview rendering pipeline', () => {
       expect(state.naturalWidth).toBe(photo.width);
       expect(state.viewportW, `viewport hugs photo for ${photo.name}`).toBeGreaterThan(0);
 
-      // Geometry: viewport must match the photo aspect (contain-fit rect)
+      // Geometry: viewport must match the photo aspect (contain-fit rect).
+      // NOTE: #previewImg carries the zoom CSS transform (auto crop-focus),
+      // so its boundingBox is transformed — compare untransformed layers.
       const vpBox = await page.locator('#previewViewport').boundingBox();
-      const imgBox = await page.locator('#previewImg').boundingBox();
+      const canvasBox = await page.locator('#previewBoxCanvas').boundingBox();
       expect(Math.abs(vpBox.width / vpBox.height - photo.width / photo.height)).toBeLessThan(0.02);
-      expect(Math.abs(imgBox.x - vpBox.x)).toBeLessThan(2);
-      expect(Math.abs(imgBox.y - vpBox.y)).toBeLessThan(2);
+      expect(Math.abs(canvasBox.x - vpBox.x)).toBeLessThan(2);
+      expect(Math.abs(canvasBox.y - vpBox.y)).toBeLessThan(2);
+      expect(Math.abs(canvasBox.width - vpBox.width)).toBeLessThan(2);
 
-      // Pixel truth: the painted photo must match the fixture tile-wise
+      // Pixel truth: normalize to 100% (auto crop-focus may have zoomed the
+      // view) so the visible frame equals the full fixture image, then
+      // compare tile-wise — any black/unpainted region fails.
+      await page.fill('#zoomLevelInput', '100');
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(80);
       const shot = await page.locator('#previewImg').screenshot();
       const { mae, blackHoles } = findBlackHoles(shot, fixturePngBuffer(photo.data));
       expect(blackHoles, `${photo.name}: black/unpainted tiles ${JSON.stringify(blackHoles)}`).toHaveLength(0);
       expect(mae, `${photo.name}: mean abs tile diff`).toBeLessThan(30);
 
       if (photo.boxes.length > 0) {
-        const svgEnabled = await page.evaluate(() => window.__AC_SVG_OVERLAY_ENABLED__ !== false);
-        if (svgEnabled) {
-          // Detection boxes must be visible over the painted photo
-          expect(state.svgBoxCount).toBe(photo.boxes.length);
-          const svgShot = await page.locator('#previewSvgOverlay').screenshot();
-          const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
-          expect(boxPixels, `${photo.name}: box stroke pixels visible`).toBeGreaterThan(80);
-        } else {
-          // Diagnostic build: SVG overlay disabled — it must be empty and the
-          // photo itself must still paint (the actual point of the bisection)
-          expect(state.svgBoxCount).toBe(0);
-        }
+        // Canvas overlay: detection boxes must be drawn over the painted photo
+        expect(state.boxStats, `${photo.name}: box overlay stats present`).toBeTruthy();
+        expect(state.boxStats.boxes).toBe(photo.boxes.length);
+        const canvasShot = await page.locator('#previewBoxCanvas').screenshot();
+        const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(canvasShot, c, 55), 0);
+        expect(boxPixels, `${photo.name}: box stroke pixels visible`).toBeGreaterThan(80);
+      } else if (photo.crop) {
+        // Crop-only photo: dashed crop rect must be drawn
+        expect(state.boxStats.crop).toBe(true);
       }
     }
 
@@ -174,18 +179,14 @@ test.describe('preview rendering pipeline', () => {
     const { blackHoles } = findBlackHoles(shot, fixturePngBuffer(photo.data));
     expect(blackHoles, `black tiles at 250% zoom: ${JSON.stringify(blackHoles)}`).toHaveLength(0);
 
-    // Detection boxes must remain visible on top of the high-res overlay
-    // (skipped in the diagnostic build where the SVG overlay is disabled)
-    const svgEnabled = await page.evaluate(() => window.__AC_SVG_OVERLAY_ENABLED__ !== false);
+    // Detection boxes must remain drawn on the canvas overlay, on top of the
+    // high-res layer, after the zoom change
     const state = await previewState(page);
-    if (svgEnabled) {
-      expect(state.svgBoxCount).toBe(photo.boxes.length);
-      const svgShot = await page.locator('#previewSvgOverlay').screenshot();
-      const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(svgShot, c, 55), 0);
-      expect(boxPixels, 'box stroke pixels visible at 250%').toBeGreaterThan(80);
-    } else {
-      expect(state.svgBoxCount).toBe(0);
-    }
+    expect(state.boxStats).toBeTruthy();
+    expect(state.boxStats.boxes).toBe(photo.boxes.length);
+    const canvasShot = await page.locator('#previewBoxCanvas').screenshot();
+    const boxPixels = BOX_COLORS.reduce((sum, c) => sum + countPixelsNear(canvasShot, c, 55), 0);
+    expect(boxPixels, 'box stroke pixels visible at 250%').toBeGreaterThan(80);
   });
 
   test('returning from 250% to 100% restores the low-res view (no lingering black)', async ({ page }) => {

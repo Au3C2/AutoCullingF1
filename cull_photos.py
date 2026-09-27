@@ -411,8 +411,22 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
                     b64_str = base64.b64encode(buf.getvalue()).decode("ascii")
                     raw_boxes = []
                     if hasattr(score, "detections") and score.detections:
+                        # Normalize to [0,1] photo-relative coordinates — det
+                        # coords live in the scored-image pixel space
+                        # (score.img_w/img_h), which differs from the preview
+                        # resolution and from the high-res layer.
+                        img_w = float(getattr(score, "img_w", 0) or 0)
+                        img_h = float(getattr(score, "img_h", 0) or 0)
+                        if img_w <= 0 or img_h <= 0:
+                            img_w, img_h = 1.0, 1.0
                         for det in score.detections:
-                            raw_boxes.append([float(det.x1), float(det.y1), float(det.x2), float(det.y2), str(det.label), float(det.conf)])
+                            raw_boxes.append([
+                                max(0.0, min(1.0, float(det.x1) / img_w)),
+                                max(0.0, min(1.0, float(det.y1) / img_h)),
+                                max(0.0, min(1.0, float(det.x2) / img_w)),
+                                max(0.0, min(1.0, float(det.y2) / img_h)),
+                                str(det.label), float(det.conf)
+                            ])
                     raw_crop = [float(x) for x in score.crop] if getattr(score, "crop", None) else None
 
                     emit({
