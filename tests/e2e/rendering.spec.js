@@ -27,6 +27,13 @@ async function loadApp(page, fixtures) {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   await page.goto('/');
+  // Wait for app init (I18N fetch + setupEventListeners) to finish so the
+  // protocol listeners exist before events fire — otherwise the scanned
+  // emit can race the registration on a cold first load.
+  await page.waitForFunction(() => {
+    const map = window.__TAURI_MOCK_LISTENERS__;
+    return !!(map && map.has && map.has('scanned') && map.has('tauri://drag-drop'));
+  }, { timeout: 15_000 });
   // Drive the scan flow directly through the engine-protocol events (the same
   // payloads the real engine emits after a folder scan). Deterministic and
   // independent of WebKit drag-drop plumbing.

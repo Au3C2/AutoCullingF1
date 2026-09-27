@@ -189,8 +189,6 @@
     // the photo bitmaps themselves carry no burned-in annotations)
     previewBoxes: null,
     previewCrop: null,
-    previewImgW: 0,
-    previewImgH: 0,
 
     // Feature 7: Context menu
     contextPhoto: null,
@@ -2068,7 +2066,7 @@
     }
     if (els.previewHighResImg) {
       els.previewHighResImg.style.opacity = '0';
-      els.previewHighResImg.src = '';
+      els.previewHighResImg.removeAttribute('src');
     }
     // Stale-photo annotation guard: box data belongs to the previous photo
     // until its own preview response arrives
@@ -2124,7 +2122,7 @@
         els.previewImg.src = src;
         if (els.previewHighResImg) {
           els.previewHighResImg.style.opacity = '0';
-          els.previewHighResImg.src = '';
+          els.previewHighResImg.removeAttribute('src');
         }
         if (els.previewViewport) els.previewViewport.style.display = 'flex';
         els.previewImg.style.display = 'block';
@@ -2138,13 +2136,7 @@
           fitViewportToImage();
         }
 
-        if (res.boxes) {
-          state.previewBoxes = res.boxes;
-          state.previewImgW = res.width || 640;
-          state.previewImgH = res.height || 427;
-        } else {
-          state.previewBoxes = null;
-        }
+        state.previewBoxes = (res.boxes && res.boxes.length > 0) ? res.boxes : null;
         state.previewCrop = (res.crop && Array.isArray(res.crop) && res.crop.length === 4) ? res.crop : null;
 
         if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
