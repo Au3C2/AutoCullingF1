@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 import pytest
@@ -27,10 +28,10 @@ def temp_cache_dir():
     shutil.rmtree(d, ignore_errors=True)
 
 
-def test_tier1_passthrough_jpg_and_heif_preview(temp_cache_dir: Path):
-    """Tier 1: JPG passthrough as-is. HEIF: software-decoded preview stream
-    cached as JPEG (the full-res primary image must never be decoded inside
-    the webview during a culling run)."""
+def test_tier1_passthrough_jpg_and_heif(temp_cache_dir: Path):
+    """Tier 1: JPG passthrough as-is. HEIF: darwin passthrough (WKWebView
+    decodes HEIF via system codecs); non-darwin software-decoded preview
+    stream cached as JPEG (WebView2 cannot decode HEIF)."""
     provider = HighResProvider(cache_dir=temp_cache_dir)
 
     # 1. Test JPG sample
@@ -48,7 +49,7 @@ def test_tier1_passthrough_jpg_and_heif_preview(temp_cache_dir: Path):
     # Tier 1 must not create any new cache file
     assert len(list(temp_cache_dir.glob("*"))) == 0
 
-    # 2. Test HEIF sample: preview-stream decode, cached as JPEG
+    # 2. Test HEIF sample: platform-dependent high-res path
     heif_sample = Path("tests/ci/sample/seed.heif")
     assert heif_sample.exists()
 
@@ -56,15 +57,22 @@ def test_tier1_passthrough_jpg_and_heif_preview(temp_cache_dir: Path):
     res_heif = provider.resolve(req_heif)
 
     assert res_heif is not None
-    assert res_heif.tier == "tier2_heif_preview"
-    assert res_heif.resolved_path.suffix.lower() == ".jpg"
-    assert res_heif.resolved_path.exists()
-    assert res_heif.format.lower() == "jpg"
+    if sys.platform == "darwin":
+        assert res_heif.tier == "tier1_passthrough"
+        assert res_heif.resolved_path == heif_sample.resolve()
+        assert res_heif.format.lower() in ("heif", "hif")
+        assert len(list(temp_cache_dir.glob("*"))) == 0
+    else:
+        assert res_heif.tier == "tier2_heif_preview"
+        assert res_heif.resolved_path.suffix.lower() == ".jpg"
+        assert res_heif.resolved_path.exists()
+        assert res_heif.format.lower() == "jpg"
     assert res_heif.width > 0 and res_heif.height > 0
 
-    # Second request must hit the cache (idempotent resolution)
+    # Second request must resolve idempotently
     res_heif2 = provider.resolve(HighResRequest(file_path=heif_sample, gen_id=3))
     assert res_heif2 is not None
+    assert res_heif2.tier == res_heif.tier
     assert res_heif2.resolved_path == res_heif.resolved_path
 
 

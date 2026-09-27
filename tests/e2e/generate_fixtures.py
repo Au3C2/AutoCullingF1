@@ -124,13 +124,25 @@ def main() -> int:
                 ])
         crop = [float(x) for x in score.crop] if getattr(score, "crop", None) else None
 
-        # High-res cache asset (Tier 2 / HEIF preview stream / Tier 3)
+        # High-res cache asset (Tier 2 / HEIF passthrough on darwin / Tier 3).
+        # For the E2E fixture, HEIF passthrough results are transcoded to a
+        # deterministic JPEG: Playwright's bundled WebKit cannot be relied on
+        # to decode HEIF (system-codec availability differs from the packaged
+        # WKWebView), and the E2E targets the rendering pipeline, not codecs.
         highres_url = None
         hr = provider.resolve(HighResRequest(file_path=p, gen_id=1))
         if hr is not None and hr.resolved_path.exists():
             dest = highres_dir / f"{p.stem}.jpg"
-            shutil.copyfile(hr.resolved_path, dest)
-            highres_url = f"/highres/{dest.name}"
+            if hr.resolved_path.suffix.lower() in (".heif", ".hif", ".heic"):
+                from cull.loader import load_image_ffmpeg
+                img = load_image_ffmpeg(hr.resolved_path, scale_width=0, hwaccel=False)
+                if img is not None:
+                    from PIL import Image as PILImage
+                    PILImage.fromarray(img).save(dest, format="JPEG", quality=92)
+            else:
+                shutil.copyfile(hr.resolved_path, dest)
+            if dest.exists():
+                highres_url = f"/highres/{dest.name}"
 
         # Ensure at least one fixture carries a crop so the auto crop-focus →
         # high-res on-demand path is exercisable even when scoring finds no

@@ -1,13 +1,12 @@
 """High-resolution data provider for intelligent on-demand zoom.
 
 Implements a 3-tier passthrough and extraction pipeline:
-- Tier 1: Zero-transcode, zero-write passthrough for native JPG, JPEG, HIF, HEIC.
-  HEIF is deliberately EXCLUDED: a camera HEIF's primary image is the full-res
-  sensor tile grid (e.g. 7008x4672) — decoding it inside the WebKit webview
-  during a culling run starves the engine. HEIF instead uses the embedded
-  1664x1088 preview stream, software-decoded once and cached as JPEG.
-- Tier 2: Zero-recode binary stream Range I/O extraction for RAW files with embedded JPEGs (ARW/NEF/CR3).
-- Tier 3: Software decode fallback (when no full-res preview is embedded).
+- Tier 1: Zero-transcode, zero-write passthrough for native JPG/JPEG/HIF/HEIC
+  (darwin; WKWebView decodes HEIF via system codecs) and JPG/JPEG elsewhere.
+- Tier 2: Zero-recode binary stream Range I/O extraction for RAW files with
+  embedded JPEGs (ARW/NEF/CR3); software-decoded HEIF preview-stream JPEG on
+  non-darwin (WebView2 cannot decode HEIF).
+- Tier 3: Software decode fallback (when no high-res preview is embedded).
 
 The cache directory MUST NOT live under a dot-directory (e.g. ~/.cache): the
 Tauri asset-protocol scope on unix defaults to require_literal_leading_dot,
@@ -102,10 +101,14 @@ class HighResProvider:
 
         ext = p.suffix.lower()
 
-        # Tier 1: Native cooked-image passthrough (0 ms, 0 transcode, 0 disk
-        # write). HEIF is handled further down — its primary image is the
-        # full-res sensor tile grid and must not be decoded inside the webview.
-        if ext in COOKED_EXTS and ext not in HEIF_EXTS:
+        # Tier 1: Native passthrough (0 ms, 0 transcode, 0 disk write).
+        # darwin: HEIF/HIF passthrough too — WKWebView decodes HEIF natively
+        # via the system codecs, and the earlier "webview decode starves the
+        # culling engine" failures were root-caused to the preview-IPC storm
+        # + SVG-overlay compositing (both fixed), NOT to the passthrough.
+        # non-darwin: WebView2/Chromium cannot decode HEIF — software-decode
+        # the embedded preview stream to a cached JPEG instead.
+        if ext in COOKED_EXTS or (ext in HEIF_EXTS and sys.platform == "darwin"):
             w, h = self._probe_dimensions(p)
             return HighResResponse(
                 gen_id=req.gen_id,
@@ -122,11 +125,8 @@ class HighResProvider:
             if res is not None:
                 return res
 
-        # HEIF: decode the embedded preview stream (software HEVC, ~1664x1088)
-        # once and cache it as JPEG. Zooming to 250% on a 640 px preview needs
-        # ~1600 px, so the preview stream is exactly the right resolution for
-        # focus verification — without dragging the 32 MP primary image
-        # (100+ MB texture) through the webview mid-culling.
+        # HEIF (non-darwin): decode the embedded preview stream (software
+        # HEVC, ~1664x1088) once and cache it as JPEG.
         if ext in HEIF_EXTS:
             res = self._resolve_heif_preview(p, req.gen_id)
             if res is not None:
