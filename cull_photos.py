@@ -411,8 +411,22 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
                     b64_str = base64.b64encode(buf.getvalue()).decode("ascii")
                     raw_boxes = []
                     if hasattr(score, "detections") and score.detections:
+                        # Normalize to [0,1] photo-relative coordinates — det
+                        # coords live in the scored-image pixel space
+                        # (score.img_w/img_h), which differs from the preview
+                        # resolution and from the high-res layer.
+                        img_w = float(getattr(score, "img_w", 0) or 0)
+                        img_h = float(getattr(score, "img_h", 0) or 0)
+                        if img_w <= 0 or img_h <= 0:
+                            img_w, img_h = 1.0, 1.0
                         for det in score.detections:
-                            raw_boxes.append([float(det.x1), float(det.y1), float(det.x2), float(det.y2), str(det.label), float(det.conf)])
+                            raw_boxes.append([
+                                max(0.0, min(1.0, float(det.x1) / img_w)),
+                                max(0.0, min(1.0, float(det.y1) / img_h)),
+                                max(0.0, min(1.0, float(det.x2) / img_w)),
+                                max(0.0, min(1.0, float(det.y2) / img_h)),
+                                str(det.label), float(det.conf)
+                            ])
                     raw_crop = [float(x) for x in score.crop] if getattr(score, "crop", None) else None
 
                     emit({
@@ -420,6 +434,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
                         "path": raw_path,
                         "data": b64_str,
                         "png": b64_str,
+                        "width": pil.width,
+                        "height": pil.height,
                         "boxes": raw_boxes,
                         "crop": raw_crop
                     })
@@ -493,6 +509,47 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
 
         threading.Thread(target=_save_worker, daemon=True).start()
 
+    from cull.highres import HighResProvider, HighResRequest
+    highres_provider = HighResProvider()
+
+    def do_highres(cmd: dict) -> None:
+        def _highres_worker() -> None:
+            raw_path = cmd.get("path", "")
+            gen_id = int(cmd.get("gen_id", 0))
+            try:
+                highres_provider.update_active_generation(gen_id)
+                res = highres_provider.resolve(HighResRequest(
+                    file_path=Path(raw_path),
+                    gen_id=gen_id,
+                ))
+                if res is not None:
+                    emit({
+                        "type": "highres_ready",
+                        "gen_id": res.gen_id,
+                        "path": str(res.resolved_path),
+                        "orig_path": raw_path,
+                        "format": res.format,
+                        "width": res.width,
+                        "height": res.height,
+                        "tier": res.tier,
+                    })
+                else:
+                    emit({
+                        "type": "highres_discarded",
+                        "gen_id": gen_id,
+                        "orig_path": raw_path,
+                    })
+            except Exception as e:
+                log.warning("do_highres failed for %s: %s", raw_path, e)
+                emit({
+                    "type": "highres_error",
+                    "gen_id": gen_id,
+                    "orig_path": raw_path,
+                    "message": str(e),
+                })
+
+        threading.Thread(target=_highres_worker, daemon=True).start()
+
     # Start the reader only after every handler exists — a command arriving
     # during the definition window used to raise NameError inside the reader
     # thread and kill it for the rest of the session.
@@ -513,6 +570,8 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
             do_export_csv(cmd)
         elif kind == "save_metadata":
             do_save_metadata(cmd)
+        elif kind == "highres":
+            do_highres(cmd)
 
 
 

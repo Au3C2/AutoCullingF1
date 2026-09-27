@@ -164,6 +164,17 @@
       startY: 0,
     },
 
+    // Intelligent High-Resolution on-demand state
+    highres: {
+      activeGenId: 0,
+      isLoading: false,
+      debounceTimer: null,
+    },
+
+    // Preview request dedup: path whose 640 px preview is loaded or in
+    // flight. Null when idle/failed so a retry can be issued.
+    previewRequestedPath: null,
+
     // Save triggers & persistence state
     dirtyPhotos: new Set(),
     isSaving: false,
@@ -172,6 +183,10 @@
     // Feature 4: Anti-race preview tracker
     previewSeq: 0,
     previewLoadedPath: null,
+    // Detection boxes / crop for the canvas overlay (single source of truth;
+    // the photo bitmaps themselves carry no burned-in annotations)
+    previewBoxes: null,
+    previewCrop: null,
 
     // Feature 7: Context menu
     contextPhoto: null,
@@ -205,7 +220,10 @@
     splitResizer: $('splitResizer'),
     previewPane: $('previewPane'),
     previewContainer: $('previewContainer'),
+    previewViewport: $('previewViewport'),
     previewImg: $('previewImg'),
+    previewHighResImg: $('previewHighResImg'),
+    previewBoxCanvas: $('previewBoxCanvas'),
     previewEmpty: $('previewEmpty'),
     previewTitle: $('previewTitle'),
     previewScoreDetails: $('previewScoreDetails'),
@@ -686,6 +704,10 @@
       els.previewImg.style.display = 'none';
       els.previewImg.removeAttribute('src');
       state.previewLoadedPath = null;
+      state.previewRequestedPath = null;
+      state.previewBoxes = null;
+      state.previewCrop = null;
+      if (els.previewViewport) els.previewViewport.style.display = 'none';
       els.previewEmpty.style.display = 'flex';
       els.previewTitle.textContent = I18N.t('preview.title');
       els.previewScoreDetails.style.display = 'none';
@@ -771,6 +793,27 @@
 
     listenTauri('save_error', ({ payload }) => {
       appendLog(`[Engine Error] save_error: ${payload && payload.message ? payload.message : JSON.stringify(payload)}`);
+    });
+
+    listenTauri('highres_ready', async ({ payload }) => {
+      if (!payload || !payload.path) return;
+      if (payload.gen_id !== state.highres.activeGenId) {
+        // Discard obsolete generation
+        return;
+      }
+      if (!state.selectedPhoto || state.selectedPhoto.path !== payload.orig_path) {
+        return;
+      }
+      // The low-res base layer must be visible first: rendering the high-res
+      // overlay over an empty viewport would show a black canvas.
+      if (state.previewLoadedPath !== payload.orig_path) {
+        return;
+      }
+      await renderHighResSeamless(payload.path, payload.gen_id);
+    });
+
+    listenTauri('highres_discarded', ({ payload }) => {
+      // Obsolete request discarded by engine
     });
 
     // Trigger 4: intercept window close to safely flush pending metadata
@@ -1556,10 +1599,19 @@
     appendLog('[Zoom] Reset to 100% (1:1 full frame)');
   }
 
-  function applyZoomTransform() {
+  function applyZoomTransform(isIntent = false) {
     if (!els.previewImg) return;
     const { level, panX, panY, mode } = state.zoom;
-    els.previewImg.style.transform = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
+    const transformStr = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
+
+    // Apply transform simultaneously to the low-res and high-res photo
+    // layers. The box overlay is NOT CSS-transformed — it redraws its
+    // geometry instead (WKWebView compositing safety, see drawBoxOverlay).
+    els.previewImg.style.transform = transformStr;
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.transform = transformStr;
+    }
+    drawBoxOverlay();
 
     const pct = Math.round(level * 100);
     if (els.zoomLevelInput && document.activeElement !== els.zoomLevelInput) {
@@ -1580,6 +1632,148 @@
         els.previewContainer.classList.remove('zoomed');
       }
     }
+
+    // Trigger intelligent high-res loading if zoomed > 150%
+    scheduleHighResEvaluation(level, isIntent);
+  }
+
+  function scheduleHighResEvaluation(level, isIntent = false) {
+    if (!state.selectedPhoto) return;
+    state.highres.activeGenId++;
+    const currentGen = state.highres.activeGenId;
+
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+
+    // If zoomed <= 150%, fade out and reset high-res layer
+    if (level <= 1.5) {
+      if (els.previewHighResImg) {
+        els.previewHighResImg.style.opacity = '0';
+      }
+      return;
+    }
+
+    // Debounce timer: 30ms for direct intent (double-click/hotkey), 150ms for wheel/drag
+    const delay = isIntent ? 30 : 150;
+    state.highres.debounceTimer = setTimeout(() => {
+      state.highres.debounceTimer = null;
+      if (currentGen !== state.highres.activeGenId || !state.selectedPhoto) return;
+      invokeTauri('request_highres', {
+        path: state.selectedPhoto.path,
+        gen_id: currentGen
+      }).catch((e) => appendLog(`[HighRes Request Error] ${e}`));
+    }, delay);
+  }
+
+  async function renderHighResSeamless(resolvedPath, genId) {
+    if (genId !== state.highres.activeGenId || !els.previewHighResImg) return;
+    try {
+      const assetUrl = window.__TAURI__?.core ? window.__TAURI__.core.convertFileSrc(resolvedPath) : resolvedPath;
+      const offscreen = new Image();
+      offscreen.src = assetUrl;
+      // Pre-rasterize texture offscreen to avoid UI thread lag
+      if (offscreen.decode) {
+        await offscreen.decode();
+      }
+
+      if (genId !== state.highres.activeGenId) return;
+
+      els.previewHighResImg.src = assetUrl;
+      els.previewHighResImg.style.opacity = '1';
+      appendLog(`[HighRes] Seamlessly loaded: ${resolvedPath.split(/[\\/]/).pop()}`);
+    } catch (err) {
+      appendLog(`[HighRes Error] ${err}`);
+    }
+  }
+
+  // Detection-box overlay: Canvas 2D redrawn in JS on every zoom/pan change.
+  // Root-caused: a CSS-transformed SVG overlay stacked above the photo
+  // bitmaps blanks sibling layers in WKWebView compositing (black previews).
+  // The canvas element itself is never CSS-transformed — the zoom/pan
+  // transform is applied to the drawn geometry instead.
+  const BOX_COLOR_CAR = '#00e5ff';
+  const BOX_COLOR_OTHER = '#fbbf24';
+  const BOX_COLOR_CROP = '#f39c12';
+  window.__AC_BOX_OVERLAY_ENABLED__ = true;
+
+  function drawBoxOverlay() {
+    const canvas = els.previewBoxCanvas;
+    if (!canvas) return;
+    const vw = els.previewViewport ? els.previewViewport.offsetWidth : 0;
+    const vh = els.previewViewport ? els.previewViewport.offsetHeight : 0;
+    if (!vw || !vh) return;
+
+    // Hi-DPI backing store, resized only when the viewport geometry changes
+    const dpr = window.devicePixelRatio || 1;
+    const bw = Math.round(vw * dpr);
+    const bh = Math.round(vh * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, vw, vh);
+
+    const boxes = state.previewBoxes || [];
+    const crop = state.previewCrop || null;
+    if (boxes.length === 0 && !crop) return;
+
+    // Screen position of a normalized photo point under the current
+    // viewport transform (CSS: translate(pan) then scale about the center):
+    //   screen = center + (point - center) * level + pan
+    const { level, panX, panY } = state.zoom;
+    const toScreen = (nx, ny) => ({
+      x: vw / 2 + (nx * vw - vw / 2) * level + panX,
+      y: vh / 2 + (ny * vh - vh / 2) * level + panY,
+    });
+
+    ctx.lineWidth = 2;
+    ctx.font = '700 11px Menlo, Consolas, monospace';
+    ctx.textBaseline = 'bottom';
+
+    for (const b of boxes) {
+      const [x1, y1, x2, y2, label, conf] = b;
+      // Boxes arrive normalized to [0,1] photo-relative coordinates
+      const nx1 = Math.min(x1, x2);
+      const ny1 = Math.min(y1, y2);
+      const nx2 = Math.max(x1, x2);
+      const ny2 = Math.max(y1, y2);
+      const p1 = toScreen(nx1, ny1);
+      const p2 = toScreen(nx2, ny2);
+      const rx = Math.min(p1.x, p2.x);
+      const ry = Math.min(p1.y, p2.y);
+      const rw = Math.abs(p2.x - p1.x);
+      const rh = Math.abs(p2.y - p1.y);
+
+      const isCar = String(label).includes('car') || String(label).includes('f1');
+      const color = isCar ? BOX_COLOR_CAR : BOX_COLOR_OTHER;
+      ctx.strokeStyle = color;
+      ctx.strokeRect(rx, ry, rw, rh);
+
+      const confPct = Math.round(conf * 100);
+      const text = `${label} ${confPct}%`;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      const tw = ctx.measureText(text).width;
+      const ty = Math.max(ry - 2, 14);
+      ctx.fillRect(rx, ty - 13, tw + 8, 15);
+      ctx.fillStyle = color;
+      ctx.fillText(text, rx + 4, ty);
+    }
+
+    if (crop && crop.length === 4) {
+      const [top, left, bottom, right] = crop;
+      const p1 = toScreen(left, top);
+      const p2 = toScreen(right, bottom);
+      ctx.strokeStyle = BOX_COLOR_CROP;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(Math.min(p1.x, p2.x), Math.min(p1.y, p2.y),
+                     Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+      ctx.setLineDash([]);
+    }
+    window.__AC_BOX_OVERLAY_STATS__ = { boxes: boxes.length, crop: !!crop };
   }
 
   function computeCenterFocusedZoom(level, anchorDx, anchorDy) {
@@ -1610,16 +1804,50 @@
     let targetScale = Math.min(scaleX, scaleY);
     targetScale = Math.max(1.0, Math.min(2.5, parseFloat(targetScale.toFixed(2))));
 
-    const containerW = els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600;
-    const containerH = els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450;
-    const panX = (0.5 - cx) * containerW * targetScale;
-    const panY = (0.5 - cy) * containerH * targetScale;
+    // Pan base MUST be the viewport rect (= the image rect after
+    // fitViewportToImage), not the preview container: the container is
+    // letterboxed around the image, so container-based pan over-shoots and
+    // translates the photo clean out of the viewport (black preview).
+    const vpW = (els.previewViewport && els.previewViewport.offsetWidth) || (els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600);
+    const vpH = (els.previewViewport && els.previewViewport.offsetHeight) || (els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450);
+    const panX = (0.5 - cx) * vpW * targetScale;
+    const panY = (0.5 - cy) * vpH * targetScale;
 
     return {
       level: targetScale,
       panX: parseFloat(panX.toFixed(1)),
       panY: parseFloat(panY.toFixed(1)),
     };
+  }
+
+  // Sizes the preview viewport to the contain-fit rect of the current image
+  // inside the preview container. All overlay layers then share exactly the
+  // image coordinate space (SVG viewBox 0 0 1 1 maps onto the photo itself,
+  // not the letterboxed container).
+  function fitViewportToImage() {
+    if (!els.previewViewport || !els.previewContainer || !els.previewImg) return;
+    const nw = els.previewImg.naturalWidth;
+    const nh = els.previewImg.naturalHeight;
+    if (!nw || !nh) return;
+    const cs = window.getComputedStyle(els.previewContainer);
+    const availW = Math.max(1, els.previewContainer.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0));
+    const availH = Math.max(1, els.previewContainer.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0));
+    const scale = Math.min(availW / nw, availH / nh);
+    els.previewViewport.style.width = `${Math.max(1, Math.round(nw * scale))}px`;
+    els.previewViewport.style.height = `${Math.max(1, Math.round(nh * scale))}px`;
+
+    // The crop-focus zoom may have been computed while the viewport still had
+    // the previous photo's dimensions — re-derive it now that the rect is
+    // exact (auto mode only; manual zoom is the user's own view).
+    if (state.zoom.mode === 'auto' && state.selectedPhoto && state.selectedPhoto.crop) {
+      const focus = computeCropFocus(state.selectedPhoto.crop);
+      if (focus) {
+        state.zoom.level = focus.level;
+        state.zoom.panX = focus.panX;
+        state.zoom.panY = focus.panY;
+      }
+    }
+    applyZoomTransform();
   }
 
   function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
@@ -1789,7 +2017,8 @@
         state.zoom.level = 2.0;
         state.zoom.panX = -mouseDx * 2.0;
         state.zoom.panY = -mouseDy * 2.0;
-        applyZoomTransform();
+        // Direct user intent: skip the long debounce so high-res follows fast
+        applyZoomTransform(true);
         appendLog('[Zoom] Double clicked: centered on mouse position and magnified 2.0x');
       }
     });
@@ -1802,6 +2031,12 @@
   // --- Photo Selection & Thumbnail Preview (Anti-Race) ---
   async function selectPhoto(item, shouldResetZoom = true) {
     if (!item) return;
+    // A preview for this photo is already loaded or in flight. Frame events
+    // stream at 17-37 fps during a culling run and re-select the same photo
+    // each time; re-issuing the preview IPC per event invalidates the
+    // in-flight response (stale-seq discard) which left the viewport
+    // permanently black, and flooded the engine with per-frame decodes.
+    const isSamePreview = state.previewRequestedPath === item.path;
     state.selectedPhoto = item;
 
     document.querySelectorAll('#photoTable tbody tr').forEach((r) => r.classList.remove('selected'));
@@ -1814,6 +2049,26 @@
     els.previewTitle.textContent = stemOf(item.name);
     els.previewScoreDetails.style.display = 'flex';
     if (els.previewZoomControls) els.previewZoomControls.style.display = 'flex';
+
+    if (isSamePreview) return;
+
+    state.previewRequestedPath = item.path;
+
+    // Discard any pending high-res requests for the previous photo
+    state.highres.activeGenId++;
+    if (state.highres.debounceTimer) {
+      clearTimeout(state.highres.debounceTimer);
+      state.highres.debounceTimer = null;
+    }
+    if (els.previewHighResImg) {
+      els.previewHighResImg.style.opacity = '0';
+      els.previewHighResImg.removeAttribute('src');
+    }
+    // Stale-photo annotation guard: box data belongs to the previous photo
+    // until its own preview response arrives
+    state.previewBoxes = null;
+    state.previewCrop = null;
+    drawBoxOverlay();
 
     if (state.zoom.mode === 'auto') {
       const focus = item.crop ? computeCropFocus(item.crop) : null;
@@ -1845,15 +2100,10 @@
     const reasonText = item.veto ? I18N.translateVeto(item.veto) : (item.rating > 0 ? I18N.t('table.tag_passed') : I18N.t('status.queued'));
     els.pillReason.textContent = `REASON: ${reasonText}`;
 
-    // Feature 4: Anti-Race Sequence tracking
+    // Anti-Race Sequence tracking (only reached when the photo actually
+    // changed — same-photo re-entry returns above)
     const currentSeq = ++state.previewSeq;
     const requestedPath = item.path;
-
-    // Same photo already rendered: skip the decode IPC (re-scoring a selected
-    // photo used to re-fetch the 640px preview on every frame event).
-    if (state.previewLoadedPath === requestedPath && els.previewImg.style.display === 'block') {
-      return;
-    }
 
     try {
       const res = await invokeTauri('preview', { path: requestedPath, size: 640 });
@@ -1864,10 +2114,26 @@
 
       if (res && res.data) {
         const src = res.data.startsWith('data:') ? res.data : `data:image/png;base64,${res.data}`;
+        els.previewImg.onload = fitViewportToImage;
         els.previewImg.src = src;
+        if (els.previewHighResImg) {
+          els.previewHighResImg.style.opacity = '0';
+          els.previewHighResImg.removeAttribute('src');
+        }
+        if (els.previewViewport) els.previewViewport.style.display = 'flex';
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
+        // Refit the viewport once the NEW image data is decoded — the sync
+        // path above still sees the previous photo's naturalWidth/Height.
+        if (els.previewImg.decode) {
+          els.previewImg.decode().then(fitViewportToImage).catch(() => {});
+        } else {
+          fitViewportToImage();
+        }
+
+        state.previewBoxes = (res.boxes && res.boxes.length > 0) ? res.boxes : null;
+        state.previewCrop = (res.crop && Array.isArray(res.crop) && res.crop.length === 4) ? res.crop : null;
 
         if (res.crop && Array.isArray(res.crop) && res.crop.length === 4) {
           item.crop = res.crop;
@@ -1881,8 +2147,15 @@
             }
           }
         }
+        drawBoxOverlay();
       } else {
+        // Preview failed: clear the in-flight marker so the next selection or
+        // frame-event re-entry can retry the request.
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
+        if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
+        state.previewBoxes = null;
+        state.previewCrop = null;
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_load_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = item.name;
@@ -1890,7 +2163,11 @@
     } catch (err) {
       if (currentSeq === state.previewSeq && state.selectedPhoto && state.selectedPhoto.path === requestedPath) {
         appendLog(`[Preview Error] ${err}`);
+        if (state.previewRequestedPath === requestedPath) state.previewRequestedPath = null;
+        if (els.previewViewport) els.previewViewport.style.display = 'none';
         els.previewImg.style.display = 'none';
+        state.previewBoxes = null;
+        state.previewCrop = null;
         els.previewEmpty.style.display = 'flex';
         els.previewEmpty.querySelector('.tau-empty-title').textContent = I18N.t('preview.error_fail_title');
         els.previewEmpty.querySelector('.tau-empty-desc').textContent = `${err}`;
@@ -2444,11 +2721,22 @@
     els.btnToggleLog.addEventListener('click', () => {
       const isHidden = els.logDrawer.style.display === 'none';
       els.logDrawer.style.display = isHidden ? 'flex' : 'none';
+      // Jump to the latest line when opening the drawer
+      if (isHidden && els.logConsole) {
+        els.logConsole.scrollTop = els.logConsole.scrollHeight;
+      }
     });
 
     els.btnClearLog.addEventListener('click', () => {
       els.logConsole.textContent = '';
     });
+
+    // Re-fit the preview viewport when the preview pane geometry changes
+    // (splitter drag / window resize) so the image rect stays contain-fit.
+    if (window.ResizeObserver && els.previewContainer) {
+      new ResizeObserver(() => fitViewportToImage()).observe(els.previewContainer);
+    }
+    window.addEventListener('resize', fitViewportToImage);
 
     initSplitter();
     initPanZoom();

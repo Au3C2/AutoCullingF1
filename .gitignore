@@ -119,3 +119,9 @@ src-tauri/resources/
 
 # PyInstaller sidecar artifacts (built by packaging/build_gui.py, too large for git)
 src-tauri/binaries/
+
+# Playwright E2E (generated fixtures + local tooling)
+node_modules/
+test-results/
+playwright-report/
+tests/e2e/fixtures/

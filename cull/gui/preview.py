@@ -1,20 +1,24 @@
-"""preview.py — fast thumbnail rendering with detection/crop overlays for the GUI.
+"""preview.py — fast thumbnail rendering for the GUI.
 
-Decoding and overlay drawing happen in background thread; safe for cross-platform.
+Decoding happens in background thread; safe for cross-platform.
+NOTE: detection/crop overlays are NOT burned into the preview bitmap — the
+frontend draws them on a canvas overlay (single annotation source of truth;
+burned-in boxes double-draw under the canvas and vanish on the high-res
+layer, which confused the zoom inspection flow).
 """
 
 from __future__ import annotations
 
-import io
 import logging
+import threading
 from functools import lru_cache
 from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
-from cull.loader import load_image_rgb
+from cull.loader import HEIF_EXTS, load_image_ffmpeg, load_image_rgb
 from cull.scorer import ImageScore
 
 log = logging.getLogger(__name__)
@@ -22,8 +26,21 @@ log = logging.getLogger(__name__)
 MAX_PREVIEW = 640
 _CACHE_SIZE = 32
 
-_DETECTION_COLOR = (46, 204, 113)  # green #2ecc71
-_CROP_COLOR = (243, 156, 18)       # orange #f39c12
+# Serializes ALL preview image decodes. During a culling run the engine's
+# decode pool already saturates VideoToolbox (macOS HEIF HW decode); unbounded
+# preview worker threads each opening their own HW session/decode context
+# caused resource contention (freezes, blank previews). One decode at a time
+# keeps preview latency bounded and the HW path stable.
+_PREVIEW_DECODE_LOCK = threading.Lock()
+
+
+class _PreviewDecodeError(Exception):
+    """Raised by the cached inner loader on decode failure.
+
+    lru_cache never caches exceptions, so wrapping failures in an exception
+    prevents a transient decode error (e.g. HW decoder busy) from permanently
+    black-listing the file in the cache.
+    """
 
 
 def _fit(img: np.ndarray, max_size: int) -> np.ndarray:
@@ -38,16 +55,45 @@ def _fit(img: np.ndarray, max_size: int) -> np.ndarray:
 
 
 @lru_cache(maxsize=_CACHE_SIZE)
+def _load_cached_inner(path_str: str, max_size: int) -> np.ndarray:
+    with _PREVIEW_DECODE_LOCK:
+        path = Path(path_str)
+        if path.suffix.lower() in HEIF_EXTS:
+            # Software HEVC decode ONLY for previews: VideoToolbox sessions
+            # from preview threads contend with the culling engine's decode
+            # pool (HW sessions are a limited resource) and degrade/hang the
+            # run. The 1664x1088 preview stream decodes in ~20-40 ms soft.
+            img = load_image_ffmpeg(path, scale_width=max_size, hwaccel=False)
+            if img is None:
+                try:
+                    import pillow_heif
+                    pillow_heif.register_heif_opener()
+                    with Image.open(path) as pil_img:
+                        img = np.asarray(pil_img.convert("RGB"))
+                        h, w = img.shape[:2]
+                        if w > max_size * 1.2:
+                            new_h = int(round(h * max_size / w))
+                            img = cv2.resize(img, (max_size, new_h),
+                                             interpolation=cv2.INTER_AREA)
+                except Exception as e:
+                    log.warning("Preview HEIF software decode failed for %s: %s",
+                                path_str, e)
+                    raise _PreviewDecodeError(path_str)
+        else:
+            img = load_image_rgb(path, scale_width=max_size)
+        if img is None:
+            raise _PreviewDecodeError(path_str)
+        return _fit(img, max_size)
+
+
 def _load_cached(path_str: str, max_size: int) -> np.ndarray | None:
     try:
-        path = Path(path_str)
-        img = load_image_rgb(path, scale_width=max_size)
+        return _load_cached_inner(path_str, max_size)
+    except _PreviewDecodeError:
+        return None
     except Exception as e:
         log.warning("Preview decode failed for %s: %s", path_str, e)
         return None
-    if img is None:
-        return None
-    return _fit(img, max_size)
 
 
 _GLOBAL_F1 = None
@@ -68,7 +114,7 @@ def _get_preview_detectors():
 
 
 def render_pil(score: ImageScore, max_size: int = MAX_PREVIEW) -> Image.Image | None:
-    """Render score.path with bounding box and crop overlays."""
+    """Render score.path as a clean photo bitmap (no burned-in overlays)."""
     resolved_path_str = str(Path(score.path).resolve())
     img = _load_cached(resolved_path_str, max_size)
     if img is None:
@@ -77,32 +123,4 @@ def render_pil(score: ImageScore, max_size: int = MAX_PREVIEW) -> Image.Image | 
     if img is None:
         return None
 
-    h, w = img.shape[:2]
-    pil = Image.fromarray(img).convert("RGB")
-
-    detections = getattr(score, "detections", None)
-    crop = getattr(score, "crop", None)
-
-    # Only draw bounding boxes and crops if the image was actually evaluated by culling!
-    if detections or crop:
-        draw = ImageDraw.Draw(pil)
-        fx = w / max(1, getattr(score, "img_w", w) or w)
-        fy = h / max(1, getattr(score, "img_h", h) or h)
-        if detections:
-            for det in detections:
-                draw.rectangle(
-                    [det.x1 * fx, det.y1 * fy, det.x2 * fx, det.y2 * fy],
-                    outline=_DETECTION_COLOR, width=3,
-                )
-                label = getattr(det, "label", "car")
-                conf = getattr(det, "conf", 0.0)
-                txt = f"{label} {conf:.2f}" if conf > 0 else label
-                draw.text((det.x1 * fx + 3, det.y1 * fy + 3), txt, fill=_DETECTION_COLOR)
-        if crop is not None:
-            top, left, bottom, right = crop
-            draw.rectangle(
-                [left * w, top * h, right * w, bottom * h],
-                outline=_CROP_COLOR, width=2,
-            )
-
-    return pil
+    return Image.fromarray(img).convert("RGB")

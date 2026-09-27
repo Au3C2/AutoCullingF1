@@ -247,3 +247,26 @@ def test_json_lines_save_metadata(engine_process: EngineChannel, tmp_path: Path)
     assert 'xmp:Rating="4"' in content or '<xmp:Rating>4</xmp:Rating>' in content
 
 
+def test_json_lines_highres_protocol(engine_process: EngineChannel):
+    """Test the request_highres command and highres_ready event through JSON lines."""
+    jpg_sample = Path("tests/ci/sample/seed.jpg").resolve()
+    assert jpg_sample.exists()
+
+    engine_process.clear()
+    engine_process.send({
+        "cmd": "highres",
+        "path": str(jpg_sample),
+        "gen_id": 101,
+    })
+
+    evt = engine_process.wait_for_event("highres_ready", timeout=5.0)
+    assert evt is not None
+    assert evt.get("gen_id") == 101
+    assert evt.get("orig_path") == str(jpg_sample)
+    assert evt.get("tier") == "tier1_passthrough"
+    assert evt.get("width") > 0
+    assert evt.get("height") > 0
+    assert Path(evt.get("path")).exists()
+
+
+

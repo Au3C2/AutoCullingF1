@@ -114,6 +114,18 @@
       };
     }
 
+    if (cmd === "highres") {
+      return {
+        gen_id: args.gen_id,
+        path: args.path,
+        orig_path: args.path,
+        format: "jpg",
+        width: 6000,
+        height: 4000,
+        tier: "tier1_passthrough",
+      };
+    }
+
     if (cmd === "export_csv") {
       return "export_mock.csv";
     }

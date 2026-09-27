@@ -11,6 +11,7 @@ import logging
 import re
 import sys
 import threading
+import time
 from typing import Any
 
 _STDOUT_LOCK = threading.Lock()
@@ -124,8 +125,9 @@ class JsonLinesHandler(logging.Handler):
             })
             return
 
-        # Fallback general log line
+        # Fallback general log line (prefixed with the engine wall-clock time
+        # so the GUI terminal stream shows when each event happened)
         emit({
             "type": "log",
-            "line": msg,
+            "line": f"[{time.strftime('%H:%M:%S')}] {msg}",
         })

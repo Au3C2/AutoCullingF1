@@ -79,6 +79,24 @@ jobs:
         shell: bash
         run: $PYBIN -m pytest tests/test_gui/
 
+      - name: Run pixel-level rendering E2E (Playwright, WebKit + Chromium)
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          uv pip install --python "$PYBIN" psutil
+          $PYBIN tests/e2e/generate_fixtures.py
+          npm ci
+          npx playwright install webkit chromium
+          npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure() && matrix.os == 'macos-14'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: playwright-report/
+          if-no-files-found: ignore
+
       - name: Build desktop GUI packages
         shell: bash
         run: $PYBIN packaging/build_gui.py

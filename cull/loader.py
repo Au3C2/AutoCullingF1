@@ -247,7 +247,7 @@ def get_preview_stream(path: Path) -> Tuple[int, int, int] | None:
         _preview_stream_cache[cache_key] = probe_embedded_preview(path)
     return _preview_stream_cache[cache_key]
 
-def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def _load_image_pyav(path: Path, scale_width: int = 1280, hwaccel: bool = True) -> np.ndarray | None:
     """Decode the primary preview stream via in-process libav (pyav).
 
     Spawning ffmpeg per file costs ~80-110 ms (process startup) on top of the
@@ -256,7 +256,10 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
     On macOS (darwin), in-process VideoToolbox hardware decoding is used by
     default (12.4 ms vs 21.8 ms soft decode), with JPEG full-range color
     metadata alignment to guarantee 100% bit-identical RGB output (0 drift).
-    Falls back gracefully to software decode if hardware decode fails.
+    Pass ``hwaccel=False`` to force the software HEVC path — required for the
+    GUI preview pipeline, whose decodes must never contend with the culling
+    engine's VideoToolbox decode pool (concurrent HW sessions degraded engine
+    throughput and could hang).
 
     In deterministic mode (``CULL_DETERMINISTIC=1``) hardware decoders are
     disabled so macOS and Windows share the same software HEVC path.
@@ -299,7 +302,7 @@ def _load_image_pyav(path: Path, scale_width: int = 1280) -> np.ndarray | None:
             except Exception:
                 _det = False
 
-            if not _det and sys.platform == "darwin":
+            if not _det and hwaccel and sys.platform == "darwin":
                 try:
                     hwa = av.codec.hwaccel.HWAccel("videotoolbox")
                     ctx = av.CodecContext.create(stream.codec_context.name, "r", hwaccel=hwa)
@@ -509,11 +512,12 @@ def _extract_raw_tiff_direct(path: Path) -> bytes | None:
     return None
 
 
-def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
+def load_image_ffmpeg(path: Path, scale_width: int = 1280, hwaccel: bool = True) -> np.ndarray | None:
     # 1. First try in-process pyav (self-probed, fastest, zero-subprocess, no window popup)
-    img_pyav = _load_image_pyav(path, scale_width=scale_width)
+    img_pyav = _load_image_pyav(path, scale_width=scale_width, hwaccel=hwaccel)
     if img_pyav is not None:
-        log.info("HEIF decode path: pyav (in-process av/VideoToolbox)")
+        log.info("HEIF decode path: pyav (in-process av/%s)",
+                 "VideoToolbox" if hwaccel else "software")
         return img_pyav
 
     # 2. Subprocess fallback only if in-process pyav is unavailable or failed
@@ -540,12 +544,13 @@ def load_image_ffmpeg(path: Path, scale_width: int = 1280) -> np.ndarray | None:
         except Exception: pass
     return None
 
-def load_image_rgb(path: Path, scale_width: int = 0) -> np.ndarray | None:
+def load_image_rgb(path: Path, scale_width: int = 0, hwaccel: bool = True) -> np.ndarray | None:
     suffix = path.suffix.lower()
     if suffix in (".hif", ".heif", ".heic"):
-        img = load_image_ffmpeg(path, scale_width=scale_width)
+        img = load_image_ffmpeg(path, scale_width=scale_width, hwaccel=hwaccel)
         if img is not None:
-            log.info("HEIF decode path: in-process av/VideoToolbox")
+            log.info("HEIF decode path: in-process av/%s",
+                     "VideoToolbox" if hwaccel else "software")
             return img
         # Pillow Fallback
         try:
@@ -708,6 +713,10 @@ class _PersistentExiftool:
         self._outdir = Path(tempfile.mkdtemp(prefix="raw_extract_"))
         self._ready = threading.Event()
         self._dead = False
+        # Serializes extract()/close(): the session's stdin/stdout and the
+        # shared {ready} event are NOT safe for concurrent callers (interleaved
+        # commands corrupt the session and can hang every future extraction).
+        self._lock = threading.Lock()
         threading.Thread(target=self._read_stdout, daemon=True).start()
 
     def _read_stdout(self) -> None:
@@ -725,55 +734,62 @@ class _PersistentExiftool:
             self._ready.set()
 
     def extract(self, path: Path, tag: str) -> bytes | None:
-        if self._dead:
-            return None
-        out = self._outdir / f"{path.stem}.jpg__"
-        cmd = ["-b", "-w", f"{self._outdir.as_posix()}/%f.jpg__", tag, str(path)]
-        try:
-            self.proc.stdin.write(("\n".join(cmd) + "\n-execute\n").encode("utf-8", "replace"))
-            self.proc.stdin.flush()
-        except Exception:
-            self._dead = True
-            return None
-        self._ready.clear()
-        import time
-        self._ready.wait(timeout=60.0)
-        if self._dead:
-            return None
-        try:
-            return out.read_bytes() if out.exists() else None
-        finally:
-            try: out.unlink(missing_ok=True)
-            except Exception: pass
+        with self._lock:
+            if self._dead:
+                return None
+            out = self._outdir / f"{path.stem}.jpg__"
+            cmd = ["-b", "-w", f"{self._outdir.as_posix()}/%f.jpg__", tag, str(path)]
+            # Clear the ready flag BEFORE writing the command: if the previous
+            # extraction's {ready} is still pending, clearing after the write
+            # would consume it and make this call block for the full timeout.
+            self._ready.clear()
+            try:
+                self.proc.stdin.write(("\n".join(cmd) + "\n-execute\n").encode("utf-8", "replace"))
+                self.proc.stdin.flush()
+            except Exception:
+                self._dead = True
+                return None
+            import time
+            self._ready.wait(timeout=60.0)
+            if self._dead:
+                return None
+            try:
+                return out.read_bytes() if out.exists() else None
+            finally:
+                try: out.unlink(missing_ok=True)
+                except Exception: pass
 
     def close(self) -> None:
+        with self._lock:
+            if not self._dead:
+                try:
+                    self.proc.stdin.write(b"-stay_open\nFalse\n-execute\n")
+                    self.proc.stdin.flush()
+                    self.proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    self.proc.wait(timeout=5)
+                except Exception:
+                    try: self.proc.kill()
+                    except Exception: pass
         import shutil
-        if not self._dead:
-            try:
-                self.proc.stdin.write(b"-stay_open\nFalse\n-execute\n")
-                self.proc.stdin.flush()
-                self.proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                self.proc.wait(timeout=5)
-            except Exception:
-                try: self.proc.kill()
-                except Exception: pass
         shutil.rmtree(self._outdir, ignore_errors=True)
 
 _raw_session: _PersistentExiftool | None = None
+_raw_session_lock = threading.Lock()
 
 def _get_raw_session() -> _PersistentExiftool | None:
     global _raw_session
-    if _raw_session is None:
-        try:
-            _raw_session = _PersistentExiftool()
-            import atexit
-            atexit.register(_raw_session.close)
-        except Exception:
-            _raw_session = None  # fall back to per-file spawns
-    return _raw_session
+    with _raw_session_lock:
+        if _raw_session is None:
+            try:
+                _raw_session = _PersistentExiftool()
+                import atexit
+                atexit.register(_raw_session.close)
+            except Exception:
+                _raw_session = None  # fall back to per-file spawns
+        return _raw_session
 
 
 def _extract_embedded_raw(path: Path, tags: list[str]) -> bytes | None:
