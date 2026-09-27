@@ -108,15 +108,6 @@ def test_write_xmp_batch(tmp_path: Path):
     assert p2 == -1
 
 
-def test_write_xmp_real_lightroom_files(tmp_path: Path):
-    """Test incremental write using real Lightroom Classic XMP files from test_import and test_nef."""
-    import shutil
-
-    # 1. Test with real Sony A7C2 Lightroom XMP (test_import/DSC01865.xmp)
-    sony_xmp_src = Path("test_import/DSC01865.xmp")
-    if sony_xmp_src.exists():
-        temp_img = tmp_path / "DSC01865.HIF"
-        temp_img.touch()
 def _xmp_attr_pairs(content: str) -> set[tuple[str, str]]:
     """All attribute-form key="value" pairs found in an XMP document."""
     return set(re.findall(r'([a-zA-Z][\w.-]*:[\w.-]+)="([^"]*)"', content))

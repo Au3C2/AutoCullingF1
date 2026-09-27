@@ -423,13 +423,11 @@ async fn request_highres(
     state: State<'_, Arc<Mutex<EngineState>>>,
     path: String,
     gen_id: u64,
-    roi: Option<Vec<f64>>,
 ) -> Result<(), String> {
     let payload = serde_json::json!({
         "cmd": "highres",
         "path": path,
-        "gen_id": gen_id,
-        "roi": roi
+        "gen_id": gen_id
     });
     let mut guard = state.lock().unwrap();
     send_engine_command(&app, &mut guard, payload)

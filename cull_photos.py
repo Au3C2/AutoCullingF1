@@ -516,13 +516,11 @@ def run_json_lines(args: argparse.Namespace, input_dir: Path | None) -> int:
         def _highres_worker() -> None:
             raw_path = cmd.get("path", "")
             gen_id = int(cmd.get("gen_id", 0))
-            roi = cmd.get("roi")
             try:
                 highres_provider.update_active_generation(gen_id)
                 res = highres_provider.resolve(HighResRequest(
                     file_path=Path(raw_path),
                     gen_id=gen_id,
-                    roi=roi,
                 ))
                 if res is not None:
                     emit({

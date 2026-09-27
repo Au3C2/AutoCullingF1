@@ -26,6 +26,9 @@ TEST_SCRIPTS = [
     "test_dom_elements_sync.js",
     "test_app_js_syntax.js",
     "test_app_js_i18n_calls.js",
+    "test_highres_state.js",
+    "test_save_and_zoom.js",
+    "test_zoom_and_row_indent.js",
 ]
 
 

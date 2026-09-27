@@ -1,17 +1,24 @@
 """High-resolution data provider for intelligent on-demand zoom.
 
 Implements a 3-tier passthrough and extraction pipeline:
-- Tier 1: Zero-transcode, zero-write passthrough for native JPG/JPEG/HIF/HEIC
-  (darwin; WKWebView decodes HEIF via system codecs) and JPG/JPEG elsewhere.
+- Tier 1: Zero-transcode, zero-write passthrough for browser-decodable cooked
+  formats (JPG/JPEG/PNG everywhere; HIF/HEIC additionally on darwin, where
+  WKWebView decodes HEIF via system codecs). TIFF is NOT tier 1: WKWebView
+  and WebView2/Chromium cannot decode TIFF in <img>, so those files take
+  the Tier 3 software-decode path instead.
 - Tier 2: Zero-recode binary stream Range I/O extraction for RAW files with
-  embedded JPEGs (ARW/NEF/CR3); software-decoded HEIF preview-stream JPEG on
+  embedded JPEGs (ARW/NEF); software-decoded HEIF preview-stream JPEG on
   non-darwin (WebView2 cannot decode HEIF).
 - Tier 3: Software decode fallback (when no high-res preview is embedded).
 
 The cache directory MUST NOT live under a dot-directory (e.g. ~/.cache): the
 Tauri asset-protocol scope on unix defaults to require_literal_leading_dot,
 so "**" never matches dotfile paths and every asset:// request would 403
-(WebKit surfaces this as EncodingError: Loading error).
+(WebKit surfaces this as EncodingError: Loading error). macOS and Windows
+(the supported packaging platforms) use vendor-capitalized dirs matching
+tauri.conf.json. Linux is not a packaging target; its XDG cache dir is
+inherently a dot-directory, so the asset scope there would need
+require_literal_leading_dot=false before this module is usable.
 """
 
 from __future__ import annotations
@@ -21,6 +28,7 @@ import logging
 import os
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +51,21 @@ log = logging.getLogger(__name__)
 # cross-file writes safe; same-file concurrent extraction must not interleave).
 _CACHE_WRITE_LOCK = threading.Lock()
 
+# Browser-decodable passthrough formats. TIFF is excluded on purpose: no
+# shipping WebView can render TIFF via <img>, so Tier 3 (PIL) serves it.
+_TIER1_EXTS = COOKED_EXTS - {".tif", ".tiff"}
+
+# Cache eviction: bounded disk usage, oldest-entries-first. Cache files are
+# content-addressed by (source path, size, mtime) so deleting any entry is
+# always safe (it only costs a regeneration on next zoom).
+_CACHE_BUDGET_BYTES = int(os.environ.get("CULL_HIGHRES_CACHE_MB", "2048")) * 1024 * 1024
+# Re-check the budget every N writes; sweeping on every write would stat the
+# whole cache dir on the hot zoom path.
+_SWEEP_EVERY_N_WRITES = 64
+# Stale partial writes (crashed engines, concurrent sessions): tmp files are
+# unique per call, so anything older than this is an orphan.
+_TMP_STALE_SECONDS = 3600.0
+
 
 def _default_cache_dir() -> Path:
     """OS-appropriate, NON-dotfile cache directory (asset-protocol friendly)."""
@@ -51,14 +74,13 @@ def _default_cache_dir() -> Path:
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA")
         return (Path(base) if base else Path.home() / "AppData" / "Local") / "AutoCulling" / "highres"
-    return Path.home() / ".cache" / "auto_culling" / "highres"
+    return Path.home() / ".cache" / "AutoCulling" / "highres"
 
 
 @dataclass
 class HighResRequest:
     file_path: Path
     gen_id: int
-    roi: Optional[list[float]] = None  # [nx1, ny1, nx2, ny2]
 
 
 @dataclass
@@ -81,11 +103,63 @@ class HighResProvider:
             self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._active_generation = 0
+        self._writes_since_sweep = 0
+        self._sweep_cache()
 
     def update_active_generation(self, gen_id: int) -> None:
         """Update active generation token. Requests with gen_id < active are discarded."""
         if gen_id > self._active_generation:
             self._active_generation = gen_id
+
+    def _sweep_cache(self) -> None:
+        """Bound cache disk usage: LRU-evict oldest entries over budget and
+        delete stale tmp orphans. Safe under concurrency — any evicted entry
+        is regenerated on demand, and tmp names are unique per write."""
+        try:
+            entries: list[tuple[float, int, Path]] = []
+            stale_tmp_cutoff = time.time() - _TMP_STALE_SECONDS
+            stale_tmps: list[Path] = []
+            total = 0
+            for p in self.cache_dir.glob("*"):
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if p.name.find(".tmp.") != -1:
+                    if st.st_mtime < stale_tmp_cutoff:
+                        stale_tmps.append(p)
+                    continue
+                if p.suffix.lower() != ".jpg":
+                    continue
+                entries.append((st.st_mtime, st.st_size, p))
+                total += st.st_size
+            for p in stale_tmps:
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if total <= _CACHE_BUDGET_BYTES:
+                return
+            entries.sort()  # oldest mtime first
+            for mtime, size, p in entries:
+                if total <= _CACHE_BUDGET_BYTES:
+                    break
+                try:
+                    p.unlink(missing_ok=True)
+                    total -= size
+                except OSError:
+                    continue
+            log.debug("Highres cache sweep: total now ~%.1f MB (budget %.0f MB)",
+                      total / 1048576, _CACHE_BUDGET_BYTES / 1048576)
+        except Exception as e:
+            log.debug("Highres cache sweep skipped: %s", e)
+
+    def _note_write(self) -> None:
+        """Count cache writes and sweep the cache periodically."""
+        self._writes_since_sweep += 1
+        if self._writes_since_sweep >= _SWEEP_EVERY_N_WRITES:
+            self._writes_since_sweep = 0
+            self._sweep_cache()
 
     def resolve(self, req: HighResRequest) -> Optional[HighResResponse]:
         """Resolve high-res asset for the request, honoring generation token."""
@@ -108,7 +182,7 @@ class HighResProvider:
         # + SVG-overlay compositing (both fixed), NOT to the passthrough.
         # non-darwin: WebView2/Chromium cannot decode HEIF — software-decode
         # the embedded preview stream to a cached JPEG instead.
-        if ext in COOKED_EXTS or (ext in HEIF_EXTS and sys.platform == "darwin"):
+        if ext in _TIER1_EXTS or (ext in HEIF_EXTS and sys.platform == "darwin"):
             w, h = self._probe_dimensions(p)
             return HighResResponse(
                 gen_id=req.gen_id,
@@ -168,6 +242,7 @@ class HighResProvider:
 
         if not self._atomic_write(cached_file, jpeg_bytes):
             return None
+        self._note_write()
 
         w, h = self._probe_dimensions(cached_file)
         return HighResResponse(
@@ -212,6 +287,7 @@ class HighResProvider:
         Image.fromarray(img).save(buf, format="JPEG", quality=92)
         if not self._atomic_write(cached_file, buf.getvalue()):
             return None
+        self._note_write()
 
         h, w = img.shape[:2]
         return HighResResponse(
@@ -274,6 +350,7 @@ class HighResProvider:
         Image.fromarray(img).save(buf, format="JPEG", quality=92)
         if not self._atomic_write(cached_file, buf.getvalue()):
             return None
+        self._note_write()
 
         return HighResResponse(
             gen_id=gen_id,

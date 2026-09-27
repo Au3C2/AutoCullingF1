@@ -167,10 +167,8 @@
     // Intelligent High-Resolution on-demand state
     highres: {
       activeGenId: 0,
-      loadedPath: null,
       isLoading: false,
       debounceTimer: null,
-      lruPaths: [], // Keep max 2 active textures
     },
 
     // Preview request dedup: path whose 640 px preview is loaded or in
@@ -1601,7 +1599,7 @@
     appendLog('[Zoom] Reset to 100% (1:1 full frame)');
   }
 
-  function applyZoomTransform() {
+  function applyZoomTransform(isIntent = false) {
     if (!els.previewImg) return;
     const { level, panX, panY, mode } = state.zoom;
     const transformStr = `scale(${level}) translate(${panX / level}px, ${panY / level}px)`;
@@ -1636,7 +1634,7 @@
     }
 
     // Trigger intelligent high-res loading if zoomed > 150%
-    scheduleHighResEvaluation(level);
+    scheduleHighResEvaluation(level, isIntent);
   }
 
   function scheduleHighResEvaluation(level, isIntent = false) {
@@ -1664,9 +1662,7 @@
       if (currentGen !== state.highres.activeGenId || !state.selectedPhoto) return;
       invokeTauri('request_highres', {
         path: state.selectedPhoto.path,
-        gen_id: currentGen,
-        genId: currentGen,
-        roi: null
+        gen_id: currentGen
       }).catch((e) => appendLog(`[HighRes Request Error] ${e}`));
     }, delay);
   }
@@ -1686,7 +1682,6 @@
 
       els.previewHighResImg.src = assetUrl;
       els.previewHighResImg.style.opacity = '1';
-      state.highres.loadedPath = resolvedPath;
       appendLog(`[HighRes] Seamlessly loaded: ${resolvedPath.split(/[\\/]/).pop()}`);
     } catch (err) {
       appendLog(`[HighRes Error] ${err}`);
@@ -2022,7 +2017,8 @@
         state.zoom.level = 2.0;
         state.zoom.panX = -mouseDx * 2.0;
         state.zoom.panY = -mouseDy * 2.0;
-        applyZoomTransform();
+        // Direct user intent: skip the long debounce so high-res follows fast
+        applyZoomTransform(true);
         appendLog('[Zoom] Double clicked: centered on mouse position and magnified 2.0x');
       }
     });

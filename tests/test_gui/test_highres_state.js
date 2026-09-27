@@ -1,6 +1,15 @@
 /**
- * Unit tests for Intelligent High-Res Zoom on-demand state machine and SVG overlay.
+ * Unit tests for the Intelligent High-Res Zoom on-demand state machine and
+ * its wiring into the real UI sources.
+ *
+ * Part 1 exercises the debounce/generation-token contract that
+ * scheduleHighResEvaluation + the highres_ready handler implement in
+ * ui/app.js (mirrored here as a mock state manager so it runs under plain
+ * node). Part 2 asserts the production wiring actually exists (Canvas 2D
+ * overlay, on-demand request path, no stale SVG overlay remnants).
  */
+const fs = require('fs');
+const path = require('path');
 const assert = require('assert');
 
 // 1. High-Res State Machine and Debounce Logic Test
@@ -10,7 +19,6 @@ class MockHighResStateManager {
     this.debounceTimer = null;
     this.dispatchCallback = dispatchCallback;
     this.isHighResVisible = false;
-    this.loadedPath = null;
   }
 
   onViewportChange(level, isIntent = false) {
@@ -39,7 +47,6 @@ class MockHighResStateManager {
       // Obsolete generation discarded
       return false;
     }
-    this.loadedPath = path;
     this.isHighResVisible = true;
     return true;
   }
@@ -56,50 +63,68 @@ function testHighResStateMachine() {
   assert.strictEqual(sm.isHighResVisible, false);
   assert.strictEqual(dispatchedGenId, null);
 
-  // Rapid scrolling > 1.5 should debounce and only dispatch the last genId
+  // Rapid scrolling > 1.5 should debounce and only dispatch the LAST genId
   sm.onViewportChange(1.8);
   sm.onViewportChange(2.0);
   sm.onViewportChange(2.2);
-  assert.strictEqual(dispatchedGenId, null);
+  assert.strictEqual(dispatchedGenId, null); // still debouncing
 
-  // Wait for debounce timer (150ms)
+  // Wait out the 150 ms debounce
   setTimeout(() => {
-    assert.strictEqual(dispatchedGenId, 4); // 1 + 3 changes = 4
-    // Simulate response arrives
-    const ok = sm.onHighResReady(4, '/path/to/highres.jpg');
-    assert.strictEqual(ok, true);
+    // Generation increments even for the sub-threshold 1.2 zoom, so
+    // 1 + 3 viewport changes = 4 (mirrors scheduleHighResEvaluation).
+    assert.strictEqual(dispatchedGenId, 4);
+    assert.strictEqual(sm.debounceTimer, null);
+
+    // Response for the active generation is accepted
+    assert.strictEqual(sm.onHighResReady(4, '/path/to/highres.jpg'), true);
     assert.strictEqual(sm.isHighResVisible, true);
 
-    // Obsolete response test
-    const staleOk = sm.onHighResReady(2, '/stale.jpg');
-    assert.strictEqual(staleOk, false);
+    // Stale responses are discarded
+    assert.strictEqual(sm.onHighResReady(2, '/stale.jpg'), false);
+
     console.log('✓ testHighResStateMachine passed');
-  }, 200);
+
+    // Intent path (double-click / hotkey) dispatches after 30 ms, not 150 ms.
+    // Check inside a 60 ms window: past the 30 ms intent debounce, but well
+    // before the 150 ms normal debounce would fire.
+    const sm2 = new MockHighResStateManager(() => {});
+    let dispatched = false;
+    sm2.dispatchCallback = () => { dispatched = true; };
+    sm2.onViewportChange(2.0, true);
+    setTimeout(() => {
+      assert.ok(dispatched, 'intent path dispatched within 60ms');
+      sm2.onViewportChange(1.0);
+      assert.strictEqual(sm2.isHighResVisible, false);
+
+      console.log('✓ testHighResIntentDebounce passed');
+      testHighResWiring();
+    }, 60);
+  }, 250);
 }
 
-// 2. SVG Normalized Vector Overlay Calculation Test
-function testSvgOverlayGeneration() {
-  function renderSvgBoxes(boxes, imgW, imgH) {
-    if (!boxes || boxes.length === 0) return '';
-    return boxes.map((box) => {
-      const [x1, y1, x2, y2, label, conf] = box;
-      // Normalized coordinates [0, 1]
-      const nx = Math.min(x1, x2) / imgW;
-      const ny = Math.min(y1, y2) / imgH;
-      const nw = Math.abs(x2 - x1) / imgW;
-      const nh = Math.abs(y2 - y1) / imgH;
-      return `<rect x="${nx.toFixed(4)}" y="${ny.toFixed(4)}" width="${nw.toFixed(4)}" height="${nh.toFixed(4)}" />`;
-    }).join('');
-  }
+// 2. Production wiring smoke test against the real UI sources.
+function testHighResWiring() {
+  const baseDir = path.resolve(__dirname, '../../ui');
+  const html = fs.readFileSync(path.join(baseDir, 'index.html'), 'utf8');
+  const appJs = fs.readFileSync(path.join(baseDir, 'app.js'), 'utf8');
 
-  const boxes = [[100, 150, 500, 450, 'car', 0.95]];
-  const svg = renderSvgBoxes(boxes, 1000, 1000);
-  assert(svg.includes('x="0.1000"'));
-  assert(svg.includes('y="0.1500"'));
-  assert(svg.includes('width="0.4000"'));
-  assert(svg.includes('height="0.3000"'));
-  console.log('✓ testSvgOverlayGeneration passed');
+  // Canvas 2D overlay is the real implementation (a CSS-transformed SVG
+  // overlay blanks sibling layers in WKWebView compositing — see the
+  // drawBoxOverlay comment in app.js).
+  assert.ok(html.includes('id="previewBoxCanvas"'), 'index.html must contain the canvas overlay element');
+  assert.ok(appJs.includes('function drawBoxOverlay'), 'app.js must implement drawBoxOverlay');
+  assert.ok(!html.includes('previewSvgOverlay'), 'stale SVG overlay element must be gone');
+
+  // On-demand request plumbing
+  assert.ok(appJs.includes("invokeTauri('request_highres'"), 'app.js must request highres via the Tauri command');
+  assert.ok(appJs.includes("'highres_ready'") || appJs.includes('"highres_ready"'),
+    'app.js must listen for highres_ready events');
+  assert.ok(appJs.includes('scheduleHighResEvaluation(level, isIntent)'),
+    'applyZoomTransform must forward the intent flag to the high-res scheduler');
+
+  console.log('✓ testHighResWiring passed');
+  console.log('All highres state tests passed');
 }
 
 testHighResStateMachine();
-testSvgOverlayGeneration();
