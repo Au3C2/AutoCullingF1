@@ -2059,7 +2059,13 @@
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
-        fitViewportToImage();
+        // Refit the viewport once the NEW image data is decoded — the sync
+        // path above still sees the previous photo's naturalWidth/Height.
+        if (els.previewImg.decode) {
+          els.previewImg.decode().then(fitViewportToImage).catch(() => {});
+        } else {
+          fitViewportToImage();
+        }
 
         if (res.boxes) {
           updateSvgVectorOverlay(res.boxes, res.width || 640, res.height || 427);
