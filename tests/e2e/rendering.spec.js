@@ -92,7 +92,11 @@ test.describe('preview rendering pipeline', () => {
   test('selecting a photo paints the full preview (no black holes / partial blocks)', async ({ page }) => {
     const consoleErrors = await loadApp(page, fixtures);
 
-    for (const index of [0, 1, 8, 16]) {
+    // Test a spread of indices dynamically bounded by fixture length
+    const total = fixtures.photos.length;
+    const testIndices = [...new Set([0, Math.min(1, total - 1), Math.floor(total / 2), total - 1])];
+
+    for (const index of testIndices) {
       const photo = fixtures.photos[index];
       await clickRow(page, index);
 
@@ -144,19 +148,22 @@ test.describe('preview rendering pipeline', () => {
     // 10 rapid switches through keyboard navigation (< 60ms apart)
     await clickRow(page, 0);
     await expect(page.locator('#previewImg')).toHaveJSProperty('naturalWidth', fixtures.photos[0].width);
-    for (let i = 1; i <= 10; i++) {
+    const steps = Math.min(10, fixtures.photos.length - 1);
+    for (let i = 1; i <= steps; i++) {
       await page.keyboard.press('j');
       await page.waitForTimeout(50);
     }
 
     const state = await previewState(page);
     // Anti-storm: one IPC per photo selection, not one per frame event /
-    // repeated re-entry. 11 selections -> <= 12 preview calls.
-    expect(state.stats.preview).toBeLessThanOrEqual(12);
+    // repeated re-entry.
+    expect(state.stats.preview).toBeLessThanOrEqual(steps + 2);
 
     // Final photo must be fully painted
-    const finalIndex = 10 % fixtures.photos.length;
+    const finalIndex = steps;
     const photo = fixtures.photos[finalIndex];
+    // Wait for the selected photo's preview to settle into the DOM
+    await expect(page.locator('#previewImg')).toHaveJSProperty('naturalWidth', photo.width);
     const shot = await page.locator('#previewImg').screenshot();
     const { blackHoles } = findBlackHoles(shot, fixturePngBuffer(photo.data));
     expect(blackHoles, `black tiles after rapid switching: ${JSON.stringify(blackHoles)}`).toHaveLength(0);

@@ -28,28 +28,56 @@ sys.path.insert(0, str(ROOT))
 
 
 def collect_samples(limit_per_dir: int = 8) -> list[Path]:
-    """Pick a deterministic, small, format-diverse photo set."""
-    chosen: list[Path] = []
-    candidates: list[Path] = []
-    for sub, exts in (
-        ("test_arw", (".ARW",)),
-        ("test_nef", (".nef",)),
-    ):
-        d = ROOT / sub
-        if d.is_dir():
-            candidates.extend(sorted(p for p in d.iterdir() if p.suffix in exts))
-    for name in ("seed.heif", "seed.jpg"):
-        p = ROOT / "tests" / "ci" / "sample" / name
-        if p.exists():
-            candidates.append(p)
+    """Pick a deterministic, small, format-diverse photo set.
 
-    seen_dirs: dict[str, int] = {}
-    for p in candidates:
-        key = str(p.parent)
-        if seen_dirs.get(key, 0) >= limit_per_dir:
-            continue
-        seen_dirs[key] = seen_dirs.get(key, 0) + 1
-        chosen.append(p)
+    In CI environments (where large camera datasets test_arw/test_nef are not
+    checked out), replicate the committed seed files in tests/ci/sample/ to
+    ensure every test has a sufficiently large list (>12 photos) across all
+    4 supported formats (ARW, NEF, HEIF, JPG).
+    """
+    chosen: list[Path] = []
+    has_camera_datasets = (ROOT / "test_arw").is_dir() and (ROOT / "test_nef").is_dir()
+
+    if has_camera_datasets:
+        candidates: list[Path] = []
+        for sub, exts in (
+            ("test_arw", (".ARW",)),
+            ("test_nef", (".nef",)),
+        ):
+            d = ROOT / sub
+            if d.is_dir():
+                candidates.extend(sorted(p for p in d.iterdir() if p.suffix in exts))
+        for name in ("seed.heif", "seed.jpg"):
+            p = ROOT / "tests" / "ci" / "sample" / name
+            if p.exists():
+                candidates.append(p)
+
+        seen_dirs: dict[str, int] = {}
+        for p in candidates:
+            key = str(p.parent)
+            if seen_dirs.get(key, 0) >= limit_per_dir:
+                continue
+            seen_dirs[key] = seen_dirs.get(key, 0) + 1
+            chosen.append(p)
+        return chosen
+
+    # CI Fallback: replicate the committed 4 seed files to 16 synthetic entries
+    sample_dir = ROOT / "tests" / "ci" / "sample"
+    seeds = [
+        sample_dir / "seed.ARW",
+        sample_dir / "seed.nef",
+        sample_dir / "seed.heif",
+        sample_dir / "seed.jpg",
+    ]
+    existing_seeds = [p for p in seeds if p.exists()]
+    if not existing_seeds:
+        return []
+
+    # Provide multiple copies per format so keyboard navigation and table indices (e.g. 0, 1, 8, 12) succeed
+    for i in range(4):
+        for s in existing_seeds:
+            chosen.append(s)
+
     return chosen
 
 
@@ -63,6 +91,7 @@ def main() -> int:
     highres_dir = out / "highres"
     highres_dir.mkdir(parents=True, exist_ok=True)
 
+    has_camera_datasets = (ROOT / "test_arw").is_dir() and (ROOT / "test_nef").is_dir()
     photos = collect_samples(args.limit_per_dir)
     if not photos:
         print("No camera sample files found; nothing to generate.", file=sys.stderr)
@@ -93,7 +122,7 @@ def main() -> int:
 
     fixture_photos = []
     crop_assigned = False
-    for p in photos:
+    for idx, p in enumerate(photos):
         score = score_by_path.get(p)
         if score is None:
             from cull.scorer import ImageScore
@@ -152,9 +181,13 @@ def main() -> int:
             nonlocal_crop = [0.30, 0.25, 0.75, 0.70]
             crop_assigned = True
 
+        # Unique synthetic path per entry to avoid photoMap key collisions when seeds are replicated
+        unique_path = str(p.parent / f"{p.stem}_{idx:02d}{p.suffix}") if not has_camera_datasets else str(p)
+        unique_name = f"{p.stem}_{idx:02d}{p.suffix}" if not has_camera_datasets else p.name
+
         fixture_photos.append({
-            "path": str(p),
-            "name": p.name,
+            "path": unique_path,
+            "name": unique_name,
             "dir": str(p.parent),
             "data": base64.b64encode(buf.getvalue()).decode("ascii"),
             "width": pil.width,
