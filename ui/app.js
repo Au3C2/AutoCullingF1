@@ -1745,16 +1745,50 @@
     let targetScale = Math.min(scaleX, scaleY);
     targetScale = Math.max(1.0, Math.min(2.5, parseFloat(targetScale.toFixed(2))));
 
-    const containerW = els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600;
-    const containerH = els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450;
-    const panX = (0.5 - cx) * containerW * targetScale;
-    const panY = (0.5 - cy) * containerH * targetScale;
+    // Pan base MUST be the viewport rect (= the image rect after
+    // fitViewportToImage), not the preview container: the container is
+    // letterboxed around the image, so container-based pan over-shoots and
+    // translates the photo clean out of the viewport (black preview).
+    const vpW = (els.previewViewport && els.previewViewport.offsetWidth) || (els.previewContainer ? els.previewContainer.offsetWidth || 600 : 600);
+    const vpH = (els.previewViewport && els.previewViewport.offsetHeight) || (els.previewContainer ? els.previewContainer.offsetHeight || 450 : 450);
+    const panX = (0.5 - cx) * vpW * targetScale;
+    const panY = (0.5 - cy) * vpH * targetScale;
 
     return {
       level: targetScale,
       panX: parseFloat(panX.toFixed(1)),
       panY: parseFloat(panY.toFixed(1)),
     };
+  }
+
+  // Sizes the preview viewport to the contain-fit rect of the current image
+  // inside the preview container. All overlay layers then share exactly the
+  // image coordinate space (SVG viewBox 0 0 1 1 maps onto the photo itself,
+  // not the letterboxed container).
+  function fitViewportToImage() {
+    if (!els.previewViewport || !els.previewContainer || !els.previewImg) return;
+    const nw = els.previewImg.naturalWidth;
+    const nh = els.previewImg.naturalHeight;
+    if (!nw || !nh) return;
+    const cs = window.getComputedStyle(els.previewContainer);
+    const availW = Math.max(1, els.previewContainer.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0));
+    const availH = Math.max(1, els.previewContainer.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0));
+    const scale = Math.min(availW / nw, availH / nh);
+    els.previewViewport.style.width = `${Math.max(1, Math.round(nw * scale))}px`;
+    els.previewViewport.style.height = `${Math.max(1, Math.round(nh * scale))}px`;
+
+    // The crop-focus zoom may have been computed while the viewport still had
+    // the previous photo's dimensions — re-derive it now that the rect is
+    // exact (auto mode only; manual zoom is the user's own view).
+    if (state.zoom.mode === 'auto' && state.selectedPhoto && state.selectedPhoto.crop) {
+      const focus = computeCropFocus(state.selectedPhoto.crop);
+      if (focus) {
+        state.zoom.level = focus.level;
+        state.zoom.panX = focus.panX;
+        state.zoom.panY = focus.panY;
+      }
+    }
+    applyZoomTransform();
   }
 
   function computeMouseCenteredZoom(oldLevel, newLevel, oldPanX, oldPanY, mouseDx, mouseDy) {
@@ -2015,6 +2049,7 @@
 
       if (res && res.data) {
         const src = res.data.startsWith('data:') ? res.data : `data:image/png;base64,${res.data}`;
+        els.previewImg.onload = fitViewportToImage;
         els.previewImg.src = src;
         if (els.previewHighResImg) {
           els.previewHighResImg.style.opacity = '0';
@@ -2024,6 +2059,7 @@
         els.previewImg.style.display = 'block';
         els.previewEmpty.style.display = 'none';
         state.previewLoadedPath = requestedPath;
+        fitViewportToImage();
 
         if (res.boxes) {
           updateSvgVectorOverlay(res.boxes, res.width || 640, res.height || 427);
@@ -2614,11 +2650,22 @@
     els.btnToggleLog.addEventListener('click', () => {
       const isHidden = els.logDrawer.style.display === 'none';
       els.logDrawer.style.display = isHidden ? 'flex' : 'none';
+      // Jump to the latest line when opening the drawer
+      if (isHidden && els.logConsole) {
+        els.logConsole.scrollTop = els.logConsole.scrollHeight;
+      }
     });
 
     els.btnClearLog.addEventListener('click', () => {
       els.logConsole.textContent = '';
     });
+
+    // Re-fit the preview viewport when the preview pane geometry changes
+    // (splitter drag / window resize) so the image rect stays contain-fit.
+    if (window.ResizeObserver && els.previewContainer) {
+      new ResizeObserver(() => fitViewportToImage()).observe(els.previewContainer);
+    }
+    window.addEventListener('resize', fitViewportToImage);
 
     initSplitter();
     initPanZoom();
