@@ -107,13 +107,40 @@ def build_engine_binary() -> Path:
     # on macOS) instead of a nested engine/ folder.
     res_dir = SRC_TAURI / "resources" / "engine"
     shutil.rmtree(res_dir, ignore_errors=True)
-    shutil.copytree(engine_dir, res_dir)
+    shutil.copytree(engine_dir, res_dir, symlinks=True)
     if sys.platform != "win32":
         os.chmod(engine_bin, 0o755)
         os.chmod(cli_bin, 0o755)
 
     print(f"PASS: Staged engine onedir to {res_dir}")
     return engine_bin
+
+
+def _restore_macos_app_symlinks() -> None:
+    """Restore dylib symlinks in AutoCulling.app/Contents/Resources/lib.
+
+    Tauri's resource packager follows symlinks when copying resources into
+    the app bundle, duplicating ~125 root dylib symlinks (~140 MB) into
+    regular files. We restore the original symlinks from dist/engine/lib to
+    keep the bundle slim.
+    """
+    if sys.platform != "darwin":
+        return
+    engine_lib = ROOT / "dist" / "engine" / "lib"
+    app_lib = SRC_TAURI / "target/release/bundle/macos/AutoCulling.app/Contents/Resources/lib"
+    if not (engine_lib.exists() and app_lib.exists()):
+        return
+    restored = 0
+    for link in engine_lib.glob("*.dylib"):
+        if link.is_symlink():
+            target = os.readlink(link)
+            dest = app_lib / link.name
+            if dest.exists() and not dest.is_symlink():
+                dest.unlink()
+                dest.symlink_to(target)
+                restored += 1
+    if restored > 0:
+        print(f"PASS: Restored {restored} soname symlinks in app bundle lib/ (saved duplicate copies)")
 
 
 def build_tauri_gui() -> None:
@@ -136,6 +163,7 @@ def build_tauri_gui() -> None:
     bundle_type = "nsis" if sys.platform == "win32" else "app"
     print(f"Running Tauri build: {' '.join(tauri_cli)} --bundles {bundle_type}")
     subprocess.run([*tauri_cli, "--bundles", bundle_type], cwd=str(ROOT), check=True)
+    _restore_macos_app_symlinks()
 
 
 def build_macos_dmg(dist_dir: Path, ver: str) -> Path | None:
@@ -148,6 +176,7 @@ def build_macos_dmg(dist_dir: Path, ver: str) -> Path | None:
     human-approved layout) — and let hdiutil compress it. No Finder, no
     AppleScript, byte-identical layout on every machine.
     """
+    _restore_macos_app_symlinks()
     app_path = SRC_TAURI / "target/release/bundle/macos/AutoCulling.app"
     if not app_path.exists():
         print("WARNING: AutoCulling.app not found to create DMG.")
@@ -194,7 +223,7 @@ def build_macos_dmg(dist_dir: Path, ver: str) -> Path | None:
         "-volname", "AutoCulling",
         "-srcfolder", str(stage),
         "-fs", "HFS+",
-        "-ov", "-format", "UDZO",
+        "-ov", "-format", "ULMO",
         str(dst_dmg),
     ]
     print(f"Creating DMG via hdiutil: {' '.join(cmd)}")
@@ -248,7 +277,7 @@ def organize_dist_artifacts() -> list[Path]:
         engine_stage = SRC_TAURI / "resources/engine"
         if release_exe is not None and engine_stage.exists():
             portable_zip = dist_dir / f"AutoCulling_v{ver}_win_x64_portable.zip"
-            with zipfile.ZipFile(portable_zip, "w", zipfile.ZIP_DEFLATED) as z:
+            with zipfile.ZipFile(portable_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
                 z.write(release_exe, "auto_culling.exe")
                 # Ensure WebView2Loader.dll sits next to auto_culling.exe
                 wv2_candidates = [
