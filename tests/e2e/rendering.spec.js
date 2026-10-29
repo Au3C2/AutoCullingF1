@@ -120,7 +120,7 @@ test.describe('preview rendering pipeline', () => {
       // compare tile-wise — any black/unpainted region fails.
       await page.fill('#zoomLevelInput', '100');
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(80);
+      await page.waitForTimeout(150);
       const shot = await page.locator('#previewImg').screenshot();
       const { mae, blackHoles } = findBlackHoles(shot, fixturePngBuffer(photo.data));
       expect(blackHoles, `${photo.name}: black/unpainted tiles ${JSON.stringify(blackHoles)}`).toHaveLength(0);
@@ -187,6 +187,12 @@ test.describe('preview rendering pipeline', () => {
     await expect(page.locator('#previewHighResImg')).toHaveJSProperty('naturalWidth', photo.highresWidth, { timeout: 10_000 });
     await expect(page.locator('#previewHighResImg')).toHaveJSProperty('naturalHeight', photo.highresHeight);
     await expect(page.locator('#previewHighResImg')).toHaveCSS('opacity', '1');
+    await page.locator('#previewHighResImg').evaluate((el) => {
+      if (getComputedStyle(el).opacity === '1') return Promise.resolve();
+      return new Promise((resolve) => el.addEventListener('transitionend', resolve, { once: true }));
+    });
+    // Also wait for frame to settle
+    await page.waitForTimeout(150);
 
     // The photo must STILL be fully painted under the high-res overlay
     const shot = await page.locator('#previewViewport').screenshot();
@@ -216,6 +222,12 @@ test.describe('preview rendering pipeline', () => {
     await page.fill('#zoomLevelInput', '100');
     await page.keyboard.press('Enter');
     await expect(page.locator('#previewHighResImg')).toHaveCSS('opacity', '0');
+    await page.locator('#previewHighResImg').evaluate((el) => {
+      if (getComputedStyle(el).opacity === '0') return Promise.resolve();
+      return new Promise((resolve) => el.addEventListener('transitionend', resolve, { once: true }));
+    });
+    // Also wait for frame to settle
+    await page.waitForTimeout(150);
 
     const shot = await page.locator('#previewImg').screenshot();
     const { blackHoles } = findBlackHoles(shot, fixturePngBuffer(photo.data));
