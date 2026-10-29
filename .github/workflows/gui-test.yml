@@ -66,9 +66,14 @@ jobs:
         run: |
           ${{ matrix.pre-steps }}
           uv venv .venv --python 3.10
+          if [ "${{ matrix.os }}" = "macos-14" ]; then
+            OPENCV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
+          else
+            OPENCV_PKG="opencv-python==5.0.0.93"
+          fi
           uv pip install --python "$PYBIN" \
-            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "scipy>=1.15" \
+            "$OPENCV_PKG" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
             "pyinstaller" "pytest"
 
       - name: Run Tauri Rust unit tests
