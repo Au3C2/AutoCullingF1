@@ -55,13 +55,12 @@ def _get_hf_mask_rfft(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
 def _hf_ratio(gray: np.ndarray) -> float:
     """Compute high-frequency energy ratio in frequency domain.
 
-    Uses scipy.fft.rfft2 (pocketfft with ARM NEON SIMD + multithreading) on
-    the half spectrum — real input makes the negative-frequency half redundant,
-    so this does the same O(n log n) work on ~half the output grid vs fft2
-    (~1.9x faster on Apple M4). The conjugate-symmetric columns are folded
-    back in via the cached weights; result matches the full-spectrum fft2
-    ratio to IEEE754 summation-order noise (~1e-7 relative), same magnitude
-    as the earlier cv2.dft -> scipy.fft2 swap (gate-verified precedent)."""
+    Uses numpy.fft.rfft2 (pocketfft) on the half spectrum — real input makes
+    the negative-frequency half redundant, so this does the same O(n log n)
+    work on ~half the output grid vs fft2 (~1.9x faster on Apple M4).
+    The conjugate-symmetric columns are folded back in via the cached weights;
+    result matches the full-spectrum fft2 ratio to IEEE754 summation-order noise
+    (~1e-7 relative), same magnitude as the earlier cv2.dft -> fft swap."""
     g_f32 = gray.astype(np.float32)
     h, w = gray.shape
     row_mask, col_weights = _get_hf_mask_rfft(h, w)
