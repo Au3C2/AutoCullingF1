@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 import cv2
 import numpy as np
-from scipy.fft import rfft2
+from numpy.fft import rfft2
 
 if TYPE_CHECKING:
     from .detector import Detection
@@ -66,12 +66,7 @@ def _hf_ratio(gray: np.ndarray) -> float:
     h, w = gray.shape
     row_mask, col_weights = _get_hf_mask_rfft(h, w)
 
-    try:
-        from cull.deterministic import is_deterministic as _is_det_s
-        _workers = 1 if _is_det_s() else -1
-    except Exception:
-        _workers = -1
-    spectrum = rfft2(g_f32, workers=_workers)  # (h, w//2+1) complex64
+    spectrum = rfft2(g_f32)  # (h, w//2+1) complex
     mag_sq = np.abs(spectrum) ** 2
 
     total = float(mag_sq.sum(axis=0) @ col_weights)

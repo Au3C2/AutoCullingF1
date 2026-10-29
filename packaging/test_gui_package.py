@@ -177,6 +177,16 @@ def test_macos_dmg(dmg_path: Path | None = None) -> bool:
                 print(f"FAIL: CLI entry point {cli_name} missing at bundle root.")
                 success = False
 
+        # 6. Guard: Root dylibs in lib/ must be symlinks (not duplicated regular files).
+        lib_dir = engine_cand.parent / "lib" if engine_cand else None
+        if lib_dir and lib_dir.is_dir() and platform.system() == "Darwin":
+            syms = [p for p in lib_dir.glob("*.dylib") if p.is_symlink()]
+            if len(syms) > 50:
+                print(f"PASS: macOS bundle preserves dylib symlinks in lib/ ({len(syms)} symlinks).")
+            else:
+                print(f"FAIL: macOS bundle dereferenced dylib symlinks ({len(syms)} symlinks found, expected >50).")
+                success = False
+
         if engine_cand:
             print(f"Testing bundled engine: {engine_cand}")
             engine_proc = subprocess.Popen(

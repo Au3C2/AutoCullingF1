@@ -90,7 +90,7 @@ a = Analysis(
         "torch", "torchvision", "ultralytics", "matplotlib", "pandas",
         "polars", "IPython", "tkinter", "PySide6", "PyQt5", "coremltools",
         "onnx", "sympy", "networkx", "requests", "coloredlogs", "humanfriendly",
-        "PIL._imagingtk", "PIL._tkinter_finder",
+        "PIL._imagingtk", "PIL._tkinter_finder", "scipy",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
