@@ -43,6 +43,7 @@ concurrency:
 
 env:
   OPENCV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
+  AV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl"
 
 jobs:
   # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
@@ -61,7 +62,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Calibrate source seed performance
         timeout-minutes: 40
@@ -130,7 +131,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Build onedir (needed by the precision comparison)
         run: .venv/bin/python packaging/build.py --onedir
@@ -153,7 +154,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Skip unless runner calibrated
         run: |
@@ -199,7 +200,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Build onedir
         run: .venv/bin/python packaging/build.py --onedir
@@ -252,7 +253,7 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" \
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pytest"
       - name: Deterministic truth — seed replication vs committed baseline
         run: |
