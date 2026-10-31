@@ -44,6 +44,9 @@ concurrency:
 env:
   OPENCV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
   AV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+  OPENCV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl"
+  AV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl"
+  POCKETFFT_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl"
 
 jobs:
   # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
@@ -284,8 +287,8 @@ jobs:
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
           uv pip install --python .venv `
-            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "pytest"
+            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: Deterministic truth — 70-file gate (strict)
         run: .venv/Scripts/python.exe -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "deterministic"
       - name: Upload perf artifact (if any)
@@ -313,8 +316,8 @@ jobs:
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
           uv pip install --python .venv `
-            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "pytest"
+            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: GPU alignment — default CUDA vs deterministic truth
         run: .venv/Scripts/python.exe -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "alignment"
       - name: Upload perf artifact (if any)
@@ -342,8 +345,8 @@ jobs:
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
           uv pip install --python .venv `
-            "opencv-python==5.0.0.93" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "av>=17.0" "pytest"
+            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
         run: |
           .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
