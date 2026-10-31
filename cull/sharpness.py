@@ -34,12 +34,18 @@ _ROI_BUFFER: float = 0.10  # 10% expansion to handle bbox jitter
 #   (19 ms/frame vs scipy's 5 ms — measured 2026-10-31), and scipy.fft drags
 #   the full linalg/sparse/openblas closure into the bundle (~80 MB), so
 #   neither is a usable Windows backend.
-try:
-    from pocketfft_fast import rfft2 as _pf_rfft2
-    _HF_BACKEND = "pocketfft_fast"
-except ImportError:
+if sys.platform == "darwin":
+    # darwin is pinned to numpy (macOS-verified backend, keeps scipy out of
+    # the macOS bundle) even if pocketfft_fast happens to be installed.
     _pf_rfft2 = None
-    _HF_BACKEND = "numpy" if sys.platform == "darwin" else "cv2"
+    _HF_BACKEND = "numpy"
+else:
+    try:
+        from pocketfft_fast import rfft2 as _pf_rfft2
+        _HF_BACKEND = "pocketfft_fast"
+    except ImportError:
+        _pf_rfft2 = None
+        _HF_BACKEND = "cv2"
 
 # Cache the HF masks keyed by (h, w) — they depend only on shape, not content.
 # Rebuilding a mask every frame costs ~0.15 ms; caching eliminates that.

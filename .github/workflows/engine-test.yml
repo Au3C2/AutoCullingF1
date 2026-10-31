@@ -283,12 +283,11 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install runtime deps into .venv + exiftool
+        shell: bash
         run: |
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
-          uv pip install --python .venv `
-            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
+          uv pip install --python .venv             "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26"             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: Deterministic truth — 70-file gate (strict)
         run: .venv/Scripts/python.exe -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "deterministic"
       - name: Upload perf artifact (if any)
@@ -312,12 +311,11 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install runtime deps into .venv + exiftool
+        shell: bash
         run: |
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
-          uv pip install --python .venv `
-            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
+          uv pip install --python .venv             "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26"             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: GPU alignment — default CUDA vs deterministic truth
         run: .venv/Scripts/python.exe -m pytest tests/test_engine/test_deterministic_baseline.py -v -m "alignment"
       - name: Upload perf artifact (if any)
@@ -341,12 +339,11 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install runtime deps into .venv + exiftool
+        shell: bash
         run: |
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
-          uv pip install --python .venv `
-            "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" `
-            "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
+          uv pip install --python .venv             "$OPENCV_WIN_WHEEL" "$POCKETFFT_WIN_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26"             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_WIN_WHEEL" "pytest"
       - name: Perf — seed steady state (Windows, same 4-seed protocol as macOS)
         run: |
           .venv/Scripts/python.exe benchmarks/run_benchmarks.py --workers 4 `
