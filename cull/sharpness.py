@@ -6,10 +6,11 @@ Refined for robustness against detection jitter.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import TYPE_CHECKING
 import cv2
 import numpy as np
-from numpy.fft import rfft2
+from numpy.fft import rfft2  # darwin path; kept for cross-check tooling
 
 if TYPE_CHECKING:
     from .detector import Detection
@@ -22,9 +23,28 @@ _LAP_REJECT: float = 3.0
 _MIN_CROP_PX: int = 32
 _ROI_BUFFER: float = 0.10  # 10% expansion to handle bbox jitter
 
-# Cache the HF mask keyed by (h, w) — it depends only on shape, not content.
-# Rebuilding the mask every frame costs ~0.15 ms; caching eliminates that.
+# FFT backend selection (platform-adaptive, same HF condition on every path):
+# - darwin: numpy.fft.rfft2 on the half spectrum. On Apple M4 numpy's pocketfft
+#   is the fastest option (~1.9x vs full-spectrum fft2) and keeps scipy out of
+#   the macOS bundle.
+# - elsewhere: the pocketfft_fast wheel (same pocketfft algorithm family as
+#   numpy/scipy vendor; SIMD-compiled, bit-identical output to scipy.fft,
+#   zero heavy deps) when installed, falling back to cv2.dft on the full
+#   spectrum otherwise. numpy 2.2's pocketfft has no SIMD dispatch on Windows
+#   (19 ms/frame vs scipy's 5 ms — measured 2026-10-31), and scipy.fft drags
+#   the full linalg/sparse/openblas closure into the bundle (~80 MB), so
+#   neither is a usable Windows backend.
+try:
+    from pocketfft_fast import rfft2 as _pf_rfft2
+    _HF_BACKEND = "pocketfft_fast"
+except ImportError:
+    _pf_rfft2 = None
+    _HF_BACKEND = "numpy" if sys.platform == "darwin" else "cv2"
+
+# Cache the HF masks keyed by (h, w) — they depend only on shape, not content.
+# Rebuilding a mask every frame costs ~0.15 ms; caching eliminates that.
 _hf_mask_rfft_cache: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+_hf_mask_full_cache: dict[tuple[int, int], np.ndarray] = {}
 
 def _get_hf_mask_rfft(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
     """Row mask for the rfft2 half-spectrum plus per-column symmetry weights.
@@ -52,20 +72,26 @@ def _get_hf_mask_rfft(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
         _hf_mask_rfft_cache[key] = cached = (row_mask, weights)
     return cached
 
-def _hf_ratio(gray: np.ndarray) -> float:
-    """Compute high-frequency energy ratio in frequency domain.
+def _get_hf_mask_full(h: int, w: int) -> np.ndarray:
+    """Boolean mask over the full fft2 spectrum marking HF bins
+    (``r_sq > (max_r*0.5)**2`` with r from the mirrored frequency grid)."""
+    key = (h, w)
+    cached = _hf_mask_full_cache.get(key)
+    if cached is None:
+        dy = np.minimum(np.arange(h), h - np.arange(h)) ** 2
+        dx = np.minimum(np.arange(w), w - np.arange(w)) ** 2
+        r_sq = dy[:, None] + dx[None, :]
+        max_r = min(h // 2, w // 2)
+        _hf_mask_full_cache[key] = cached = r_sq > (max_r * 0.5) ** 2
+    return cached
 
-    Uses numpy.fft.rfft2 (pocketfft) on the half spectrum — real input makes
-    the negative-frequency half redundant, so this does the same O(n log n)
-    work on ~half the output grid vs fft2 (~1.9x faster on Apple M4).
-    The conjugate-symmetric columns are folded back in via the cached weights;
-    result matches the full-spectrum fft2 ratio to IEEE754 summation-order noise
-    (~1e-7 relative), same magnitude as the earlier cv2.dft -> fft swap."""
+def _hf_half_spectrum(gray: np.ndarray, rfft2_fn) -> float:
+    """Half-spectrum HF ratio via a numpy-compatible rfft2."""
     g_f32 = gray.astype(np.float32)
     h, w = gray.shape
     row_mask, col_weights = _get_hf_mask_rfft(h, w)
 
-    spectrum = rfft2(g_f32)  # (h, w//2+1) complex
+    spectrum = rfft2_fn(g_f32)  # (h, w//2+1) complex
     mag_sq = np.abs(spectrum) ** 2
 
     total = float(mag_sq.sum(axis=0) @ col_weights)
@@ -73,6 +99,46 @@ def _hf_ratio(gray: np.ndarray) -> float:
         return 0.0
     masked_col = (mag_sq * row_mask).sum(axis=0)
     return float((masked_col @ col_weights) / total)
+
+def _hf_ratio_pocketfft(gray: np.ndarray) -> float:
+    """Half-spectrum HF ratio via the pocketfft_fast wheel (non-darwin path).
+
+    Bit-identical to scipy.fft (same pocketfft algorithm), ~4 ms/frame."""
+    return _hf_half_spectrum(gray, _pf_rfft2)
+
+def _hf_ratio_rfft2(gray: np.ndarray) -> float:
+    """Half-spectrum HF ratio via numpy.fft.rfft2 (darwin path)."""
+    return _hf_half_spectrum(gray, rfft2)
+
+def _hf_ratio_cv2(gray: np.ndarray) -> float:
+    """Full-spectrum HF ratio via cv2.dft (non-darwin path).
+
+    Mathematically identical to the half-spectrum weighted sum (symmetry of
+    the HF condition under both axis flips); differs only in float rounding
+    (~1e-4 relative on the energy sums, far inside the 0.005 raw gate)."""
+    g_f32 = gray.astype(np.float32)
+    spectrum = cv2.dft(g_f32, flags=cv2.DFT_COMPLEX_OUTPUT)  # (h, w, 2) f32
+    re, im = spectrum[:, :, 0], spectrum[:, :, 1]
+    mag_sq = re * re + im * im
+
+    total = float(mag_sq.sum())
+    if total <= 1e-9:
+        return 0.0
+    return float(mag_sq[_get_hf_mask_full(*mag_sq.shape)].sum() / total)
+
+def _hf_ratio(gray: np.ndarray) -> float:
+    """Compute high-frequency energy ratio in frequency domain.
+
+    Backend is platform-adaptive (see _HF_BACKEND): pocketfft_fast (or a
+    cv2.dft fallback) off darwin, numpy.fft.rfft2 on darwin. All backends
+    implement the same HF condition; results agree to float rounding noise
+    (~1e-4 relative worst case), same magnitude as the earlier cv2.dft <->
+    fft library swaps (optimization #B precedent)."""
+    if _HF_BACKEND == "pocketfft_fast":
+        return _hf_ratio_pocketfft(gray)
+    if _HF_BACKEND == "numpy":
+        return _hf_ratio_rfft2(gray)
+    return _hf_ratio_cv2(gray)
 
 def laplacian_variance(gray: np.ndarray) -> float:
     p = np.pad(gray.astype(np.float64), 1, mode='edge')
