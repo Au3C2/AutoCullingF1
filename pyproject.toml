@@ -9,9 +9,11 @@ dependencies = [
     "pillow-heif>=0.18.0",
     "pillow-avif-plugin>=1.5.5",
     "opencv-python-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "opencv-python==5.0.0.93 ; sys_platform != 'darwin' or platform_machine != 'arm64'",
-    "av @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "av>=17.0 ; sys_platform != 'darwin' or platform_machine != 'arm64'",
+    "opencv-python-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl ; sys_platform == 'win32'",
+    "opencv-python==5.0.0.93 ; sys_platform == 'linux'",
+    "pocketfft-fast @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl ; sys_platform == 'win32'",
+    "av @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl ; sys_platform == 'win32'",
+    "av>=17.0 ; sys_platform == 'linux'",
     # Windows: DirectML build (measured ~2x faster scoring-chain inference
     # than the CUDA EP on RTX 4070 Ti, 2026-08-30; CUDA build kept elsewhere).
     "onnxruntime-directml==1.23.0; sys_platform == 'win32'",
