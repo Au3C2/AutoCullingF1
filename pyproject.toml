@@ -13,7 +13,7 @@ dependencies = [
     "opencv-python-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.10'",
     "opencv-python==5.0.0.93 ; (sys_platform == 'linux') or (sys_platform == 'darwin' and platform_machine != 'arm64') or (python_version != '3.10')",
     "pocketfft-fast @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.10'",
-    "av @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
+    "av @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_10_9_universal2.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
     "av @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.10'",
     "av>=17.0 ; (sys_platform == 'linux') or (sys_platform == 'darwin' and platform_machine != 'arm64') or (python_version != '3.10')",
     # Windows: DirectML build (measured ~2x faster scoring-chain inference
@@ -21,7 +21,7 @@ dependencies = [
     "onnxruntime-directml==1.23.0; sys_platform == 'win32'",
     # Custom reduced-ops build (29 ops, no Azure/ML/contrib) for darwin arm64;
     # keeps CoreML EP. Stock wheel fallback elsewhere.
-    "onnxruntime-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
+    "onnxruntime-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_12_0_universal2.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
     "onnxruntime==1.23.2 ; (sys_platform == 'linux') or (sys_platform == 'darwin' and platform_machine != 'arm64') or (python_version != '3.10')",
     "onnx>=1.17.0",
     "numpy>=1.26.0",

@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             rust-target: aarch64-apple-darwin
             py: .venv/bin/python
             pre-steps: ""
@@ -66,10 +66,10 @@ jobs:
         run: |
           ${{ matrix.pre-steps }}
           uv venv .venv --python 3.10
-          if [ "${{ matrix.os }}" = "macos-14" ]; then
+          if [ "${{ matrix.os }}" = "macos-15" ]; then
             OPENCV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
-            AV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl"
-            ORT_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl"
+            AV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_10_9_universal2.whl"
+            ORT_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_12_0_universal2.whl"
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
             OPENCV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl"
             AV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl"
@@ -99,7 +99,7 @@ jobs:
         run: $PYBIN -m pytest tests/test_gui/
 
       - name: Run pixel-level rendering E2E (Playwright, WebKit + Chromium)
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         shell: bash
         run: |
           uv pip install --python "$PYBIN" psutil
@@ -109,7 +109,7 @@ jobs:
           npx playwright test
 
       - name: Upload Playwright report on failure
-        if: failure() && matrix.os == 'macos-14'
+        if: failure() && matrix.os == 'macos-15'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.os }}

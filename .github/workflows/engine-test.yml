@@ -3,7 +3,7 @@ name: engine-test
 # Engine tests — seed-protocol precision / determinism / performance gates
 # across both platforms, in ONE workflow:
 #
-#   macOS (macos-14, Apple Silicon):
+#   macOS (macos-15, Apple Silicon):
 #     perf-calibrate      — manual dispatch only: measures runner baselines,
 #                           uploads tests/ci/ci_config.json to commit back
 #     precision           — packaged vs source score consistency
@@ -43,16 +43,16 @@ concurrency:
 
 env:
   OPENCV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
-  AV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+  AV_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_10_9_universal2.whl"
   OPENCV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl"
   AV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl"
   POCKETFFT_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl"
-  ORT_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl"
+  ORT_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_12_0_universal2.whl"
 
 jobs:
   # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
   perf-calibrate:
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -121,7 +121,7 @@ jobs:
 
   precision:
     name: precision (macos)
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +144,7 @@ jobs:
 
   perf-source:
     name: perf-source (macos)
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -190,7 +190,7 @@ jobs:
 
   perf-packaged:
     name: perf-packaged (macos)
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -242,7 +242,7 @@ jobs:
   # equality without requiring the full camera datasets.
   deterministic-cpu-macos:
     name: deterministic-cpu (macos)
-    runs-on: macos-14
+    runs-on: macos-15
     if: github.event_name != 'workflow_dispatch'
     timeout-minutes: 10
     steps:
