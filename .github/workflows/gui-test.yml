@@ -78,6 +78,10 @@ jobs:
             AV_PKG="av>=17.0"
             POCKETFFT_PKG="pocketfft-fast>=1.0.0"
           fi
+          # The windows branch sets POCKETFFT_PKG to the custom wheel; other
+          # branches get a marker-guarded no-op so the install line has no
+          # empty PEP 508 fields (the package does not exist on PyPI).
+          POCKETFFT_PKG="${POCKETFFT_PKG:-pocketfft-fast>=1.0.0; sys_platform == 'win32'}"
           uv pip install --python "$PYBIN" \
             "$OPENCV_PKG" "$AV_PKG" "$POCKETFFT_PKG" "onnxruntime==1.23.2" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" \
