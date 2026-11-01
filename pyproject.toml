@@ -19,7 +19,10 @@ dependencies = [
     # Windows: DirectML build (measured ~2x faster scoring-chain inference
     # than the CUDA EP on RTX 4070 Ti, 2026-08-30; CUDA build kept elsewhere).
     "onnxruntime-directml==1.23.0; sys_platform == 'win32'",
-    "onnxruntime==1.23.2; sys_platform != 'win32'",
+    # Custom reduced-ops build (29 ops, no Azure/ML/contrib) for darwin arm64;
+    # keeps CoreML EP. Stock wheel fallback elsewhere.
+    "onnxruntime-custom @ https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
+    "onnxruntime==1.23.2 ; (sys_platform == 'linux') or (sys_platform == 'darwin' and platform_machine != 'arm64') or (python_version != '3.10')",
     "onnx>=1.17.0",
     "numpy>=1.26.0",
     "pillow>=10.0.0",

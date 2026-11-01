@@ -47,6 +47,7 @@ env:
   OPENCV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl"
   AV_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl"
   POCKETFFT_WIN_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl"
+  ORT_MACOS_WHEEL: "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl"
 
 jobs:
   # ---- manual: measure runner baselines, commit result as tests/ci/ci_config.json ----
@@ -64,7 +65,7 @@ jobs:
         run: |
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
-            "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_MACOS_WHEEL" "$ORT_MACOS_WHEEL" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Calibrate source seed performance
@@ -133,7 +134,7 @@ jobs:
         run: |
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
-            "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_MACOS_WHEEL" "$ORT_MACOS_WHEEL" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Build onedir (needed by the precision comparison)
@@ -156,7 +157,7 @@ jobs:
         run: |
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
-            "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_MACOS_WHEEL" "$ORT_MACOS_WHEEL" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Skip unless runner calibrated
@@ -202,7 +203,7 @@ jobs:
         run: |
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
-            "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_MACOS_WHEEL" "$ORT_MACOS_WHEEL" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pyinstaller"
       - name: Build onedir
@@ -255,7 +256,7 @@ jobs:
         run: |
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
-            "$OPENCV_MACOS_WHEEL" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_MACOS_WHEEL" "$ORT_MACOS_WHEEL" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" "$AV_MACOS_WHEEL" \
             "pytest"
       - name: Deterministic truth — seed replication vs committed baseline

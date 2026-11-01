@@ -69,21 +69,24 @@ jobs:
           if [ "${{ matrix.os }}" = "macos-14" ]; then
             OPENCV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl"
             AV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+            ORT_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_11_0_arm64.whl"
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
             OPENCV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl"
             AV_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl"
             POCKETFFT_PKG="https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl"
+            ORT_PKG="onnxruntime-directml==1.23.0"
           else
             OPENCV_PKG="opencv-python==5.0.0.93"
             AV_PKG="av>=17.0"
             POCKETFFT_PKG="pocketfft-fast>=1.0.0"
+            ORT_PKG="onnxruntime==1.23.2"
           fi
           # The windows branch sets POCKETFFT_PKG to the custom wheel; other
           # branches get a marker-guarded no-op so the install line has no
           # empty PEP 508 fields (the package does not exist on PyPI).
           POCKETFFT_PKG="${POCKETFFT_PKG:-pocketfft-fast>=1.0.0; sys_platform == 'win32'}"
           uv pip install --python "$PYBIN" \
-            "$OPENCV_PKG" "$AV_PKG" "$POCKETFFT_PKG" "onnxruntime==1.23.2" "numpy>=1.26" \
+            "$OPENCV_PKG" "$AV_PKG" "$POCKETFFT_PKG" "$ORT_PKG" "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" \
             "pyinstaller" "pytest"
 
