@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 50
     env:
       CULL_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
@@ -49,8 +49,9 @@ jobs:
           uv venv .venv --python 3.10
           uv pip install --python .venv/bin/python \
             "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-macosx_11_0_arm64.whl" \
-            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_11_0_arm64.whl" \
-            "onnxruntime==1.23.2" "numpy>=1.26" \
+            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-macosx_10_9_universal2.whl" \
+            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_custom-1.23.2-cp310-cp310-macosx_12_0_universal2.whl" \
+            "numpy>=1.26" \
             "pillow>=10.0" "pillow-heif>=0.18.0" \
             "pyinstaller" "pytest"
       - name: Resolve release version
@@ -127,7 +128,8 @@ jobs:
           choco install exiftool -y --no-progress
           uv venv .venv --python 3.10
           uv pip install --python .venv `
-            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl" "onnxruntime==1.23.2" "numpy>=1.26" `
+            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl" `
+            "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/onnxruntime_directml-1.23.0-cp310-cp310-win_amd64.whl" "numpy>=1.26" `
             "pillow>=10.0" "pillow-heif>=0.18.0" "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/av-17.1.0-cp310-cp310-win_amd64.whl" `
             "https://github.com/Au3C2/AutoCulling-Wheels/releases/download/v5.0.0.93-cull1/pocketfft_fast-1.0.0-cp310-cp310-win_amd64.whl" `
             "pyinstaller" "pytest"
